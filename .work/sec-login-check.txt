@@ -1,0 +1,77 @@
+    <!-- Step 1: Car & Login Selection View -->
+    <div class="card" id="loginPage">
+      <h2>เลือกรถเพื่อเริ่มตรวจเช็ค</h2>
+      <div class="car-grid" aria-label="เลือกรถรีเฟอร์"><button type="button" class="car-select-card car-symbol car-tone-0" data-car-id="car-1" aria-pressed="false" aria-label="เลือกรถ 3ชฏ3250" onclick="selectVehicle('car-1')"><img src="IMG" alt=""><span>3ชฏ3250</span><span class="car-selected-mark" aria-hidden="true">✓</span></button><button type="button" class="car-select-card car-symbol car-tone-1" data-car-id="car-2" aria-pressed="false" aria-label="เลือกรถ ฆง8434" onclick="selectVehicle('car-2')"><img src="IMG" alt=""><span>ฆง8434</span><span class="car-selected-mark" aria-hidden="true">✓</span></button><button type="button" class="car-select-card car-symbol car-tone-2" data-car-id="car-3" aria-pressed="false" aria-label="เลือกรถ 5กล1034" onclick="selectVehicle('car-3')"><img src="IMG" alt=""><span>5กล1034</span><span class="car-selected-mark" aria-hidden="true">✓</span></button></div><label>ชื่อผู้ตรวจ (พยาบาล)</label>
+      <select id="userName">
+        <option value="">-- เลือกรายชื่อพยาบาล --</option>
+      </select>
+
+      <label>เวร</label>
+      <select id="shift">
+        <option value="">-- เลือกเวร --</option>
+        <option value="เช้า">เช้า (08:00 - 16:00)</option>
+        <option value="บ่าย">บ่าย (16:00 - 24:00)</option>
+        <option value="ดึก">ดึก (24:00 - 08:00)</option>
+      </select>
+
+      <label>รถที่เลือกปฏิบัติงาน</label>
+      <select id="car">
+        <option value="">-- เลือกรถ --</option>
+        <option value="รถ Refer (3ชฏ3250)">รถ Refer (3ชฏ3250)</option>
+        <option value="รถ Refer (ฆง8434)">รถ Refer (ฆง8434)</option>
+        <option value="รถ Refer (5กล1034)">รถ Refer (5กล1034)</option>
+      </select>
+
+      <button onclick="login()">เริ่มทำรายการตรวจสอบ</button>
+    </div>
+
+    <!-- Step 2: The Active Check Form -->
+    <div class="card hidden" id="checkPage">
+      <h2>แบบฟอร์มตรวจสอบอุปกรณ์</h2>
+      <div class="top-info" id="loginInfo"></div>
+
+      <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+        <button onclick="checkAll()" style="flex: 1; padding: 10px;">✅ Check All ทั้งหมดครบ</button>
+        <button class="gray" onclick="logout()" style="flex: 1; padding: 10px;">กลับไปเลือกรถ</button>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ที่</th>
+              <th>รายการอุปกรณ์</th>
+              <th>มาตรฐาน</th>
+              <th>วันหมดอายุ</th>
+              <th>สถานะ</th>
+              <th>จำนวนที่ระบุ</th>
+              <th>จัดการข้อมูล</th>
+            </tr>
+          </thead>
+          <tbody id="itemTable"></tbody>
+        </table>
+      </div>
+
+      <button class="secondary" onclick="saveCheck()">💾 บันทึกผลตรวจทั้งรอบ</button>
+    </div>
+  </div>
+
+
+  <!-- ================= TAB: NURSE DIRECTORY ================= -->
+  <div id="tabContentNurses" class="hidden">
+    <div class="card">
+      <h2>ทำเนียบรายชื่อพยาบาลเวร Refer</h2>
+      <p>ทะเบียนนี้เก็บในเซิร์ฟเวอร์กลาง เพิ่มหรือแก้ไขได้โดยไม่ต้องแก้โค้ด</p><div class="editor" id="nurseEditor"><input id="nId" placeholder="รหัสพยาบาล (ไม่ซ้ำ)"><input id="nName" placeholder="ชื่อ–นามสกุล"><input id="nDept" placeholder="หน่วยงาน"><input id="nPhone" placeholder="โทรศัพท์"><input id="nStart" placeholder="วันเริ่มปฏิบัติงาน"><input id="nEnd" placeholder="ครบ 6 เดือน"><input id="nNote" placeholder="หมายเหตุ"><select id="nActive"><option value="true">ปฏิบัติงาน</option><option value="false">พักใช้งาน</option></select><button onclick="saveNurse()">บันทึกพยาบาล</button><button class="gray" onclick="resetNurseEditor()">ล้างช่องกรอก</button></div><label>นำเข้ารายชื่อจากไฟล์ HTML ต้นฉบับในเครื่อง (ส่งเฉพาะเซิร์ฟเวอร์ที่เปิดใช้งาน)</label><input type="file" accept=".html" onchange="importNurses(event)"><div class="search-box">
+        <input type="text" id="nurseSearch" oninput="filterNurseTable()" placeholder="🔍 ค้นหาด้วย ชื่อ, สกุล หรือหน่วยงาน..." style="margin-bottom:0;" />
+      </div>
+      
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ที่</th>
+              <th>ชื่อ-นามสกุล</th>
+              <th>หน่วยงาน</th>
+              <th>เบอร์โทรศัพท์</th>
+              <th>วันเริ่มงาน</th>
+              <th>ครบ 6 เดือน</th>

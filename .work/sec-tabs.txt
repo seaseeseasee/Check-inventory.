@@ -1,0 +1,14 @@
+374:               <th>สถานะปฏิบัติงาน</th>
+375:               <th>หมายเหตุ</th>
+376:             </tr>
+377:           </thead>
+378:           <tbody id="nurseDirectoryTable"></tbody>
+379:         </table>
+380:       </div>
+381:     </div>
+382:   </div>
+383: 
+384: 
+385:   <!-- ================= TAB: REPORTS & HISTORY ================= -->
+386: <div id="tabContentReports" class="hidden"><div class="card"><h2>ประวัติการตรวจเช็ก</h2><div class="table-container"><table><thead></thead><tbody id="reportTable"></tbody></table></div><div class="history-footer" id="historyFooter"><button class="clear-history-btn" id="clearHistoryBtn" onclick="clearData()" type="button">ล้างประวัติการตรวจ</button></div></div></div></div>
+387: <div class="container hidden" id="tabContentStock"><div class="card"><h2>ตารางอุปกรณ์ประจำรถ</h2><label>เลือกรถ</label><select id="stockCar" onchange="renderStock()"></select><p>จำนวนและวันหมดอายุแยกตามรถแต่ละคัน</p><div class="editor"><input id="stockName" placeholder="ชื่ออุปกรณ์ใหม่"><input id="stockStandard" placeholder="จำนวนมาตรฐาน เช่น 2 หรือ 1 ชุด"><button onclick="addStock()">เพิ่มให้รถคั…[CUT -150]…ckName" placeholder="ชื่ออุปกรณ์ใหม่"><input id="stockStandard" placeholder="จำนวนมาตรฐาน เช่น 2 หรือ 1 ชุด"><button onclick="addStock()">เพิ่มให้รถคันนี้</button></div><div class="table-container"><table><thead><tr><th>อุปกรณ์</th><th>จำนวนมาตรฐาน</th><th>วันหมดอายุ</th><th>การใช้งาน</th></tr></thead><tbody id="stockTable"></tbody></table></div></div></div><script>const ambulanceChecklistConfig=[

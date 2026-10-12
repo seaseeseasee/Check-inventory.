@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>ระบบเช็ครถ Refer / Ambulance</title>
+  <style>
+    :root {
+      --teal-900: #134e4a; --teal-800: #115e59; --teal-700: #0f766e; --teal-600: #0d9488; --teal-500: #14b8a6;
+      --ink: #0f172a; --muted: #64748b; --line: #e2e8f0;
+      --card: #ffffff;
+      --ok: #059669; --ok-soft: #d1fae5; --warn: #d97706; --warn-soft: #fef3c7; --bad: #dc2626; --bad-soft: #fee2e2;
+      --radius: 16px; --shadow: 0 2px 12px rgba(13, 148, 136, .10);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, system-ui, -apple-system, sans-serif;
+      background: linear-gradient(180deg, #ecfeff 0%, #f0fdfa 240px, #f8fafc 100%);
+      color: var(--ink);
+      padding-bottom: 40px;
+      min-height: 100vh;
+    }
+    .hidden { display: none !important; }
+    img { max-width: 100%; }
+
+    /* ---------- Top area ---------- */
+    .app-top { position: sticky; top: 0; z-index: 1001; box-shadow: 0 4px 18px rgba(15, 118, 110, .18); }
+    #mainHeader {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px;
+      background: linear-gradient(135deg, #0f766e, #0d9488 55%, #14b8a6);
+      color: #fff;
+    }
+    .brand-logo {
+      width: 48px; height: 48px; flex-shrink: 0;
+      background: #fff; border-radius: 12px; padding: 4px; object-fit: contain;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+    }
+    #headerTitle { flex: 1; font-size: 16px; font-weight: 700; line-height: 1.35; }
+    .signout {
+      width: auto; margin: 0; min-height: 40px; padding: 8px 14px;
+      font-size: 12px; font-weight: 700; border-radius: 999px;
+      background: rgba(255, 255, 255, .16); color: #fff;
+      border: 1px solid rgba(255, 255, 255, .38); flex-shrink: 0;
+    }
+    .signout:active { background: rgba(255, 255, 255, .28); }
+
+    .nav-tabs {
+      display: flex; gap: 6px; padding: 8px 10px;
+      background: #fff; border-bottom: 1px solid var(--line);
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+    }
+    .tab-btn {
+      flex: 1 1 0; min-width: 96px; width: auto; margin: 0; min-height: 46px;
+      padding: 8px 6px; font-size: 13px; font-weight: 700;
+      background: #f8fafc; color: var(--muted);
+      border: 1.5px solid transparent; border-radius: 12px;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .tab-btn.active { background: #ccfbf1; color: var(--teal-700); border-color: #5eead4; }
+
+    .storage-note {
+      padding: 7px 14px; font-size: 12px; color: var(--teal-700);
+      background: #f0fdfa; border-bottom: 1px solid #ccfbf1;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* ---------- Cards & layout ---------- */
+    .container { max-width: 900px; margin: 0 auto; }
+    .card {
+      background: var(--card); border: 1px solid rgba(13, 148, 136, .10);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 18px; margin: 14px 12px;
+    }
+    .card h2 { margin: 0 0 8px; font-size: 17px; color: var(--teal-700); }
+    .card > p { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+    .muted { color: var(--muted); font-size: 13px; }
+
+    label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin: 12px 0 6px; }
+    input:not([type="file"]), select, textarea {
+      width: 100%; padding: 12px; min-height: 46px; font-size: 16px;
+      border: 1.5px solid #d1d5db; border-radius: 10px; background: #fff; color: var(--ink);
+      font-family: inherit;
+    }
+    input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 3px solid #5eead4; outline-offset: 1px; border-color: var(--teal-600);
+    }
+    input[type="file"] { width: 100%; font-size: 14px; padding: 18px 12px; border: 1.5px dashed #99f6e4; border-radius: 10px; background: #f0fdfa; }
+
+    button {
+      font-family: inherit; cursor: pointer; width: 100%; margin: 0 0 8px;
+      min-height: 48px; padding: 12px 14px; font-size: 15px; font-weight: 700;
+      border: none; border-radius: 12px; color: #fff;
+      background: linear-gradient(135deg, #0d9488, #0f766e);
+      transition: transform .06s, filter .15s;
+    }
+    button:active { transform: scale(.985); filter: brightness(.97); }
+    button:focus-visible { outline: 3px solid #5eead4; outline-offset: 2px; }
+    button.secondary { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
+    button.gray { background: #e2e8f0; color: #334155; }
+    button.danger { background: var(--bad); }
+    button.warning { background: #f59e0b; color: #111827; }
+    .small-btn {
+      width: auto; min-height: 44px; margin: 0; padding: 8px 14px;
+      font-size: 13px; border-radius: 10px;
+      background: #f1f5f9; color: #334155; border: 1.5px solid var(--line);
+    }
+    .btn-row { display: flex; gap: 8px; margin-bottom: 12px; }
+    .btn-row button { flex: 1; margin: 0; }
+
+    /* ---------- Login: car selection ---------- */
+    .car-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 4px 0 8px; }
+    .car-symbol {
+      position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 8px; min-width: 0; min-height: 128px; margin: 0; padding: 14px 6px;
+      background: #f8fafc; color: #334155; border: 2px solid transparent; border-radius: 16px;
+      transition: box-shadow .15s, transform .15s, background .15s, border-color .15s;
+    }
+    .car-symbol img { width: 64px; height: 64px; object-fit: contain; }
+    .car-symbol > span:first-of-type { font-size: 15px; font-weight: 700; white-space: nowrap; }
+    .car-symbol[aria-pressed="true"] { background: #ccfbf1; border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13, 148, 136, .22); transform: translateY(-2px); }
+    .car-selected-mark {
+      display: none; position: absolute; top: 7px; right: 8px;
+      width: 22px; height: 22px; line-height: 22px; text-align: center;
+      background: var(--teal-700); color: #fff; border-radius: 50%; font-size: 13px;
+    }
+    .car-symbol[aria-pressed="true"] .car-selected-mark { display: block; }
+
+    /* ---------- Check page ---------- */
+    .top-info {
+      background: #ecfeff; border: 1px solid #cffafe; border-radius: 12px;
+      padding: 12px; font-size: 13px; line-height: 1.6; margin-bottom: 12px;
+    }
+    .progress-wrap { margin: 4px 0 14px; }
+    .progress-track { height: 12px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+    .progress-fill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #0d9488, #34d399); transition: width .25s ease; }
+    .progress-text { margin-top: 6px; font-size: 12px; color: var(--muted); text-align: right; }
+
+    .list { display: flex; flex-direction: column; gap: 10px; }
+    .item-card {
+      border: 1.5px solid var(--line); border-radius: 14px; background: #fff;
+      padding: 12px; transition: border-color .15s, background .15s;
+    }
+    .item-card.is-checked { border-color: #a7f3d0; background: #f0fdf9; }
+    .item-card.is-missing { border-color: #fecaca; background: #fff7f7; }
+    .item-card.is-used { border-color: #fde68a; background: #fffbf0; }
+    .item-head { display: flex; align-items: flex-start; gap: 10px; }
+    .item-no {
+      flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%;
+      display: grid; place-items: center;
+      background: #ccfbf1; color: var(--teal-700); font-size: 13px; font-weight: 700;
+    }
+    .item-name { flex: 1; font-size: 15px; font-weight: 600; line-height: 1.4; word-break: break-word; }
+    .chip { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .chip-ok { background: var(--ok-soft); color: #065f46; }
+    .chip-miss { background: var(--bad-soft); color: #991b1b; }
+    .chip-used { background: var(--warn-soft); color: #92400e; }
+    .chip-pending, .chip-off { background: #f1f5f9; color: var(--muted); }
+    .chip-info { background: #cffafe; color: #155e75; }
+    .item-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+    .std-chip { font-size: 12px; padding: 3px 8px; border-radius: 8px; background: #f8fafc; border: 1px solid var(--line); color: var(--muted); }
+    .detail-chip { font-size: 12px; padding: 3px 8px; border-radius: 8px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
+    .exp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .exp-row label { margin: 0; flex-shrink: 0; font-size: 12px; color: var(--muted); }
+    .exp-row input { flex: 1; min-width: 0; min-height: 44px; padding: 8px 10px; }
+    .item-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .act-btn { flex: 1 1 0; min-width: 84px; min-height: 48px; margin: 0; padding: 12px 8px; font-size: 14.5px; border-radius: 10px; }
+    .act-btn.ok { background: var(--ok); }
+    .act-btn.warn { background: #f59e0b; color: #1f2937; }
+    .act-btn.danger { background: #fff; color: #b91c1c; border: 1.5px solid #fecaca; }
+    .battery-container {
+      flex: 2 1 220px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+      border: 2px solid #334155; border-radius: 12px; padding: 6px; background: #f8fafc;
+    }
+    .bat-btn {
+      margin: 0; min-height: 44px; min-width: 0; padding: 4px 2px;
+      font-size: 13px; font-weight: 700; border-radius: 8px;
+      background: #fff; color: #475569; border: 1.5px solid var(--line);
+    }
+    .bat-btn.on { background: var(--teal-700); color: #fff; border-color: var(--teal-700); }
+    .save-bar { position: sticky; bottom: 12px; z-index: 60; margin-top: 14px; }
+    .save-bar button { margin: 0; box-shadow: 0 8px 22px rgba(37, 99, 235, .32); }
+
+    /* ---------- Editor grids (nurses / stock) ---------- */
+    .editor { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .editor label { margin: 0 0 4px; }
+    .editor button { align-self: end; margin: 0; }
+    .search-box { margin: 12px 0; }
+    .search-box input { margin: 0; }
+
+    /* ---------- Nurse / stock / report cards ---------- */
+    .nurse-card, .stock-card, .report-card {
+      border: 1.5px solid var(--line); border-radius: 14px; background: #fff; padding: 12px;
+    }
+    .nurse-top, .stock-top, .report-top { display: flex; align-items: flex-start; gap: 10px; }
+    .nurse-name, .stock-name, .report-time { flex: 1; font-size: 15px; font-weight: 700; line-height: 1.4; word-break: break-word; }
+    .nurse-sub, .report-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .nurse-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0 10px; font-size: 12px; color: var(--muted); }
+    .stock-card.is-off { opacity: .62; }
+    .stock-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+    .stock-fields label { margin: 0 0 4px; font-size: 12px; color: var(--muted); }
+    .stock-fields input { min-height: 44px; padding: 8px 10px; }
+    .report-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0; }
+    .plate-chip { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #ccfbf1; color: var(--teal-700); }
+    .report-details { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 8px; }
+    .report-details summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--teal-700); min-height: 32px; }
+    .report-details p { margin: 6px 0; font-size: 12px; color: #475569; line-height: 1.5; }
+    .report-details p.attn { color: #b91c1c; font-weight: 600; }
+    .empty { margin: 0; padding: 18px; text-align: center; font-size: 13px; color: var(--muted); background: #f8fafc; border: 1px dashed var(--line); border-radius: 12px; }
+    .history-footer { display: flex; justify-content: flex-end; border-top: 1px solid var(--line); padding-top: 14px; margin-top: 12px; }
+    .clear-history-btn {
+      width: auto; margin: 0; min-height: 44px; padding: 10px 16px; font-size: 14px;
+      background: transparent; color: #b91c1c; border: 1.5px solid #fecaca; border-radius: 10px;
+    }
+    .clear-history-btn:hover { background: #fff1f2; }
+    .clear-history-btn:disabled { color: #9ca3af; border-color: #e5e7eb; cursor: default; }
+
+    /* ---------- Dashboard ---------- */
+    .dash-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 4px 0 14px; }
+    .stat { background: #f0fdfa; border: 1.5px solid #ccfbf1; border-radius: 12px; padding: 10px 6px; text-align: center; }
+    .stat b { display: block; font-size: 22px; color: var(--teal-700); line-height: 1.2; }
+    .stat span { font-size: 11px; color: var(--muted); font-weight: 600; }
+    .stat.warn { background: #fff7ed; border-color: #fed7aa; }
+    .stat.warn b { color: var(--warn); }
+    .dash-car { border: 1.5px solid var(--line); border-radius: 14px; background: #fff; padding: 12px; margin-bottom: 10px; }
+    .dash-car.is-alert { border-color: #fde68a; background: #fffdf5; }
+    .dash-car-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .dash-last { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+    .dash-attn { margin: 6px 0 0; font-size: 12.5px; color: #b91c1c; font-weight: 600; line-height: 1.6; }
+    .dash-car .act-btn { margin: 10px 0 0; }
+    .chip-warn { background: var(--warn-soft); color: #92400e; }
+
+    /* ---------- Restock module (เบิก–เติมอุปกรณ์) ---------- */
+    .rs-info { border: 1.5px solid #ccfbf1; background: #f0fdfa; border-radius: 12px; padding: 10px 12px; font-size: 12.5px; color: #334155; line-height: 1.7; margin: 0 0 10px; }
+    .rs-info.is-warn { border-color: #fde68a; background: #fffbeb; color: #92400e; }
+    .rs-editor-row { border: 1.5px solid var(--line); border-radius: 12px; background: #fff; padding: 10px; margin-bottom: 8px; }
+    .rs-editor-row.off { opacity: .55; }
+    .rs-row-head { display: flex; align-items: flex-start; gap: 10px; }
+    .rs-row-check { width: 22px; height: 22px; min-height: 22px; margin: 3px 0 0; accent-color: var(--teal-700); flex-shrink: 0; }
+    .rs-row-name { flex: 1; font-size: 14px; font-weight: 600; line-height: 1.4; word-break: break-word; }
+    .rs-qty-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .rs-qty-grid label { margin: 0 0 3px; font-size: 11.5px; color: var(--muted); }
+    .rs-qty-grid input { min-height: 44px; padding: 8px 10px; }
+    .rs-card { border: 1.5px solid var(--line); border-radius: 14px; background: #fff; padding: 12px; margin-bottom: 10px; }
+    .rs-head { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+    .rs-no { font-size: 15px; font-weight: 700; }
+    .rs-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: var(--muted); margin: 8px 0; }
+    .rs-table-wrap { overflow-x: auto; margin: 8px 0; }
+    .rs-items { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .rs-items th, .rs-items td { border: 1px solid var(--line); padding: 6px; text-align: left; vertical-align: top; }
+    .rs-items th { background: #f8fafc; color: #475569; font-size: 11px; white-space: nowrap; }
+    .rs-items td.num { text-align: right; white-space: nowrap; }
+    .rs-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .rs-actions .act-btn { flex: 1 1 130px; margin: 0; min-height: 46px; font-size: 13.5px; }
+    .rs-actions .act-btn.gray { background: #e2e8f0; color: #334155; }
+    .timeline { margin: 8px 0 0; padding: 0; list-style: none; }
+    .timeline li { position: relative; padding: 0 0 10px 18px; font-size: 12px; color: #475569; line-height: 1.6; }
+    .timeline li::before { content: ''; position: absolute; left: 4px; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--teal-600); }
+    .timeline li::after { content: ''; position: absolute; left: 7px; top: 16px; bottom: 2px; width: 2px; background: #ccfbf1; }
+    .timeline li:last-child::after { display: none; }
+    .timeline b { color: var(--teal-800); }
+    .chip-draft { background: #f1f5f9; color: #475569; }
+    .chip-submitted { background: #cffafe; color: #155e75; }
+    .chip-partial { background: var(--warn-soft); color: #92400e; }
+    .chip-fulfilled { background: var(--ok-soft); color: #065f46; }
+    .chip-cancelled { background: var(--bad-soft); color: #991b1b; }
+    .seg { display: flex; gap: 6px; margin: 0 0 10px; }
+    .seg-btn { flex: 1 1 0; margin: 0; min-height: 44px; font-size: 13.5px; background: #f1f5f9; color: var(--muted); border: 1.5px solid var(--line); border-radius: 999px; }
+    .seg-btn.on { background: #ccfbf1; color: var(--teal-700); border-color: #5eead4; }
+    .date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .date-row > div { min-width: 0; }
+    .date-row label { margin: 0 0 4px; font-size: 11.5px; color: var(--muted); }
+    .date-row input { min-height: 44px; padding: 8px 10px; min-width: 0; }
+    #restockSheet { position: fixed; inset: 0; z-index: 12000; background: rgba(15, 23, 42, .5); display: flex; align-items: flex-end; justify-content: center; }
+    #restockSheet .sheet-body { max-height: 60vh; overflow-y: auto; margin: 0 0 6px; }
+
+    /* ---------- Car status badge (selection page) ---------- */
+    .car-stat {
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px;
+    }
+    .car-stat.is-warn { color: #92400e; background: var(--warn-soft); border-color: #fde68a; }
+    .car-stat.is-ok { color: #065f46; background: var(--ok-soft); border-color: #a7f3d0; }
+
+    /* ---------- Check: sticky progress + filter chips ---------- */
+    .check-sticky {
+      position: sticky; top: 160px; z-index: 900;
+      background: #fff; border: 1.5px solid #ccfbf1; border-radius: 12px;
+      padding: 10px 12px; margin-bottom: 12px;
+      box-shadow: 0 4px 14px rgba(13, 148, 136, .10);
+    }
+    .check-sticky .progress-wrap { margin: 0 0 8px; }
+    .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip-btn {
+      flex: 1 1 0; min-width: 96px; min-height: 42px; margin: 0; padding: 8px 6px;
+      font-size: 12.5px; font-weight: 700; border-radius: 999px;
+      background: #f1f5f9; color: var(--muted); border: 1.5px solid var(--line);
+    }
+    .chip-btn.on { background: #ccfbf1; color: var(--teal-700); border-color: #5eead4; }
+    .chip-btn b { font-weight: 800; }
+
+    /* ---------- History toolbar ---------- */
+    .report-toolbar { display: flex; flex-direction: column; gap: 10px; margin: 0 0 10px; }
+    .report-toolbar input[type="search"] { margin: 0; }
+    .report-toolbar .filter-chips { flex-wrap: nowrap; overflow-x: auto; }
+    .report-toolbar .chip-btn { flex: 0 0 auto; min-width: 0; }
+    .report-count { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
+
+    /* ---------- Auth gate ---------- */
+    #authGate {
+      position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 16px;
+      background: linear-gradient(160deg, #0f766e, #115e59 55%, #134e4a);
+    }
+    .auth-card {
+      width: 100%; max-width: 380px; background: #fff; border-radius: 22px;
+      padding: 28px 22px 22px; text-align: center;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .4);
+    }
+    .auth-logo { width: 88px; height: 88px; object-fit: contain; }
+    .auth-card h2 { margin: 10px 0 4px; font-size: 19px; color: var(--teal-800); }
+    .auth-sub { margin: 0 0 16px; font-size: 13px; color: var(--muted); }
+    .auth-card label { text-align: left; }
+    .auth-error { min-height: 20px; margin: 10px 0 0; font-size: 13px; color: var(--bad); font-weight: 600; }
+
+    /* ---------- Bottom sheet (detail input) ---------- */
+    #sheetOverlay { position: fixed; inset: 0; z-index: 12000; background: rgba(15, 23, 42, .5); display: flex; align-items: flex-end; justify-content: center; }
+    .sheet {
+      width: 100%; max-width: 520px; background: #fff; border-radius: 20px 20px 0 0;
+      padding: 20px 18px 22px; box-shadow: 0 -12px 40px rgba(0, 0, 0, .3);
+      animation: sheetUp .18s ease;
+    }
+    .sheet h3 { margin: 0 0 12px; font-size: 16px; color: var(--teal-800); }
+    .sheet-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .sheet-actions button { flex: 1; margin: 0; }
+    @keyframes sheetUp { from { transform: translateY(40px); opacity: .4; } to { transform: none; opacity: 1; } }
+
+    /* ---------- Small screens ---------- */
+    @media (max-width: 480px) {
+      .card { margin: 12px 8px; padding: 14px; }
+      #headerTitle { font-size: 14px; }
+      .brand-logo { width: 42px; height: 42px; }
+      .car-symbol { min-height: 118px; padding: 10px 4px; gap: 6px; }
+      .car-symbol img { width: 52px; height: 52px; }
+      .car-symbol > span:first-of-type { font-size: 13px; }
+      .car-stat { font-size: 10px; padding: 1px 6px; }
+      .tab-btn { min-width: 88px; font-size: 12px; }
+      .dash-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .check-sticky { top: 154px; padding: 8px 10px; }
+    }
+  </style>
+</head>
+
+<body>
+<div id="authGate" style="position:fixed;inset:0;background:linear-gradient(160deg,#0f766e,#115e59 55%,#134e4a);z-index:10000;display:grid;place-items:center;padding:16px"><form id="authForm" class="auth-card" style="width:100%;max-width:380px;background:#fff;border-radius:22px;padding:28px 22px 22px;text-align:center"><img class="auth-logo" src="__IMG_B64__" alt="โลโก้รถรีเฟอร์"><h2>เข้าสู่ระบบรถรีเฟอร์</h2><p class="auth-sub">ใช้รหัสผ่านระบบที่ผู้ดูแลกำหนด</p><label for="systemPassword">รหัสผ่านระบบ</label><input id="systemPassword" type="password" autocomplete="current-password" required><button type="submit">เชื่อมต่อระบบกลาง</button><p id="authError" role="alert" class="auth-error"></p></form></div>
+
+<div class="app-top">
+  <header id="mainHeader">
+    <img class="brand-logo" src="__IMG_B64__" alt="โลโก้รถรีเฟอร์">
+    <span id="headerTitle">ระบบตรวจเช็ครถ Refer / Ambulance</span>
+    <button type="button" class="signout" onclick="signOut()">ออกจากระบบ</button>
+  </header>
+
+  <nav class="nav-tabs" aria-label="เมนูหลัก">
+    <button type="button" class="tab-btn active" id="btnTabDashboard" onclick="switchTab('dashboard')">🏠 หน้าแรก</button>
+    <button type="button" class="tab-btn" id="btnTabCheck" onclick="switchTab('check')">🚗 ตรวจเช็ครถ</button>
+    <button type="button" class="tab-btn" id="btnTabRestock" onclick="switchTab('restock')">🧰 เบิก–เติมอุปกรณ์</button>
+    <button type="button" class="tab-btn" id="btnTabReports" onclick="switchTab('reports')">📋 ประวัติตรวจ–เติม</button>
+    <button type="button" class="tab-btn" id="btnTabStock" onclick="switchTab('stock')">📦 ทะเบียนรถ/อุปกรณ์</button>
+    <button type="button" class="tab-btn" id="btnTabNurses" onclick="switchTab('nurses')">👩‍⚕️ ผู้ใช้งาน/พยาบาล</button>
+  </nav>
+  <div class="storage-note" id="storageState" role="status" aria-live="polite">กำลังเชื่อมต่อฐานข้อมูลกลาง…</div>
+</div>
+
+<div class="container">
+
+  <!-- ================= TAB: DASHBOARD ================= -->
+  <div id="tabContentDashboard">
+    <div class="card">
+      <h2>ภาพรวมการตรวจรถและการเติมของวันนี้</h2>
+      <div class="dash-stats" id="dashStats"></div>
+      <div id="dashCars"></div>
+    </div>
+  </div>
+
+  <!-- ================= TAB: CHECKLIST ================= -->
+  <div id="tabContentCheck" class="hidden">
+
+    <!-- Step 1: Car & Login Selection View -->
+    <div class="card" id="loginPage">
+      <h2>เลือกรถเพื่อเริ่มตรวจเช็ค</h2>
+      <div class="car-grid" aria-label="เลือกรถรีเฟอร์">
+        <button type="button" class="car-symbol" data-car-id="car-1" aria-pressed="false" aria-label="เลือกรถ 3ชฏ3250" onclick="selectVehicle('car-1')"><img src="__IMG_B64__" alt=""><span>3ชฏ3250</span><span class="car-stat" data-car-stat>–</span><span class="car-selected-mark" aria-hidden="true">✓</span></button>
+        <button type="button" class="car-symbol" data-car-id="car-2" aria-pressed="false" aria-label="เลือกรถ ฆง8434" onclick="selectVehicle('car-2')"><img src="__IMG_B64__" alt=""><span>ฆง8434</span><span class="car-stat" data-car-stat>–</span><span class="car-selected-mark" aria-hidden="true">✓</span></button>
+        <button type="button" class="car-symbol" data-car-id="car-3" aria-pressed="false" aria-label="เลือกรถ 5กล1034" onclick="selectVehicle('car-3')"><img src="__IMG_B64__" alt=""><span>5กล1034</span><span class="car-stat" data-car-stat>–</span><span class="car-selected-mark" aria-hidden="true">✓</span></button>
+      </div>
+
+      <label for="userName">ชื่อผู้ตรวจ (พยาบาล)</label>
+      <select id="userName">
+        <option value="">-- เลือกรายชื่อพยาบาล --</option>
+      </select>
+
+      <label for="shift">เวร</label>
+      <select id="shift">
+        <option value="">-- เลือกเวร --</option>
+        <option value="เช้า">เช้า (08:00 - 16:00)</option>
+        <option value="บ่าย">บ่าย (16:00 - 24:00)</option>
+        <option value="ดึก">ดึก (24:00 - 08:00)</option>
+      </select>
+
+      <label for="car">รถที่เลือกปฏิบัติงาน</label>
+      <select id="car">
+        <option value="">-- เลือกรถ --</option>
+        <option value="รถ Refer (3ชฏ3250)">รถ Refer (3ชฏ3250)</option>
+        <option value="รถ Refer (ฆง8434)">รถ Refer (ฆง8434)</option>
+        <option value="รถ Refer (5กล1034)">รถ Refer (5กล1034)</option>
+      </select>
+
+      <button onclick="login()">เริ่มทำรายการตรวจสอบ</button>
+    </div>
+
+    <!-- Step 2: The Active Check Form -->
+    <div class="card hidden" id="checkPage">
+      <h2>แบบฟอร์มตรวจสอบอุปกรณ์</h2>
+      <div class="top-info" id="loginInfo"></div>
+
+      <div class="check-sticky">
+        <div class="progress-wrap">
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+          <div class="progress-text" id="progressText"></div>
+        </div>
+        <div class="filter-chips" role="group" aria-label="กรองรายการตรวจ">
+          <button type="button" class="chip-btn on" id="chipAll" onclick="setCheckFilter('all')">ทั้งหมด <b id="cntAll"></b></button>
+          <button type="button" class="chip-btn" id="chipPending" onclick="setCheckFilter('pending')">ยังไม่ตรวจ <b id="cntPending"></b></button>
+          <button type="button" class="chip-btn" id="chipAttn" onclick="setCheckFilter('attn')">ต้องติดตาม <b id="cntAttn"></b></button>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button onclick="checkAll()">✅ ตรวจครบทั้งหมด</button>
+        <button class="gray" onclick="logout()">กลับไปเลือกรถ</button>
+      </div>
+
+      <div id="itemTable" class="list"></div>
+
+      <div class="save-bar"><button class="secondary" onclick="saveCheck()">💾 บันทึกผลตรวจทั้งรอบ</button></div>
+    </div>
+  </div>
+
+  <!-- ================= TAB: RESTOCK (เบิก–เติมอุปกรณ์) ================= -->
+  <div id="tabContentRestock" class="hidden">
+    <div class="card">
+      <h2>แจ้งเบิก–เติมอุปกรณ์</h2>
+      <label for="rsCar">รถที่ขอเติม</label>
+      <select id="rsCar" onchange="onRestockCarChange()"></select>
+      <div class="rs-info" id="rsSourceInfo">เลือกรถเพื่อเตรียมรายการ</div>
+      <label for="rsBy">ผู้แจ้ง (พยาบาล)</label>
+      <select id="rsBy"></select>
+      <label for="rsReason">เหตุผลการขอเติม</label>
+      <input id="rsReason" maxlength="500" placeholder="เช่น ตรวจพบของขาด / ใช้ไปในการปฏิบัติงาน">
+      <label for="rsNote">หมายเหตุเพิ่มเติม</label>
+      <input id="rsNote" maxlength="500" placeholder="หมายเหตุ (ถ้ามี)">
+      <div id="rsItems"></div>
+      <div class="btn-row">
+        <button onclick="saveRestockDraft()">💾 บันทึกร่าง</button>
+        <button class="secondary" onclick="submitRestock()">📤 ส่งคำขอ</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>คำขอเบิก–เติมทั้งหมด</h2>
+      <p>คำขอที่ส่งแล้วจะรอหน่วยพัสดุจ่ายของ (จ่าย) แล้วจึงบันทึกการเติมลงรถจริง (เติม) แยกขั้นตอนกัน</p>
+      <div id="restockList"></div>
+    </div>
+  </div>
+
+  <!-- ================= TAB: NURSE DIRECTORY ================= -->
+  <div id="tabContentNurses" class="hidden">
+    <div class="card">
+      <h2>จัดการผู้ใช้งาน / พยาบาลเวร Refer</h2>
+      <p>ทะเบียนนี้เก็บในเซิร์ฟเวอร์กลาง เพิ่มหรือแก้ไขได้โดยไม่ต้องแก้โค้ด</p>
+      <div class="editor" id="nurseEditor">
+        <div><label for="nId">รหัสพยาบาล (ไม่ซ้ำ)</label><input id="nId" placeholder="เช่น 1001"></div>
+        <div><label for="nName">ชื่อ–นามสกุล</label><input id="nName" placeholder="ชื่อ–นามสกุล"></div>
+        <div><label for="nDept">หน่วยงาน</label><input id="nDept" placeholder="หน่วยงาน"></div>
+        <div><label for="nPhone">โทรศัพท์</label><input id="nPhone" placeholder="โทรศัพท์" inputmode="tel"></div>
+        <div><label for="nStart">วันเริ่มปฏิบัติงาน</label><input id="nStart" placeholder="วัน/เดือน/ปี"></div>
+        <div><label for="nEnd">ครบ 6 เดือน</label><input id="nEnd" placeholder="วัน/เดือน/ปี"></div>
+        <div><label for="nNote">หมายเหตุ</label><input id="nNote" placeholder="หมายเหตุ"></div>
+        <div><label for="nActive">สถานะ</label><select id="nActive"><option value="true">ปฏิบัติงาน</option><option value="false">พักใช้งาน</option></select></div>
+        <button onclick="saveNurse()">บันทึกพยาบาล</button>
+        <button class="gray" onclick="resetNurseEditor()">ล้างช่องกรอก</button>
+      </div>
+      <label for="nurseImport">นำเข้ารายชื่อจากไฟล์ HTML ต้นฉบับในเครื่อง (ส่งเฉพาะเซิร์ฟเวอร์ที่เปิดใช้งาน)</label>
+      <input id="nurseImport" type="file" accept=".html" onchange="importNurses(event)">
+      <div class="search-box">
+        <input type="text" id="nurseSearch" oninput="filterNurseTable()" placeholder="🔍 ค้นหาด้วย ชื่อ, สกุล หรือหน่วยงาน...">
+      </div>
+      <div id="nurseDirectoryTable" class="list"></div>
+    </div>
+  </div>
+
+  <!-- ================= TAB: REPORTS & HISTORY (ตรวจ + เติม) ================= -->
+  <div id="tabContentReports" class="hidden">
+    <div class="card">
+      <h2>ประวัติการตรวจและการเบิก–เติม</h2>
+      <div class="seg" role="group" aria-label="เลือกประเภทประวัติ">
+        <button type="button" class="seg-btn on" id="segChecks" onclick="setHistoryView('checks')">การตรวจเช็ค</button>
+        <button type="button" class="seg-btn" id="segRestock" onclick="setHistoryView('restock')">การเบิก–เติม</button>
+      </div>
+      <div class="report-toolbar">
+        <input type="search" id="reportSearch" oninput="filterHistory()" placeholder="🔍 ค้นหา วันที่ ทะเบียน ผู้ตรวจ ผู้แจ้ง เลขที่คำขอ หรือชื่ออุปกรณ์">
+        <div class="filter-chips" id="reportCarChips" role="group" aria-label="กรองตามรถ"></div>
+        <div class="filter-chips hidden" id="restockStatusChips" role="group" aria-label="กรองสถานะคำขอเติม"></div>
+        <div class="date-row">
+          <div><label for="historyFrom">ตั้งแต่วันที่</label><input type="date" id="historyFrom" onchange="filterHistory()"></div>
+          <div><label for="historyTo">ถึงวันที่</label><input type="date" id="historyTo" onchange="filterHistory()"></div>
+        </div>
+      </div>
+      <p class="report-count" id="reportCount"></p>
+      <div id="reportTable" class="list"></div>
+      <div id="restockHistoryTable" class="list hidden"></div>
+      <div class="history-footer" id="historyFooter"><button class="clear-history-btn" id="clearHistoryBtn" onclick="clearData()" type="button">ล้างประวัติการตรวจ</button></div>
+    </div>
+  </div>
+
+  <!-- ================= TAB: STOCK ================= -->
+  <div id="tabContentStock" class="hidden">
+    <div class="card">
+      <h2>ทะเบียนรถและอุปกรณ์ประจำรถ</h2>
+      <label for="stockCar">เลือกรถ</label>
+      <select id="stockCar" onchange="renderStock()"></select>
+      <p>จำนวนและวันหมดอายุแยกตามรถแต่ละคัน</p>
+      <div class="editor">
+        <div><label for="stockName">ชื่ออุปกรณ์ใหม่</label><input id="stockName" placeholder="ชื่ออุปกรณ์ใหม่"></div>
+        <div><label for="stockStandard">จำนวนมาตรฐาน</label><input id="stockStandard" placeholder="จำนวนมาตรฐาน เช่น 2 หรือ 1 ชุด"></div>
+        <button onclick="addStock()">เพิ่มให้รถคันนี้</button>
+      </div>
+      <div id="stockTable" class="list"></div>
+    </div>
+  </div>
+
+</div>
+
+<div id="sheetOverlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet">
+    <h3 id="sheetTitle"></h3>
+    <input id="sheetInput" type="text" autocomplete="off" placeholder="ระบุจำนวน / รายละเอียด">
+    <div class="sheet-actions">
+      <button type="button" class="gray" id="sheetCancel">ยกเลิก</button>
+      <button type="button" id="sheetOk">ตกลง</button>
+    </div>
+  </div>
+</div>
+
+<div id="restockSheet" class="hidden" role="dialog" aria-modal="true" aria-labelledby="rsSheetTitle">
+  <div class="sheet">
+    <h3 id="rsSheetTitle"></h3>
+    <div class="sheet-body" id="rsSheetBody"></div>
+    <div class="sheet-actions">
+      <button type="button" class="gray" id="rsSheetCancel">ยกเลิก</button>
+      <button type="button" id="rsSheetOk">ยืนยัน</button>
+    </div>
+  </div>
+</div>
+
+<script>const ambulanceChecklistConfig=[
+    { name: "หน้ากากอนามัย (Mask)", standard: 1 },
+    { name: "Tourniquet", standard: 1 },
+    { name: "ชามรูปไต", standard: 1 },
+    { name: "เครื่องวัดความดัน (ติดผนัง)", standard: 1 },
+    { name: "เครื่องวัดความดัน (พกพา)", standard: 1 },
+    { name: "Stethoscope", standard: 1 },
+    { name: "Laryngoscope + Blade", standard: "1 ชุด" },
+    { name: "Micropore", standard: 1 },
+    { name: "Transpore", standard: 1 },
+    { name: "เครื่อง Suction", standard: 1 },
+    { name: "Macgril forcep", standard: 1 },
+    { name: "เสาน้ำเกลือ", standard: 1 },
+    { name: "ถังขยะติดเชื้อ", standard: 1 },
+    { name: "ถังขยะทั่วไป", standard: 1 },
+    { name: "เครื่องAED (ระบุจำนวนขีดแบต)", standard: 1, isBattery: true },
+    { name: "เครื่องวัด O2 Sat mobile", standard: 1 },
+    { name: "Slide Board", standard: 1 },
+    { name: "Alcohol jelly", standard: 1 },
+    { name: "ถุงมือเบอร์ M", standard: 1 },
+    { name: "ถุงมือเบอร์ S", standard: 1 },
+    { name: "Aquapak 340 ml", standard: 1 },
+    { name: "Lubricgel", standard: 1 },
+    { name: "Betadine", standard: 1 },
+    { name: "0.9% NSS 100 cc", standard: 1 },
+    { name: "0.9% NSS 1000 cc", standard: 1 },
+    { name: "5% DN/2 1000 cc", standard: 1 },
+    { name: "70% Alcohol", standard: 1 },
+    { name: "Set IV", standard: 2 },
+    { name: "Set Infusion", standard: 2 },
+    { name: "3-way", standard: 2 },
+    { name: "Extension", standard: 2 },
+    { name: "สาย Suction No.14", standard: 3 },
+    { name: "Syringe ขนาด 20 ml", standard: 2 },
+    { name: "Syringe ขนาด 10 ml", standard: 5 },
+    { name: "Syringe ขนาด 5 ml", standard: 5 },
+    { name: "Syringe ขนาด 3 ml", standard: 5 },
+    { name: "เข็มเบอร์ 18", standard: 5 },
+    { name: "เข็มเบอร์ 21", standard: 5 },
+    { name: "เข็มเบอร์ 24", standard: 5 },
+    { name: "IV catheter No.20", standard: 3 },
+    { name: "IV catheter No.22", standard: 3 },
+    { name: "IV catheter No.24", standard: 3 },
+    { name: "Bacteria Filter", standard: 1 },
+    { name: "Endotracheal tube ID 6.5", standard: 1 },
+    { name: "Endotracheal tube ID 7", standard: 2 },
+    { name: "Endotracheal tube ID 7.5", standard: 2 },
+    { name: "Endotracheal tube ID 8", standard: 2 },
+    { name: "Stylet", standard: 1 },
+    { name: "O2 Mask with Bag", standard: 1 },
+    { name: "O2 cannula", standard: 1 },
+    { name: "ชุด Ambu Bag + สายต่อ O2", standard: 1 },
+    { name: "Oral Airway (4 ชิ้น No.3,4)", standard: "1 ชุด" },
+    { name: "Nasal Airway No.7.5", standard: 1 },
+    { name: "ถุงมือ Sterile No.6.5", standard: 3 },
+    { name: "ถุงมือ Sterile No.7", standard: 3 },
+    { name: "สำลี 5 ก้อน", standard: 4 },
+    { name: "Gauze Bandage", standard: 2 },
+    { name: "ไม้พันสำลี", standard: 4 },
+    { name: "ก๊อส 3x3", standard: 4 },
+    { name: "ไฟฉาย", standard: 1 },
+    { name: "เครื่องเจาะ DTX", standard: 1 },
+    { name: "O2 ถังใหญ่ (หน่วย PSI)", standard: 2 },
+    { name: "O2 ถังเล็ก (หน่วย PSI)", standard: 1 }
+  ];
+'use strict';
+let revision=0, state={vehicles:[],items:[],nurses:[],checks:[],drafts:[],metadata:[],restocks:[]}, currentUser={}, checkResults=[], busy=false, editingNurse=null;
+const stores=Object.keys(state), $=id=>document.getElementById(id), uid=()=>crypto.randomUUID(), clone=x=>JSON.parse(JSON.stringify(x));
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pending='ยังไม่ตรวจ', missing='ขาด', used='ใช้ไป';
+const chipClass=s=>s==='Checked'?'chip-ok':s===missing?'chip-miss':s===used?'chip-used':'chip-pending';
+const cardCls=i=>i.status===missing?'is-missing':i.status===used?'is-used':i.status==='Checked'?'is-checked':'';
+let checkFilter='all', reportCar='all', rsEditor=null, rsSheetCtx=null, historyView='checks', restockStatusFilter='all';
+const RESTOCK_STATUS={draft:'ร่าง',submitted:'รอดำเนินการ',partial:'จ่าย/เติมบางส่วน',fulfilled:'เติมครบ',cancelled:'ยกเลิก'};
+const RESTOCK_ACT_TEXT={create:'สร้างคำขอ',submit:'ส่งคำขอ',issue:'จ่ายของจากคลัง',fill:'เติมลงรถจริง',fulfil:'ยืนยันเติมครบ',cancel:'ยกเลิกคำขอ'};
+function statusText(s){$('storageState').textContent=s;}
+async function api(path,options={}){const r=await fetch('api.php?action='+encodeURIComponent(path.split('/').pop()),{...options,headers:{'Content-Type':'application/json',...options.headers},cache:'no-store'});if(!r.ok){const e=Error(r.status===409?'ข้อมูลเปลี่ยนจากเครื่องอื่น กรุณาโหลดหน้าใหม่แล้วตรวจสอบก่อนบันทึกอีกครั้ง':r.status===401?'หมดเวลาเข้าสู่ระบบ กรุณาเข้าสู่ระบบอีกครั้ง':'เชื่อมต่อหรือบันทึกไม่สำเร็จ');e.status=r.status;throw e;}return r.json();}
+function mergeChanges(base,next,remote){const merged=clone(remote);for(const table of stores){const before=new Map(base[table].map(r=>[r.id,r])),after=new Map(next[table].map(r=>[r.id,r])),latest=new Map(remote[table].map(r=>[r.id,r]));for(const id of new Set([...before.keys(),...after.keys()])){const old=before.get(id),value=after.get(id);if(JSON.stringify(old)===JSON.stringify(value))continue;const current=latest.get(id);if(JSON.stringify(current)!==JSON.stringify(old)&&JSON.stringify(current)!==JSON.stringify(value))throw Error('รายการเดียวกันถูกแก้ไขจากอีกเครื่อง กรุณาโหลดหน้าใหม่เพื่อตรวจสอบ');if(value===undefined)latest.delete(id);else latest.set(id,value);}merged[table]=[...latest.values()];}return merged;}
+async function persist(next){let data=next,rev=revision;try{const result=await api('/api/state',{method:'PUT',body:JSON.stringify({revision:rev,data})});revision=result.revision;state=data;}catch(e){if(e.status!==409)throw e;const fresh=await api('/api/state');data=mergeChanges(state,next,fresh.data);const result=await api('/api/state',{method:'PUT',body:JSON.stringify({revision:fresh.revision,data})});revision=result.revision;state=data;}}
+async function mutate(fn){if(busy){alert('กำลังบันทึก กรุณาลองอีกครั้ง');return false;}busy=true;try{const next=clone(state);fn(next);await persist(next);statusText('บันทึกในฐานข้อมูลกลางแล้ว • เครื่องอื่นเปิดอ่านข้อมูลล่าสุดได้');renderDashboard();return true;}catch(e){statusText('บันทึกไม่สำเร็จ — '+e.message);alert(e.message);return false;}finally{busy=false;}}
+window.onload=()=>{$('authForm').onsubmit=async e=>{e.preventDefault();try{await api('/api/login',{method:'POST',body:JSON.stringify({password:$('systemPassword').value})});$('systemPassword').value='';await boot();}catch(err){$('authError').textContent='เข้าสู่ระบบไม่ได้ ตรวจรหัสผ่านและการเชื่อมต่อ';}};boot().catch(()=>{});};
+async function boot(){try{
+ const loaded=await api('/api/state');state=loaded.data;revision=loaded.revision;state.restocks=state.restocks||[];$('authGate').style.display='none';
+ if(!state.metadata.length){const next=clone(state);next.vehicles=[...$('car').options].filter(o=>o.value).map((o,i)=>({id:'car-'+(i+1),name:o.value}));const oldItems=null,oldReports=[];
+ const seed=ambulanceChecklistConfig;
+ for(const car of next.vehicles)seed.forEach((item,i)=>next.items.push({id:car.id+'-item-'+String(i).padStart(4,'0'),carId:car.id,name:item.name,standard:item.standard,isBattery:!!item.isBattery,expire:'',active:true}));
+ next.metadata=[{id:'schema',version:5},{id:'legacy',reports:oldReports,items:oldItems}];await persist(next);}
+ $('stockCar').innerHTML=state.vehicles.map(c=>`<option value="${esc(c.id)}">${esc(vehiclePlate(c))}</option>`).join('');
+ $('rsCar').innerHTML=state.vehicles.map(c=>`<option value="${esc(c.id)}">${esc(vehiclePlate(c))}</option>`).join('');
+ setupRestockDropdowns();onRestockCarChange();renderRestock();
+ $('car').innerHTML='<option value="">-- เลือกรถ --</option>'+state.vehicles.map(c=>`<option value="${esc(c.name)}">${esc(vehiclePlate(c))}</option>`).join('');$('car').onchange=syncVehicleSelection;setupDropdowns();renderNurseDirectory();loadReport();renderStock();renderDashboard();statusText('เชื่อมต่อฐานข้อมูลกลางแล้ว • โหลดหน้าใหม่เพื่อรับข้อมูลล่าสุดจากเครื่องอื่น');
+ if(state.metadata.find(x=>x.id==='legacy')?.items)statusText('เก็บสำเนาข้อมูล v3 แล้ว • วันหมดอายุเดิมไม่ระบุรถ กรุณาตรวจและกรอกแยกคัน');
+ }catch(e){statusText('เปิดฐานข้อมูลไม่ได้: '+e.message);throw e;}}
+function switchTab(id){for(const n of ['Dashboard','Check','Restock','Reports','Stock','Nurses']){$('tabContent'+n)?.classList.toggle('hidden',n.toLowerCase()!==id);$('btnTab'+n)?.classList.toggle('active',n.toLowerCase()===id);}if(id==='reports')loadReport();if(id==='dashboard')renderDashboard();if(id==='restock')renderRestock();}
+function vehiclePlate(car){return ({'car-1':'3ชฏ3250','car-2':'ฆง8434','car-3':'5กล1034'})[car.id]||car.name;}
+function selectVehicle(id){const car=state.vehicles.find(c=>c.id===id);if(!car)return;$('car').value=car.name;syncVehicleSelection();}
+function syncVehicleSelection(){const car=state.vehicles.find(c=>c.name===$('car').value);document.querySelectorAll('.car-symbol').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.carId===car?.id)));}
+function renderDashboard(){const today=new Date().toDateString();const lastByCar={},draftByCar={};for(const c of [...state.checks].sort((a,b)=>a.completedAt.localeCompare(b.completedAt)))lastByCar[c.carId]=c;for(const d of state.drafts)draftByCar[d.carId]=d;const restocks=state.restocks||[];
+ const waiting=restocks.filter(r=>r.status==='submitted').length,partialN=restocks.filter(r=>r.status==='partial').length;
+ const soonItems=state.items.filter(i=>i.active&&expireState(i.expire));
+ let attnTotal=0,checkedToday=0;
+ const rows=state.vehicles.map(car=>{const last=lastByCar[car.id],draft=draftByCar[car.id];const attn=last?last.results.filter(needsAttention).length:0;attnTotal+=attn;const isToday=!!(last&&new Date(last.completedAt).toDateString()===today);if(isToday)checkedToday++;const rs=restocks.filter(r=>r.carId===car.id&&r.status!=='cancelled');return{car,last,draft,attn,isToday,wait:rs.filter(r=>r.status==='submitted').length,part:rs.filter(r=>r.status==='partial').length,soon:soonItems.filter(i=>i.carId===car.id)};});
+ if(!$('dashStats'))return;
+ $('dashStats').innerHTML=`<div class="stat"><b>${state.vehicles.length}</b><span>รถทั้งหมด</span></div><div class="stat"><b>${checkedToday}</b><span>ตรวจแล้ววันนี้</span></div><div class="stat${state.drafts.length?' warn':''}"><b>${state.drafts.length}</b><span>ร่างตรวจค้าง</span></div><div class="stat${attnTotal?' warn':''}"><b>${attnTotal}</b><span>ต้องติดตาม</span></div><div class="stat${waiting?' warn':''}"><b>${waiting}</b><span>รอเติม</span></div><div class="stat${partialN?' warn':''}"><b>${partialN}</b><span>เติมไม่ครบ</span></div><div class="stat${soonItems.length?' warn':''}"><b>${soonItems.length}</b><span>ใกล้หมดอายุ</span></div>`;
+ $('dashCars').innerHTML=rows.map(r=>`<article class="dash-car${(r.attn||r.draft||r.wait||r.part||r.soon.length)?' is-alert':''}"><div class="dash-car-head"><span class="plate-chip">${esc(vehiclePlate(r.car))}</span><span class="chip ${r.draft?'chip-warn':r.isToday?'chip-ok':'chip-off'}">${r.draft?'มีร่างค้าง':r.isToday?'ตรวจแล้ววันนี้':'ยังไม่ตรวจวันนี้'}</span>${r.wait?`<span class="chip chip-submitted">รอเติม ${r.wait}</span>`:''}${r.part?`<span class="chip chip-partial">เติมไม่ครบ ${r.part}</span>`:''}</div><p class="dash-last">${r.last?`ตรวจล่าสุด ${esc(new Date(r.last.completedAt).toLocaleString('th-TH'))} • ${esc(r.last.userName)} • เวร ${esc(r.last.shift)}`:'ยังไม่มีประวัติการตรวจที่บันทึก'}</p>${r.attn?`<p class="dash-attn">ต้องติดตาม ${r.attn} รายการ เช่น ${r.last.results.filter(needsAttention).slice(0,3).map(i=>esc(i.name)).join(' • ')}</p>`:''}${r.soon.length?`<p class="dash-attn">วันหมดอายุ: ${r.soon.slice(0,3).map(i=>`${esc(i.name)} ${expireState(i.expire)==='expired'?'หมดอายุแล้ว':'ใกล้หมดอายุ'} (${esc(i.expire)})`).join(' • ')}${r.soon.length>3?` และอีก ${r.soon.length-3} รายการ`:''}</p>`:''}${r.draft?`<p class="dash-last">ร่างนี้ทำต่อได้เฉพาะผู้ตรวจและเวรเดิม</p>`:''}<div class="rs-actions"><button type="button" class="act-btn ok" onclick="startCheckFromDash('${esc(r.car.id)}')">ตรวจคันนี้</button><button type="button" class="act-btn gray" onclick="startRestockFromDash('${esc(r.car.id)}')">แจ้งเติมคันนี้</button></div></article>`).join('');
+ for(const r of rows){const el=document.querySelector(`.car-symbol[data-car-id="${r.car.id}"] .car-stat`);if(el){el.textContent=r.draft?'มีร่างค้าง':r.isToday?'ตรวจแล้ววันนี้':(r.last?'รอตรวจวันนี้':'ยังไม่มีประวัติ');el.className='car-stat '+(r.draft?'is-warn':r.isToday?'is-ok':'');}}}
+function startCheckFromDash(id){switchTab('check');selectVehicle(id);$('loginPage').scrollIntoView({block:'start'});}
+function startRestockFromDash(id,nurseId){switchTab('restock');$('rsCar').value=id;if(nurseId&&state.nurses.some(n=>n.id===nurseId&&n.active))$('rsBy').value=nurseId;onRestockCarChange();$('tabContentRestock').querySelector('.card').scrollIntoView({block:'start'});}
+
+// ---------- เบิก–เติมอุปกรณ์: helpers ----------
+function numeric(v){const n=parseFloat(String(v??'').trim());return isNaN(n)?null:n;}
+function addQty(cur,add){const a=String(add??'').trim();if(!a)return cur||'';if(!cur)return a;const c=parseFloat(String(cur).trim()),n=parseFloat(a);if(!isNaN(c)&&!isNaN(n)&&String(c)===String(cur).trim()&&String(n)===a)return String(c+n);return cur+' + '+a;}
+function parseExpireDate(t){if(!t)return null;const m=String(t).trim().match(/^(\d{1,2})\s*[/\-.]\s*(\d{1,2})\s*[/\-.]\s*(\d{2,4})$/);if(!m)return null;let y=+m[3];if(y<100)y+=2500;if(y>2400)y-=543;const d=new Date(y,+m[2]-1,+m[1]);return isNaN(d.getTime())?null:d;}
+function expireState(t){const d=parseExpireDate(t);if(!d)return null;const days=Math.round((d.getTime()-Date.now())/86400000);return days<0?'expired':days<=60?'soon':null;}
+function suggestQty(res){const d=(res.missing||'').trim();if(/^\d+(\.\d+)?$/.test(d))return d;return String(res.standard??'');}
+function nextRestockNo(){const d=new Date(),p=n=>String(n).padStart(2,'0'),ymd=d.getFullYear()+p(d.getMonth()+1)+p(d.getDate());const n=(state.restocks||[]).filter(r=>String(r.no).startsWith('RT-'+ymd)).length+1;return 'RT-'+ymd+'-'+String(n).padStart(3,'0');}
+function restockCheckConflict(checkId,selfId){return !!checkId&&(state.restocks||[]).some(r=>r.checkId===checkId&&r.status!=='cancelled'&&r.id!==selfId);}
+function activeCheckRef(){return rsEditor&&rsEditor.checkId&&rsEditor.items.some(e=>e.include&&e.fromCheck)?rsEditor.checkId:null;}
+function setupRestockDropdowns(){if(!$('rsBy'))return;const val=$('rsBy').value;$('rsBy').innerHTML='<option value="">-- เลือกผู้แจ้ง --</option>'+state.nurses.filter(n=>n.active).map(n=>`<option value="${esc(n.id)}">${esc(n.name)} (${esc(n.dept)})</option>`).join('');$('rsBy').value=val;}
+// ---------- เบิก–เติมอุปกรณ์: ฟอร์มแจ้ง ----------
+function onRestockCarChange(){const carId=$('rsCar').value,car=state.vehicles.find(c=>c.id===carId);rsEditor={carId,checkId:null,editingId:null,items:[]};if(!car){$('rsSourceInfo').className='rs-info';$('rsSourceInfo').textContent='เลือกรถเพื่อเตรียมรายการ';renderRestockEditor();return;}
+ const existing=(state.restocks||[]).filter(r=>r.carId===carId);
+ const draft=existing.find(r=>r.status==='draft');
+ if(draft){loadRestockEditor(draft);return;}
+ const checks=[...state.checks].filter(c=>c.carId===carId).sort((a,b)=>b.completedAt.localeCompare(a.completedAt));
+ const last=checks[0];let info='',warn=false;
+ if(existing.some(r=>r.status==='submitted'||r.status==='partial')){warn=true;info+='รถคันนี้มีคำขอเติมที่ยังไม่ปิด — ตรวจสอบรายการด้านล่างก่อนสร้างซ้ำ<br>';}
+ if(last){const dupe=existing.find(r=>r.checkId===last.id&&r.status!=='cancelled');if(dupe){warn=true;info+=`รอบตรวจล่าสุด (${esc(new Date(last.completedAt).toLocaleString('th-TH'))}) แจ้งเติมแล้วในคำขอ ${esc(dupe.no)} — จะไม่เติมข้อมูลจากรอบนี้ให้ซ้ำ กรอกเองได้ถ้าต้องการขอเพิ่ม`;}else{const attn=last.results.filter(needsAttention);info+=`เติมรายการจากรอบตรวจล่าสุด ${esc(new Date(last.completedAt).toLocaleString('th-TH'))} • ${esc(last.userName)} • พบ ${attn.length} รายการต้องเติม (ขาด/ใช้ไป)`;rsEditor.checkId=last.id;for(const res of attn)rsEditor.items.push({itemId:res.id,name:res.name,standard:res.standard,include:true,actualQty:'',qtyRequested:suggestQty(res),fromCheck:true});}}
+ else info+='รถคันนี้ยังไม่มีประวัติการตรวจ — เลือกรายการและกรอกจำนวนขอเติมเองได้';
+ for(const i of state.items.filter(i=>i.carId===carId&&i.active&&!rsEditor.items.some(e=>e.itemId===i.id)))rsEditor.items.push({itemId:i.id,name:i.name,standard:i.standard,include:false,actualQty:'',qtyRequested:'',fromCheck:false});
+ $('rsSourceInfo').className='rs-info'+(warn?' is-warn':'');$('rsSourceInfo').innerHTML=info;renderRestockEditor();}
+function loadRestockEditor(r){rsEditor={carId:r.carId,checkId:r.checkId??null,editingId:r.id,items:r.items.map(i=>({itemId:i.itemId,name:i.name,standard:i.standard,include:true,actualQty:i.actualQty,qtyRequested:i.qtyRequested,fromCheck:false}))};
+ for(const i of state.items.filter(i=>i.carId===r.carId&&i.active&&!rsEditor.items.some(e=>e.itemId===i.id)))rsEditor.items.push({itemId:i.id,name:i.name,standard:i.standard,include:false,actualQty:'',qtyRequested:'',fromCheck:false});
+ if(state.nurses.some(n=>n.id===r.createdBy&&n.active))$('rsBy').value=r.createdBy;
+ $('rsSourceInfo').className='rs-info';$('rsSourceInfo').innerHTML=`กำลังแก้ไขร่างคำขอ <b>${esc(r.no)}</b> — ปรับรายการแล้วกด "บันทึกร่าง" หรือ "ส่งคำขอ"`;renderRestockEditor();}
+function renderRestockEditor(){if(!$('rsItems'))return;$('rsItems').innerHTML=(rsEditor?.items||[]).map((e,k)=>`<div class="rs-editor-row${e.include?'':' off'}"><div class="rs-row-head"><input type="checkbox" class="rs-row-check" aria-label="รวมรายการ ${esc(e.name)}" ${e.include?'checked':''} onchange="toggleRestockItem(${k},this.checked)"><div class="rs-row-name">${esc(e.name)}<div class="muted" style="font-weight:400;font-size:12px">มาตรฐาน ${esc(e.standard)}${e.fromCheck?' • จากรอบตรวจ':''}</div></div></div><div class="rs-qty-grid"><div><label for="rsAct-${k}">มีจริง (ตอนตรวจ)</label><input id="rsAct-${k}" maxlength="100" type="text" inputmode="decimal" value="${esc(e.actualQty)}" placeholder="เช่น 0 หรือ 1" onchange="setRestockQty(${k},'actualQty',this.value)"></div><div><label for="rsReq-${k}">ขอเติม</label><input id="rsReq-${k}" maxlength="100" type="text" inputmode="decimal" value="${esc(e.qtyRequested)}" placeholder="เช่น 2 หรือ 1 ชุด" onchange="setRestockQty(${k},'qtyRequested',this.value)"></div></div></div>`).join('')||'<p class="empty">เลือกรถก่อนเพื่อเตรียมรายการ</p>';}
+function toggleRestockItem(k,on){if(!rsEditor)return;rsEditor.items[k].include=on;const row=$('rsItems').children[k];if(row)row.classList.toggle('off',!on);}
+function setRestockQty(k,f,v){if(rsEditor)rsEditor.items[k][f]=v;}
+function collectRestockItems(){return (rsEditor?.items||[]).filter(e=>e.include&&String(e.qtyRequested).trim()).map(e=>({itemId:e.itemId,name:e.name,standard:e.standard,actualQty:String(e.actualQty||''),qtyRequested:String(e.qtyRequested).trim(),qtyIssued:'',qtyFilled:''}));}
+function mergeRestockItems(items,oldItems){return items.map(i=>{const o=(oldItems||[]).find(x=>x.itemId===i.itemId);return{...i,qtyIssued:o?.qtyIssued||'',qtyFilled:o?.qtyFilled||''};});}
+async function saveRestockDraft(){if(!rsEditor||!rsEditor.carId)return alert('เลือกรถก่อน');const nurse=state.nurses.find(n=>n.id===$('rsBy').value);if(!nurse)return alert('เลือกผู้แจ้ง');const items=collectRestockItems();if(!items.length)return alert('กรอกจำนวน "ขอเติม" อย่างน้อย 1 รายการ');const reason=$('rsReason').value.trim(),note=$('rsNote').value.trim(),now=new Date().toISOString();
+ if(rsEditor.editingId){const old=state.restocks.find(r=>r.id===rsEditor.editingId);const ok=await mutate(s=>{const r=s.restocks.find(x=>x.id===old.id);r.items=mergeRestockItems(items,old.items);r.reason=reason;r.note=note;r.createdBy=nurse.id;r.createdByName=nurse.name;});if(ok){$('rsSourceInfo').className='rs-info';$('rsSourceInfo').innerHTML=`บันทึกร่าง <b>${esc(old.no)}</b> เรียบร้อย — กด "ส่งคำขอ" เมื่อพร้อม`;renderRestock();}return;}
+ const car=state.vehicles.find(c=>c.id===rsEditor.carId);const req={id:uid(),no:nextRestockNo(),carId:car.id,car:car.name,checkId:activeCheckRef(),createdBy:nurse.id,createdByName:nurse.name,createdAt:now,reason,note,status:'draft',items,actions:[{type:'create',at:now,by:nurse.id,byName:nurse.name,note:reason,lines:[]}]};
+ const ok=await mutate(s=>{s.restocks.push(clone(req));});
+ if(ok){rsEditor.editingId=req.id;$('rsSourceInfo').className='rs-info';$('rsSourceInfo').innerHTML=`บันทึกร่างแล้ว เลขที่ <b>${esc(req.no)}</b> — ตรวจสอบแล้วกด "ส่งคำขอ"`;renderRestock();}}
+async function submitRestock(){if(!rsEditor||!rsEditor.carId)return alert('เลือกรถก่อน');const nurse=state.nurses.find(n=>n.id===$('rsBy').value);if(!nurse)return alert('เลือกผู้แจ้ง');const items=collectRestockItems();if(!items.length)return alert('กรอกจำนวน "ขอเติม" อย่างน้อย 1 รายการ');const reason=$('rsReason').value.trim(),note=$('rsNote').value.trim(),now=new Date().toISOString();
+ if(rsEditor.editingId){const old=state.restocks.find(r=>r.id===rsEditor.editingId);if(restockCheckConflict(old.checkId??null,old.id))return alert('รอบตรวจนี้ถูกแจ้งเติมแล้วในคำขออื่น');
+  const ok=await mutate(s=>{const r=s.restocks.find(x=>x.id===old.id);r.items=mergeRestockItems(items,old.items);r.reason=reason;r.note=note;r.createdBy=nurse.id;r.createdByName=nurse.name;r.status='submitted';r.actions.push({type:'submit',at:now,by:nurse.id,byName:nurse.name,note:reason,lines:[]});});
+  if(ok){alert('ส่งคำขอ '+old.no+' แล้ว');resetRestockEditor();renderRestock();}return;}
+ const checkId=activeCheckRef();if(restockCheckConflict(checkId,null))return alert('รอบตรวจนี้ถูกแจ้งเติมแล้วในคำขออื่น');
+ const car=state.vehicles.find(c=>c.id===rsEditor.carId);const req={id:uid(),no:nextRestockNo(),carId:car.id,car:car.name,checkId,createdBy:nurse.id,createdByName:nurse.name,createdAt:now,reason,note,status:'submitted',items,actions:[{type:'create',at:now,by:nurse.id,byName:nurse.name,note:reason,lines:[]},{type:'submit',at:now,by:nurse.id,byName:nurse.name,note:reason,lines:[]}]};
+ const ok=await mutate(s=>{s.restocks.push(clone(req));});
+ if(ok){alert('ส่งคำขอ '+req.no+' แล้ว');resetRestockEditor();renderRestock();}}
+function resetRestockEditor(){$('rsReason').value='';$('rsNote').value='';onRestockCarChange();}
+function editRestockDraft(id){const r=state.restocks.find(x=>x.id===id);if(!r||r.status!=='draft')return;$('rsCar').value=r.carId;$('rsReason').value=r.reason||'';$('rsNote').value=r.note||'';loadRestockEditor(r);$('tabContentRestock').querySelector('.card').scrollIntoView({block:'start'});}
+// ---------- เบิก–เติมอุปกรณ์: รายการคำขอ + การดำเนินการ ----------
+function restockCardHTML(r,readOnly){const lines=r.items.map(i=>`<tr><td>${esc(i.name)}</td><td class="num">${esc(i.standard)}</td><td class="num">${esc(i.actualQty||'-')}</td><td class="num">${esc(i.qtyRequested)}</td><td class="num">${esc(i.qtyIssued||'-')}</td><td class="num">${esc(i.qtyFilled||'-')}</td></tr>`).join('');
+ const timeline=r.actions.map(a=>`<li><b>${esc(RESTOCK_ACT_TEXT[a.type]||a.type)}</b> — ${esc(new Date(a.at).toLocaleString('th-TH'))} • ${esc(a.byName)}${a.note?` • ${esc(a.note)}`:''}${(a.lines||[]).length?' • '+a.lines.map(l=>{const it=r.items.find(i=>i.itemId===l.itemId);return `${esc(it?it.name:l.itemId)} ${esc(l.qty)}`;}).join(', '):''}</li>`).join('');
+ let btns='';if(!readOnly){if(r.status==='draft')btns=`<div class="rs-actions"><button type="button" class="act-btn gray" data-act="edit">แก้ไข</button><button type="button" class="act-btn ok" data-act="submit">ส่งคำขอ</button><button type="button" class="act-btn danger" data-act="cancel">ยกเลิก</button></div>`;else if(r.status==='submitted'||r.status==='partial')btns=`<div class="rs-actions"><button type="button" class="act-btn ok" data-act="issue">จ่ายของ</button><button type="button" class="act-btn secondary" data-act="fill">เติมลงรถ</button><button type="button" class="act-btn warning" data-act="fulfil">ยืนยันเติมครบ</button><button type="button" class="act-btn danger" data-act="cancel">ยกเลิก</button></div>`;}
+ return `<article class="rs-card" data-id="${esc(r.id)}" data-car-id="${esc(r.carId)}" data-status="${esc(r.status)}" data-at="${esc(String(r.createdAt).slice(0,10))}"><div class="rs-head"><span class="rs-no">${esc(r.no)}</span><span class="chip chip-${esc(r.status)}">${esc(RESTOCK_STATUS[r.status]||r.status)}</span></div><div class="rs-meta"><span class="plate-chip">${esc(vehiclePlate({id:r.carId,name:r.car}))}</span><span>แจ้งโดย ${esc(r.createdByName)}</span><span>${esc(new Date(r.createdAt).toLocaleString('th-TH'))}</span>${r.reason?`<span>เหตุผล: ${esc(r.reason)}</span>`:''}${r.note?`<span>หมายเหตุ: ${esc(r.note)}</span>`:''}</div><div class="rs-table-wrap"><table class="rs-items"><thead><tr><th>อุปกรณ์</th><th>มาตรฐาน</th><th>มีจริง</th><th>ขอเติม</th><th>จ่ายแล้ว</th><th>เติมแล้ว</th></tr></thead><tbody>${lines}</tbody></table></div><details class="report-details"><summary>ประวัติการดำเนินการ (${r.actions.length})</summary><ul class="timeline">${timeline}</ul></details>${btns}</article>`;}
+function renderRestock(){if(!$('restockList'))return;const list=[...(state.restocks||[])].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));$('restockList').innerHTML=list.map(r=>restockCardHTML(r,false)).join('')||'<p class="empty">ยังไม่มีคำขอเบิก–เติม</p>';$('restockList').querySelectorAll('button[data-act]').forEach(b=>b.onclick=()=>restockAction(b.closest('.rs-card').dataset.id,b.dataset.act));}
+function restockAction(id,act){const r=state.restocks.find(x=>x.id===id);if(!r)return;if(act==='edit')return editRestockDraft(id);rsSheetCtx={id,act};const titles={submit:'ส่งคำขอ',issue:'บันทึกจ่ายของจากคลัง',fill:'บันทึกเติมลงรถจริง',fulfil:'ยืนยันเติมครบ',cancel:'ยกเลิกคำขอ'};$('rsSheetTitle').textContent=(titles[act]||act)+' — '+r.no;
+ let body=`<label for="rsSheetBy">ผู้ดำเนินการ</label><select id="rsSheetBy"><option value="">-- เลือกผู้ดำเนินการ --</option>${state.nurses.filter(n=>n.active).map(n=>`<option value="${esc(n.id)}"${n.id===r.createdBy?' selected':''}>${esc(n.name)} (${esc(n.dept)})</option>`).join('')}</select>`;
+ if(act==='issue'||act==='fill'){body+=r.items.map(i=>{const cur=act==='issue'?i.qtyIssued:i.qtyFilled;const req=numeric(i.qtyRequested),done=numeric(cur);const remain=req!==null&&done!==null?req-done:null;return `<label for="rsq-${esc(i.itemId)}" style="margin-top:10px">${esc(i.name)} <span class="muted">(ขอเติม ${esc(i.qtyRequested)}${cur?` • บันทึกแล้ว ${esc(cur)}`:''})</span></label><input id="rsq-${esc(i.itemId)}" maxlength="100" type="text" inputmode="decimal" placeholder="${act==='issue'?'จ่ายจำนวน':'เติมลงรถจำนวน'}${remain!==null&&remain>0?' (คงเหลือ '+remain+')':''}">`;}).join('');}
+ body+=`<label for="rsSheetNote" style="margin-top:10px">${act==='cancel'?'เหตุผลการยกเลิก (จำเป็น)':'หมายเหตุ'}</label><input id="rsSheetNote" maxlength="500" type="text" placeholder="${act==='cancel'?'ระบุเหตุผลที่ยกเลิก':'หมายเหตุ (ถ้ามี)'}">`;
+ if(act==='cancel')body+='<p class="muted" style="margin-top:8px">การยกเลิกจะบันทึกเหตุผลไว้ในไทม์ไลน์อย่างถาวร</p>';
+ if(act==='fulfil')body+='<p class="muted" style="margin-top:8px">ใช้เมื่อเติมครบทุกรายการแล้ว คำขอจะปิดและแก้ไขต่อไม่ได้</p>';
+ $('rsSheetBody').innerHTML=body;$('restockSheet').classList.remove('hidden');}
+function closeRestockSheet(){$('restockSheet').classList.add('hidden');rsSheetCtx=null;}
+async function confirmRestockAction(){if(!rsSheetCtx)return;const{id,act}=rsSheetCtx;const r=state.restocks.find(x=>x.id===id);if(!r)return closeRestockSheet();const nurse=state.nurses.find(n=>n.id===$('rsSheetBy').value);if(!nurse)return alert('เลือกผู้ดำเนินการ');const note=($('rsSheetNote')?.value||'').trim();
+ if(act==='cancel'&&!note)return alert('กรุณาระบุเหตุผลการยกเลิก');
+ let lines=[];if(act==='issue'||act==='fill'){lines=r.items.map(i=>({itemId:i.itemId,qty:($('rsq-'+i.itemId)?.value||'').trim()})).filter(l=>l.qty);if(!lines.length)return alert('กรอกจำนวนอย่างน้อย 1 รายการ');}
+ if(act==='fulfil'&&!confirm('ยืนยันว่าเติมครบทุกรายการของคำขอ '+r.no+' แล้ว?'))return;
+ if(act==='cancel'&&!confirm('ยืนยันยกเลิกคำขอ '+r.no+'?'))return;
+ const now=new Date().toISOString();const newStatus={submit:'submitted',issue:'partial',fill:'partial',fulfil:'fulfilled',cancel:'cancelled'}[act];
+ const ok=await mutate(s=>{const t=s.restocks.find(x=>x.id===id);t.actions.push({type:act,at:now,by:nurse.id,byName:nurse.name,note,lines:clone(lines)});t.status=newStatus;if(act==='issue'||act==='fill'){const field=act==='issue'?'qtyIssued':'qtyFilled';for(const l of lines){const it=t.items.find(i=>i.itemId===l.itemId);if(it)it[field]=addQty(it[field],l.qty);}}});
+ closeRestockSheet();if(ok){renderRestock();if(rsEditor&&rsEditor.editingId===id)resetRestockEditor();}}
+function setupDropdowns(){const val=$('userName').value;$('userName').innerHTML='<option value="">-- เลือกรายชื่อพยาบาล --</option>'+state.nurses.filter(n=>n.active).map(n=>`<option value="${esc(n.id)}">${esc(n.name)} (${esc(n.dept)})</option>`).join('');$('userName').value=val;}
+function login(){checkFilter='all';const n=state.nurses.find(n=>n.id===$('userName').value&&n.active),car=state.vehicles.find(c=>c.name===$('car').value);if(!n||!car||!$('shift').value)return alert('กรุณาเลือกพยาบาล เวร และรถให้ครบ');const draft=state.drafts.find(d=>d.carId===car.id);if(draft){if(draft.nurseId!==n.id||draft.shift!==$('shift').value)return alert('รถคันนี้มีร่างการตรวจค้างอยู่ กรุณาเลือกผู้ตรวจและเวรเดิมเพื่อทำต่อ');currentUser=clone(draft);checkResults=clone(draft.results);}else{currentUser={id:uid(),carId:car.id,car:car.name,nurseId:n.id,userName:n.name,userId:n.id,shift:$('shift').value,startedAt:new Date().toISOString()};checkResults=state.items.filter(i=>i.carId===car.id&&i.active).map(i=>({...i,status:pending,missing:'',batteryLevel:null}));}
+ $('loginPage').classList.add('hidden');$('checkPage').classList.remove('hidden');$('headerTitle').textContent='ตรวจรถ '+vehiclePlate(car);$('loginInfo').textContent=`ผู้ตรวจ: ${n.name} | เวร: ${currentUser.shift} | ${vehiclePlate(car)}`;renderChecklistTable();}
+function renderChecklistTable(){const doneN=checkResults.filter(i=>i.status!==pending).length;$('progressFill').style.width=(checkResults.length?Math.round(doneN/checkResults.length*100):0)+'%';$('progressText').textContent=`ตรวจแล้ว ${doneN} / ${checkResults.length} รายการ`;if($('cntAll')){$('cntAll').textContent=checkResults.length;$('cntPending').textContent=checkResults.length-doneN;$('cntAttn').textContent=checkResults.filter(needsAttention).length;for(const[id,f]of[['chipAll','all'],['chipPending','pending'],['chipAttn','attn']])$(id)?.classList.toggle('on',checkFilter===f);}const visible=checkResults.map((i,k)=>({i,k})).filter(({i})=>checkFilter==='all'||(checkFilter==='pending'&&i.status===pending)||(checkFilter==='attn'&&needsAttention(i)));$('itemTable').innerHTML=visible.map(({i,k})=>`<article class="item-card ${cardCls(i)}"><div class="item-head"><span class="item-no">${k+1}</span><div class="item-name">${esc(i.name)}</div><span class="chip ${chipClass(i.status)}">${esc(i.status)}</span></div><div class="item-meta"><span class="std-chip">มาตรฐาน ${esc(i.standard)}</span>${i.missing?`<span class="detail-chip">${esc(i.missing)}</span>`:''}</div><div class="exp-row"><label for="exp-${k}">วันหมดอายุ</label><input id="exp-${k}" aria-label="วันหมดอายุ ${esc(i.name)}" type="text" value="${esc(i.expire)}" onchange="changeExpirationRow(${k},this.value)" placeholder="วัน/เดือน/ปี"></div><div class="item-actions">${i.isBattery?`<div class="battery-container" role="group" aria-label="ระดับแบตเตอรี่ ${esc(i.name)}">${[0,1,2,3,4].map(v=>`<button type="button" class="bat-btn${i.batteryLevel===v?' on':''}" aria-pressed="${i.batteryLevel===v}" aria-label="แบตเตอรี่ ${v}/4" onclick="clickBatteryUI(${k},${v})">${v}/4</button>`).join('')}</div>`:`<button type="button" class="act-btn ok" onclick="setItemStatus(${k},'Checked')">✓ ครบ</button><button type="button" class="act-btn warn" onclick="triggerManualValue(${k},'${used}')">ใช้ไป</button>`}<button type="button" class="act-btn danger" onclick="triggerManualValue(${k},'${missing}')">ขาด</button></div></article>`).join('')||`<p class="empty">${checkFilter==='pending'?'ไม่มีรายการที่ยังไม่ตรวจ — ตรวจครบทุกรายการแล้ว':checkFilter==='attn'?'ไม่มีรายการที่ต้องติดตามในรอบนี้':'ยังไม่มีรายการตรวจ'}</p>`;}
+function setCheckFilter(f){checkFilter=f;renderChecklistTable();}
+async function saveDraft(nextResults){const saved=await mutate(s=>{s.drafts=s.drafts.filter(d=>d.carId!==currentUser.carId);s.drafts.push({...clone(currentUser),results:nextResults});});if(saved){checkResults=nextResults;renderChecklistTable();}return saved;}
+function askDetail(title){return new Promise(resolve=>{const ov=$('sheetOverlay'),inp=$('sheetInput');$('sheetTitle').textContent=title;inp.value='';ov.classList.remove('hidden');setTimeout(()=>inp.focus(),60);const done=v=>{ov.classList.add('hidden');inp.onkeydown=null;ov.onclick=null;resolve(v);};$('sheetOk').onclick=()=>done(inp.value);$('sheetCancel').onclick=()=>done(null);inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();done(inp.value);}};ov.onclick=e=>{if(e.target===ov)done(null);};});}
+async function changeExpirationRow(k,v){const next=clone(checkResults);next[k].expire=v;await saveDraft(next);}
+async function setItemStatus(k,v){const next=clone(checkResults);next[k].status=v;next[k].missing='';await saveDraft(next);}
+async function triggerManualValue(k,v){const value=await askDetail('ระบุจำนวน / รายละเอียด');if(!value?.trim())return;const next=clone(checkResults);next[k].status=v;next[k].missing=value.trim();await saveDraft(next);}
+async function clickBatteryUI(k,v){const next=clone(checkResults);Object.assign(next[k],{batteryLevel:v,status:'Checked',missing:v+'/4 ขีด'});await saveDraft(next);}
+async function checkAll(){if(!confirm('ยืนยันเฉพาะรายการที่ยังไม่ตรวจว่าได้ตรวจครบแล้ว? รายการขาด/ใช้ไปและแบตเตอรี่จะคงเดิม'))return;await saveDraft(checkResults.map(i=>i.status===pending&&!i.isBattery?{...i,status:'Checked'}:i));}
+async function saveCheck(){if(!currentUser.id)return alert('กรุณาเริ่มตรวจ');if(!checkResults.length||checkResults.some(i=>i.status===pending))return alert('กรุณาตรวจทุกรายการ รวมถึงระดับแบตเตอรี่ก่อนบันทึก');if(state.checks.some(c=>c.id===currentUser.id))return alert('รอบนี้บันทึกแล้ว กรุณาเริ่มรอบใหม่');const carId=currentUser.carId,nurseId=currentUser.nurseId,checkId=currentUser.id,attn=checkResults.filter(needsAttention).length;const ok=await mutate(s=>{s.checks.push({...clone(currentUser),completedAt:new Date().toISOString(),results:clone(checkResults)});s.drafts=s.drafts.filter(d=>d.carId!==currentUser.carId);for(const r of checkResults){const i=s.items.find(i=>i.id===r.id);if(i)i.expire=r.expire;}});if(ok){alert('บันทึกครบทั้งรอบแล้ว');currentUser={};checkResults=[];$('checkPage').classList.add('hidden');$('loginPage').classList.remove('hidden');renderStock();if(attn&&!restockCheckConflict(checkId,null)){if(confirm('รอบนี้มี '+attn+' รายการต้องติดตาม (ขาด/ใช้ไป) — แจ้งเบิก–เติมอุปกรณ์เลยไหม?')){startRestockFromDash(carId,nurseId);return;}}switchTab('reports');}}
+function logout(){currentUser={};checkResults=[];$('checkPage').classList.add('hidden');$('loginPage').classList.remove('hidden');$('headerTitle').textContent='ระบบเช็ครถ Refer / Ambulance';}
+function resetNurseEditor(){editingNurse=null;for(const id of ['nId','nName','nDept','nPhone','nStart','nEnd','nNote'])$(id).value='';$('nId').readOnly=false;$('nActive').value='true';}
+function editNurse(id){const n=state.nurses.find(n=>n.id===id);editingNurse=id;$('nId').value=n.id;$('nId').readOnly=true;$('nName').value=n.name;$('nDept').value=n.dept;$('nPhone').value=n.phone||'';$('nActive').value=String(n.active);$('nStart').value=n.start||'';$('nEnd').value=n.end||'';$('nNote').value=n.note||'';$('nurseEditor').scrollIntoView({block:'start'});}
+async function saveNurse(){const n={id:$('nId').value.trim(),name:$('nName').value.trim(),dept:$('nDept').value.trim(),phone:$('nPhone').value.trim(),start:$('nStart').value.trim(),end:$('nEnd').value.trim(),note:$('nNote').value.trim(),active:$('nActive').value==='true'};if(!n.id||!n.name)return alert('กรอกรหัสและชื่อ');if(!editingNurse&&state.nurses.some(x=>x.id===n.id))return alert('รหัสนี้มีแล้ว ใช้ปุ่มแก้ไข');if(await mutate(s=>{const old=s.nurses.find(x=>x.id===n.id);s.nurses=s.nurses.filter(x=>x.id!==n.id);s.nurses.push({...old,...n});})){resetNurseEditor();setupDropdowns();renderNurseDirectory();}}
+function renderNurseDirectory(){$('nurseDirectoryTable').innerHTML=state.nurses.map((n,k)=>`<article class="nurse-card"><div class="nurse-top"><div style="flex:1;min-width:0"><div class="nurse-name">${esc(n.name)}</div><div class="nurse-sub">รหัส ${esc(n.id)} • ${esc(n.dept)}</div></div><span class="chip ${n.active?'chip-ok':'chip-off'}">${n.active?'ปฏิบัติงาน':'พักใช้งาน'}</span></div><div class="nurse-meta">${n.phone?`<span>📞 ${esc(n.phone)}</span>`:''}${n.start?`<span>เริ่ม ${esc(n.start)}</span>`:''}${n.end?`<span>ครบ 6 เดือน ${esc(n.end)}</span>`:''}${n.note?`<span>📝 ${esc(n.note)}</span>`:''}</div><button class="small-btn" data-index="${k}">แก้ไข</button></article>`).join('')||'<p class="empty">ยังไม่มีรายชื่อ — เพิ่มหรือเลือกไฟล์ต้นฉบับเพื่อนำเข้าสู่เซิร์ฟเวอร์</p>';$('nurseDirectoryTable').querySelectorAll('button').forEach(b=>b.onclick=()=>editNurse(state.nurses[Number(b.dataset.index)].id));filterNurseTable();}
+function filterNurseTable(){const q=$('nurseSearch').value.toLowerCase();$('nurseDirectoryTable').querySelectorAll('.nurse-card').forEach(r=>r.classList.toggle('hidden',!r.textContent.toLowerCase().includes(q)));}
+async function importNurses(event){try{const f=event.target.files[0];if(!f)return;const s=await f.text(),block=s.match(/const nurseRegistryData\s*=\s*(\[[\s\S]*?\n\s*\]);/);if(!block)throw Error();const rows=JSON.parse(block[1].replace(/([{,]\s*)(id|name|dept|phone|start|end|note)\s*:/g,'$1"$2":'));if(!rows.length||rows.some(n=>typeof n.name!=='string'||!n.id))throw Error();if(!confirm(`นำเข้า ${rows.length} รายชื่อเข้าสู่เซิร์ฟเวอร์โรงพยาบาล? กรุณาตรวจสถานะปฏิบัติงานหลังนำเข้า รหัสที่มีแล้วจะไม่ถูกทับ`))return;await mutate(next=>{for(const n of rows){const id=String(n.id);if(!next.nurses.some(x=>x.id===id))next.nurses.push({...n,id,active:true});}});setupDropdowns();renderNurseDirectory();}catch(e){alert('อ่านรายชื่อไม่ได้ กรุณาเลือกไฟล์ HTML ต้นฉบับ v3');}finally{event.target.value='';}}
+function renderStock(){const rows=state.items.filter(i=>i.carId===$('stockCar').value);$('stockTable').innerHTML=rows.map((i,k)=>`<article class="stock-card${i.active?'':' is-off'}"><div class="stock-top"><div class="stock-name">${esc(i.name)}</div><span class="chip ${i.active?'chip-ok':'chip-off'}">${i.active?'ใช้งาน':'พัก'}</span></div><div class="stock-fields"><div><label>จำนวนมาตรฐาน</label><input aria-label="จำนวนมาตรฐาน" data-k="${k}" data-field="standard" value="${esc(i.standard)}"></div><div><label>วันหมดอายุ</label><input aria-label="วันหมดอายุ" data-k="${k}" data-field="expire" value="${esc(i.expire)}"></div></div><button class="small-btn gray" data-k="${k}">${i.active?'พักใช้งาน':'เปิดใช้งาน'}</button></article>`).join('')||'<p class="empty">ยังไม่มีอุปกรณ์ในรถคันนี้</p>';$('stockTable').querySelectorAll('input').forEach(el=>el.onchange=()=>updateStock(rows[Number(el.dataset.k)].id,el.dataset.field,el.value));$('stockTable').querySelectorAll('button').forEach(el=>el.onclick=()=>{const i=rows[Number(el.dataset.k)];updateStock(i.id,'active',!i.active);});}
+async function updateStock(id,field,value){const item=state.items.find(i=>i.id===id);if(state.drafts.some(d=>d.carId===item.carId)||currentUser.carId===item.carId){alert('รถคันนี้มีรอบตรวจค้าง กรุณาบันทึกให้เสร็จก่อนแก้ทะเบียน');renderStock();return;}await mutate(s=>s.items.find(i=>i.id===id)[field]=value);renderStock();}
+async function addStock(){const name=$('stockName').value.trim(),standard=$('stockStandard').value.trim(),carId=$('stockCar').value;if(!name||!standard)return alert('กรอกชื่อและจำนวน');if(state.drafts.some(d=>d.carId===carId)||currentUser.carId===carId)return alert('กรุณาจบรอบตรวจของรถคันนี้ก่อน');if(await mutate(s=>s.items.push({id:uid(),carId,name,standard,expire:'',isBattery:false,active:true}))){$('stockName').value='';$('stockStandard').value='';renderStock();}}
+function needsAttention(i){return i.status===missing||i.status===used||(i.isBattery&&i.batteryLevel<4);}
+function loadReport(){const sorted=[...state.checks].sort((a,b)=>b.completedAt.localeCompare(a.completedAt));
+ $('reportTable').innerHTML=sorted.map(c=>{const attn=c.results.filter(needsAttention).length;return `<article class="report-card" data-car-id="${esc(c.carId)}" data-at="${esc(String(c.completedAt).slice(0,10))}"><div class="report-top"><div class="report-time">${esc(new Date(c.completedAt).toLocaleString('th-TH'))}</div><span class="chip ${attn?'chip-miss':'chip-ok'}">${attn?'ต้องติดตาม '+attn:'ครบถ้วน'}</span></div><div class="report-meta"><span class="plate-chip">${esc(vehiclePlate({id:c.carId,name:c.car}))}</span><span>${esc(c.userName)}</span><span>เวร ${esc(c.shift)}</span><span>ตรวจ ${c.results.length} รายการ</span></div><details class="report-details"><summary>ดูทุกรายการ (${c.results.length})</summary>${c.results.map(i=>`<p class="${needsAttention(i)?'attn':''}">${esc(i.name)}: ${esc(i.status)} ${esc(i.missing)} | หมดอายุ ${esc(i.expire||'-')}</p>`).join('')}</details></article>`;}).join('')||'<p class="empty">ยังไม่มีรอบการตรวจที่บันทึก</p>';
+ renderRestockHistory();
+ if($('reportCarChips')){const carIds=[...new Set([...state.checks.map(c=>c.carId),...(state.restocks||[]).map(r=>r.carId)])];$('reportCarChips').innerHTML='<button type="button" class="chip-btn'+(reportCar==='all'?' on':'')+'" onclick="setReportCar(\'all\')">ทุกคัน</button>'+carIds.map(id=>'<button type="button" class="chip-btn'+(reportCar===id?' on':'')+'" onclick="setReportCar(\''+esc(id)+'\')">'+esc(vehiclePlate({id,name:id}))+'</button>').join('');}
+ $('clearHistoryBtn').disabled=state.checks.length===0;
+ const archives=state.metadata.filter(m=>m.id.startsWith('legacy')&&m.reports?.length);
+ if(archives.length){const box=document.createElement('div');box.id='legacyReports';box.innerHTML='<h2>แฟ้มประวัติจาก v3 (เก็บตามต้นฉบับ)</h2>'+archives.map(m=>'<details><summary>รายงานเดิม '+m.reports.length+' รายการ / อุปกรณ์เดิม '+(m.items?.length||0)+' รายการ</summary>'+m.reports.map(r=>`<p>${esc(r.date)} ${esc(r.time)} | ${esc(r.car)} | ${esc(r.item)}: ${esc(r.missing)} | ${esc(r.user)}</p>`).join('')+'<h3>วันหมดอายุเดิม — ยังไม่ระบุรถ</h3>'+(m.items||[]).map(i=>`<p>${esc(i.name)} | ${esc(i.expire||'-')}</p>`).join('')+'</details>').join('');$('legacyReports')?.remove();$('historyFooter').before(box);}else $('legacyReports')?.remove();
+ filterHistory();}
+function renderRestockHistory(){if(!$('restockHistoryTable'))return;const list=[...(state.restocks||[])].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));const counts={};for(const r of list)counts[r.status]=(counts[r.status]||0)+1;
+ if($('restockStatusChips')){$('restockStatusChips').innerHTML='<button type="button" class="chip-btn'+(restockStatusFilter==='all'?' on':'')+'" onclick="setRestockStatus(\'all\')">ทั้งหมด '+list.length+'</button>'+Object.keys(RESTOCK_STATUS).map(s=>`<button type="button" class="chip-btn${restockStatusFilter===s?' on':''}" onclick="setRestockStatus('${s}')">${RESTOCK_STATUS[s]} ${counts[s]||0}</button>`).join('');}
+ $('restockHistoryTable').innerHTML=list.map(r=>restockCardHTML(r,true)).join('')||'<p class="empty">ยังไม่มีคำขอเบิก–เติม</p>';filterHistory();}
+function setReportCar(id){reportCar=id;loadReport();}
+function setHistoryView(v){historyView=v;if($('segChecks')){$('segChecks').classList.toggle('on',v==='checks');$('segRestock').classList.toggle('on',v==='restock');$('reportTable').classList.toggle('hidden',v!=='checks');$('restockHistoryTable').classList.toggle('hidden',v!=='restock');$('restockStatusChips').classList.toggle('hidden',v!=='restock');}filterHistory();}
+function setRestockStatus(f){restockStatusFilter=f;renderRestockHistory();}
+function filterHistory(){const q=($('reportSearch')?.value||'').toLowerCase().trim();const from=$('historyFrom')?.value||'',to=$('historyTo')?.value||'';const inRange=d=>(!from||d>=from)&&(!to||d<=to);
+ if(historyView==='checks'){const cards=[...$('reportTable')?.querySelectorAll('.report-card')||[]];let shown=0;cards.forEach(card=>{const hit=(reportCar==='all'||reportCar===card.dataset.carId)&&inRange(card.dataset.at||'')&&(!q||card.textContent.toLowerCase().includes(q));card.classList.toggle('hidden',!hit);if(hit)shown++;});if($('reportCount'))$('reportCount').textContent=state.checks.length?('แสดง '+shown+' จาก '+state.checks.length+' รอบการตรวจ'):'';}
+ else{const cards=[...$('restockHistoryTable')?.querySelectorAll('.rs-card')||[]];let shown=0;cards.forEach(card=>{const hit=(reportCar==='all'||reportCar===card.dataset.carId)&&(restockStatusFilter==='all'||card.dataset.status===restockStatusFilter)&&inRange(card.dataset.at||'')&&(!q||card.textContent.toLowerCase().includes(q));card.classList.toggle('hidden',!hit);if(hit)shown++;});const total=(state.restocks||[]).length;if($('reportCount'))$('reportCount').textContent=total?('แสดง '+shown+' จาก '+total+' คำขอเติม'):'';}}
+async function clearData(){if(!confirm('ล้างประวัติการตรวจทั้งหมดบนเซิร์ฟเวอร์? การล้างมีผลกับทุกเครื่อง และไม่ลบทะเบียนรถ อุปกรณ์ หรือพยาบาล'))return;await mutate(s=>{s.checks=[];});loadReport();}
+// Refresh idle screens; active checklists retain their revision to reject stale writes.
+setInterval(async()=>{if($('authGate').style.display!=='none'||['nName','stockName'].some(id=>$(id).value)||busy||currentUser.id||document.activeElement?.matches('input,select,textarea')||editingNurse||!$('restockSheet').classList.contains('hidden'))return;try{const r=await api('/api/state');if(r.revision!==revision){state=r.data;state.restocks=state.restocks||[];revision=r.revision;setupDropdowns();setupRestockDropdowns();renderNurseDirectory();renderStock();loadReport();renderDashboard();renderRestock();statusText('อัปเดตข้อมูลจากระบบกลางแล้ว');}}catch(e){statusText(e.message);}},15000);
+
+async function signOut(){if(busy)return;try{await api('/api/logout',{method:'POST',body:'{}'});location.reload();}catch(e){alert(e.message);}}
+$('rsSheetOk').onclick=confirmRestockAction;
+$('rsSheetCancel').onclick=closeRestockSheet;
+
+</script>
+</body>
+</html>

@@ -1,0 +1,2726 @@
+{
+  "revision": 24,
+  "data": {
+    "vehicles": [
+      {
+        "id": "car-1",
+        "name": "รถ Refer (3ชฏ3250)"
+      },
+      {
+        "id": "car-2",
+        "name": "รถ Refer (ฆง8434)"
+      },
+      {
+        "id": "car-3",
+        "name": "รถ Refer (5กล1034)"
+      }
+    ],
+    "items": [
+      {
+        "id": "car-1-item-0000",
+        "carId": "car-1",
+        "name": "หน้ากากอนามัย (Mask)",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0001",
+        "carId": "car-1",
+        "name": "Tourniquet",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0002",
+        "carId": "car-1",
+        "name": "ชามรูปไต",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0003",
+        "carId": "car-1",
+        "name": "เครื่องวัดความดัน (ติดผนัง)",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0004",
+        "carId": "car-1",
+        "name": "เครื่องวัดความดัน (พกพา)",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0005",
+        "carId": "car-1",
+        "name": "Stethoscope",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0006",
+        "carId": "car-1",
+        "name": "Laryngoscope + Blade",
+        "standard": "1 ชุด",
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0007",
+        "carId": "car-1",
+        "name": "Micropore",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0008",
+        "carId": "car-1",
+        "name": "Transpore",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0009",
+        "carId": "car-1",
+        "name": "เครื่อง Suction",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0010",
+        "carId": "car-1",
+        "name": "Macgril forcep",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0011",
+        "carId": "car-1",
+        "name": "เสาน้ำเกลือ",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0012",
+        "carId": "car-1",
+        "name": "ถังขยะติดเชื้อ",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0013",
+        "carId": "car-1",
+        "name": "ถังขยะทั่วไป",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0014",
+        "carId": "car-1",
+        "name": "เครื่องAED (ระบุจำนวนขีดแบต)",
+        "standard": 1,
+        "isBattery": true,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0015",
+        "carId": "car-1",
+        "name": "เครื่องวัด O2 Sat mobile",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0016",
+        "carId": "car-1",
+        "name": "Slide Board",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0017",
+        "carId": "car-1",
+        "name": "Alcohol jelly",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0018",
+        "carId": "car-1",
+        "name": "ถุงมือเบอร์ M",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0019",
+        "carId": "car-1",
+        "name": "ถุงมือเบอร์ S",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0020",
+        "carId": "car-1",
+        "name": "Aquapak 340 ml",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0021",
+        "carId": "car-1",
+        "name": "Lubricgel",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0022",
+        "carId": "car-1",
+        "name": "Betadine",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0023",
+        "carId": "car-1",
+        "name": "0.9% NSS 100 cc",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0024",
+        "carId": "car-1",
+        "name": "0.9% NSS 1000 cc",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0025",
+        "carId": "car-1",
+        "name": "5% DN/2 1000 cc",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0026",
+        "carId": "car-1",
+        "name": "70% Alcohol",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0027",
+        "carId": "car-1",
+        "name": "Set IV",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0028",
+        "carId": "car-1",
+        "name": "Set Infusion",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0029",
+        "carId": "car-1",
+        "name": "3-way",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0030",
+        "carId": "car-1",
+        "name": "Extension",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0031",
+        "carId": "car-1",
+        "name": "สาย Suction No.14",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0032",
+        "carId": "car-1",
+        "name": "Syringe ขนาด 20 ml",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0033",
+        "carId": "car-1",
+        "name": "Syringe ขนาด 10 ml",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0034",
+        "carId": "car-1",
+        "name": "Syringe ขนาด 5 ml",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0035",
+        "carId": "car-1",
+        "name": "Syringe ขนาด 3 ml",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0036",
+        "carId": "car-1",
+        "name": "เข็มเบอร์ 18",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0037",
+        "carId": "car-1",
+        "name": "เข็มเบอร์ 21",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0038",
+        "carId": "car-1",
+        "name": "เข็มเบอร์ 24",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0039",
+        "carId": "car-1",
+        "name": "IV catheter No.20",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0040",
+        "carId": "car-1",
+        "name": "IV catheter No.22",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0041",
+        "carId": "car-1",
+        "name": "IV catheter No.24",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0042",
+        "carId": "car-1",
+        "name": "Bacteria Filter",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0043",
+        "carId": "car-1",
+        "name": "Endotracheal tube ID 6.5",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0044",
+        "carId": "car-1",
+        "name": "Endotracheal tube ID 7",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0045",
+        "carId": "car-1",
+        "name": "Endotracheal tube ID 7.5",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0046",
+        "carId": "car-1",
+        "name": "Endotracheal tube ID 8",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0047",
+        "carId": "car-1",
+        "name": "Stylet",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0048",
+        "carId": "car-1",
+        "name": "O2 Mask with Bag",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0049",
+        "carId": "car-1",
+        "name": "O2 cannula",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0050",
+        "carId": "car-1",
+        "name": "ชุด Ambu Bag + สายต่อ O2",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0051",
+        "carId": "car-1",
+        "name": "Oral Airway (4 ชิ้น No.3,4)",
+        "standard": "1 ชุด",
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0052",
+        "carId": "car-1",
+        "name": "Nasal Airway No.7.5",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0053",
+        "carId": "car-1",
+        "name": "ถุงมือ Sterile No.6.5",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0054",
+        "carId": "car-1",
+        "name": "ถุงมือ Sterile No.7",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0055",
+        "carId": "car-1",
+        "name": "สำลี 5 ก้อน",
+        "standard": 4,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0056",
+        "carId": "car-1",
+        "name": "Gauze Bandage",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0057",
+        "carId": "car-1",
+        "name": "ไม้พันสำลี",
+        "standard": 4,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0058",
+        "carId": "car-1",
+        "name": "ก๊อส 3x3",
+        "standard": 4,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0059",
+        "carId": "car-1",
+        "name": "ไฟฉาย",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0060",
+        "carId": "car-1",
+        "name": "เครื่องเจาะ DTX",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0061",
+        "carId": "car-1",
+        "name": "O2 ถังใหญ่ (หน่วย PSI)",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-1-item-0062",
+        "carId": "car-1",
+        "name": "O2 ถังเล็ก (หน่วย PSI)",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0000",
+        "carId": "car-2",
+        "name": "หน้ากากอนามัย (Mask)",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0001",
+        "carId": "car-2",
+        "name": "Tourniquet",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0002",
+        "carId": "car-2",
+        "name": "ชามรูปไต",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0003",
+        "carId": "car-2",
+        "name": "เครื่องวัดความดัน (ติดผนัง)",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0004",
+        "carId": "car-2",
+        "name": "เครื่องวัดความดัน (พกพา)",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0005",
+        "carId": "car-2",
+        "name": "Stethoscope",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0006",
+        "carId": "car-2",
+        "name": "Laryngoscope + Blade",
+        "standard": "1 ชุด",
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0007",
+        "carId": "car-2",
+        "name": "Micropore",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0008",
+        "carId": "car-2",
+        "name": "Transpore",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0009",
+        "carId": "car-2",
+        "name": "เครื่อง Suction",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0010",
+        "carId": "car-2",
+        "name": "Macgril forcep",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0011",
+        "carId": "car-2",
+        "name": "เสาน้ำเกลือ",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0012",
+        "carId": "car-2",
+        "name": "ถังขยะติดเชื้อ",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0013",
+        "carId": "car-2",
+        "name": "ถังขยะทั่วไป",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0014",
+        "carId": "car-2",
+        "name": "เครื่องAED (ระบุจำนวนขีดแบต)",
+        "standard": 1,
+        "isBattery": true,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0015",
+        "carId": "car-2",
+        "name": "เครื่องวัด O2 Sat mobile",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0016",
+        "carId": "car-2",
+        "name": "Slide Board",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0017",
+        "carId": "car-2",
+        "name": "Alcohol jelly",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0018",
+        "carId": "car-2",
+        "name": "ถุงมือเบอร์ M",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0019",
+        "carId": "car-2",
+        "name": "ถุงมือเบอร์ S",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0020",
+        "carId": "car-2",
+        "name": "Aquapak 340 ml",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0021",
+        "carId": "car-2",
+        "name": "Lubricgel",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0022",
+        "carId": "car-2",
+        "name": "Betadine",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0023",
+        "carId": "car-2",
+        "name": "0.9% NSS 100 cc",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0024",
+        "carId": "car-2",
+        "name": "0.9% NSS 1000 cc",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0025",
+        "carId": "car-2",
+        "name": "5% DN/2 1000 cc",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0026",
+        "carId": "car-2",
+        "name": "70% Alcohol",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0027",
+        "carId": "car-2",
+        "name": "Set IV",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0028",
+        "carId": "car-2",
+        "name": "Set Infusion",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0029",
+        "carId": "car-2",
+        "name": "3-way",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0030",
+        "carId": "car-2",
+        "name": "Extension",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0031",
+        "carId": "car-2",
+        "name": "สาย Suction No.14",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0032",
+        "carId": "car-2",
+        "name": "Syringe ขนาด 20 ml",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0033",
+        "carId": "car-2",
+        "name": "Syringe ขนาด 10 ml",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0034",
+        "carId": "car-2",
+        "name": "Syringe ขนาด 5 ml",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0035",
+        "carId": "car-2",
+        "name": "Syringe ขนาด 3 ml",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0036",
+        "carId": "car-2",
+        "name": "เข็มเบอร์ 18",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0037",
+        "carId": "car-2",
+        "name": "เข็มเบอร์ 21",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0038",
+        "carId": "car-2",
+        "name": "เข็มเบอร์ 24",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0039",
+        "carId": "car-2",
+        "name": "IV catheter No.20",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0040",
+        "carId": "car-2",
+        "name": "IV catheter No.22",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0041",
+        "carId": "car-2",
+        "name": "IV catheter No.24",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0042",
+        "carId": "car-2",
+        "name": "Bacteria Filter",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0043",
+        "carId": "car-2",
+        "name": "Endotracheal tube ID 6.5",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0044",
+        "carId": "car-2",
+        "name": "Endotracheal tube ID 7",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0045",
+        "carId": "car-2",
+        "name": "Endotracheal tube ID 7.5",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0046",
+        "carId": "car-2",
+        "name": "Endotracheal tube ID 8",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0047",
+        "carId": "car-2",
+        "name": "Stylet",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0048",
+        "carId": "car-2",
+        "name": "O2 Mask with Bag",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0049",
+        "carId": "car-2",
+        "name": "O2 cannula",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0050",
+        "carId": "car-2",
+        "name": "ชุด Ambu Bag + สายต่อ O2",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0051",
+        "carId": "car-2",
+        "name": "Oral Airway (4 ชิ้น No.3,4)",
+        "standard": "1 ชุด",
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0052",
+        "carId": "car-2",
+        "name": "Nasal Airway No.7.5",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0053",
+        "carId": "car-2",
+        "name": "ถุงมือ Sterile No.6.5",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0054",
+        "carId": "car-2",
+        "name": "ถุงมือ Sterile No.7",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0055",
+        "carId": "car-2",
+        "name": "สำลี 5 ก้อน",
+        "standard": 4,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0056",
+        "carId": "car-2",
+        "name": "Gauze Bandage",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0057",
+        "carId": "car-2",
+        "name": "ไม้พันสำลี",
+        "standard": 4,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0058",
+        "carId": "car-2",
+        "name": "ก๊อส 3x3",
+        "standard": 4,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0059",
+        "carId": "car-2",
+        "name": "ไฟฉาย",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0060",
+        "carId": "car-2",
+        "name": "เครื่องเจาะ DTX",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0061",
+        "carId": "car-2",
+        "name": "O2 ถังใหญ่ (หน่วย PSI)",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-2-item-0062",
+        "carId": "car-2",
+        "name": "O2 ถังเล็ก (หน่วย PSI)",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0000",
+        "carId": "car-3",
+        "name": "หน้ากากอนามัย (Mask)",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0001",
+        "carId": "car-3",
+        "name": "Tourniquet",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "11/11/2569",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0002",
+        "carId": "car-3",
+        "name": "ชามรูปไต",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0003",
+        "carId": "car-3",
+        "name": "เครื่องวัดความดัน (ติดผนัง)",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0004",
+        "carId": "car-3",
+        "name": "เครื่องวัดความดัน (พกพา)",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0005",
+        "carId": "car-3",
+        "name": "Stethoscope",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0006",
+        "carId": "car-3",
+        "name": "Laryngoscope + Blade",
+        "standard": "1 ชุด",
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0007",
+        "carId": "car-3",
+        "name": "Micropore",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0008",
+        "carId": "car-3",
+        "name": "Transpore",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0009",
+        "carId": "car-3",
+        "name": "เครื่อง Suction",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0010",
+        "carId": "car-3",
+        "name": "Macgril forcep",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0011",
+        "carId": "car-3",
+        "name": "เสาน้ำเกลือ",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0012",
+        "carId": "car-3",
+        "name": "ถังขยะติดเชื้อ",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0013",
+        "carId": "car-3",
+        "name": "ถังขยะทั่วไป",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0014",
+        "carId": "car-3",
+        "name": "เครื่องAED (ระบุจำนวนขีดแบต)",
+        "standard": 1,
+        "isBattery": true,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0015",
+        "carId": "car-3",
+        "name": "เครื่องวัด O2 Sat mobile",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0016",
+        "carId": "car-3",
+        "name": "Slide Board",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0017",
+        "carId": "car-3",
+        "name": "Alcohol jelly",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0018",
+        "carId": "car-3",
+        "name": "ถุงมือเบอร์ M",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0019",
+        "carId": "car-3",
+        "name": "ถุงมือเบอร์ S",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0020",
+        "carId": "car-3",
+        "name": "Aquapak 340 ml",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0021",
+        "carId": "car-3",
+        "name": "Lubricgel",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0022",
+        "carId": "car-3",
+        "name": "Betadine",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0023",
+        "carId": "car-3",
+        "name": "0.9% NSS 100 cc",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0024",
+        "carId": "car-3",
+        "name": "0.9% NSS 1000 cc",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0025",
+        "carId": "car-3",
+        "name": "5% DN/2 1000 cc",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0026",
+        "carId": "car-3",
+        "name": "70% Alcohol",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0027",
+        "carId": "car-3",
+        "name": "Set IV",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0028",
+        "carId": "car-3",
+        "name": "Set Infusion",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0029",
+        "carId": "car-3",
+        "name": "3-way",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0030",
+        "carId": "car-3",
+        "name": "Extension",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0031",
+        "carId": "car-3",
+        "name": "สาย Suction No.14",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0032",
+        "carId": "car-3",
+        "name": "Syringe ขนาด 20 ml",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0033",
+        "carId": "car-3",
+        "name": "Syringe ขนาด 10 ml",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0034",
+        "carId": "car-3",
+        "name": "Syringe ขนาด 5 ml",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0035",
+        "carId": "car-3",
+        "name": "Syringe ขนาด 3 ml",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0036",
+        "carId": "car-3",
+        "name": "เข็มเบอร์ 18",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0037",
+        "carId": "car-3",
+        "name": "เข็มเบอร์ 21",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0038",
+        "carId": "car-3",
+        "name": "เข็มเบอร์ 24",
+        "standard": 5,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0039",
+        "carId": "car-3",
+        "name": "IV catheter No.20",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0040",
+        "carId": "car-3",
+        "name": "IV catheter No.22",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0041",
+        "carId": "car-3",
+        "name": "IV catheter No.24",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0042",
+        "carId": "car-3",
+        "name": "Bacteria Filter",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0043",
+        "carId": "car-3",
+        "name": "Endotracheal tube ID 6.5",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0044",
+        "carId": "car-3",
+        "name": "Endotracheal tube ID 7",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0045",
+        "carId": "car-3",
+        "name": "Endotracheal tube ID 7.5",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0046",
+        "carId": "car-3",
+        "name": "Endotracheal tube ID 8",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0047",
+        "carId": "car-3",
+        "name": "Stylet",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0048",
+        "carId": "car-3",
+        "name": "O2 Mask with Bag",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0049",
+        "carId": "car-3",
+        "name": "O2 cannula",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0050",
+        "carId": "car-3",
+        "name": "ชุด Ambu Bag + สายต่อ O2",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0051",
+        "carId": "car-3",
+        "name": "Oral Airway (4 ชิ้น No.3,4)",
+        "standard": "1 ชุด",
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0052",
+        "carId": "car-3",
+        "name": "Nasal Airway No.7.5",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0053",
+        "carId": "car-3",
+        "name": "ถุงมือ Sterile No.6.5",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0054",
+        "carId": "car-3",
+        "name": "ถุงมือ Sterile No.7",
+        "standard": 3,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0055",
+        "carId": "car-3",
+        "name": "สำลี 5 ก้อน",
+        "standard": 4,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0056",
+        "carId": "car-3",
+        "name": "Gauze Bandage",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0057",
+        "carId": "car-3",
+        "name": "ไม้พันสำลี",
+        "standard": 4,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0058",
+        "carId": "car-3",
+        "name": "ก๊อส 3x3",
+        "standard": 4,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0059",
+        "carId": "car-3",
+        "name": "ไฟฉาย",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0060",
+        "carId": "car-3",
+        "name": "เครื่องเจาะ DTX",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0061",
+        "carId": "car-3",
+        "name": "O2 ถังใหญ่ (หน่วย PSI)",
+        "standard": 2,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      },
+      {
+        "id": "car-3-item-0062",
+        "carId": "car-3",
+        "name": "O2 ถังเล็ก (หน่วย PSI)",
+        "standard": 1,
+        "isBattery": false,
+        "expire": "",
+        "active": true
+      }
+    ],
+    "nurses": [
+      {
+        "id": "MOCK-01",
+        "name": "ทดสอบ พยาบาลหนึ่ง",
+        "dept": "ER",
+        "phone": "",
+        "start": "2026-01-05",
+        "end": "2026-07-05",
+        "note": "ข้อมูลจำลองเพื่อทดสอบ",
+        "active": true
+      },
+      {
+        "id": "MOCK-02",
+        "name": "ทดสอบ พยาบาลสอง",
+        "dept": "Refer",
+        "phone": "",
+        "start": "2026-03-01",
+        "end": "2026-09-01",
+        "note": "",
+        "active": true
+      }
+    ],
+    "checks": [
+      {
+        "id": "c675eb16-29de-40a3-af16-a5146ea5bcc4",
+        "carId": "car-1",
+        "car": "รถ Refer (3ชฏ3250)",
+        "nurseId": "MOCK-01",
+        "userName": "ทดสอบ พยาบาลหนึ่ง",
+        "userId": "MOCK-01",
+        "shift": "เช้า",
+        "startedAt": "2026-10-12T02:25:24.185Z",
+        "completedAt": "2026-10-12T02:26:30.496Z",
+        "results": [
+          {
+            "id": "car-1-item-0000",
+            "carId": "car-1",
+            "name": "หน้ากากอนามัย (Mask)",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0001",
+            "carId": "car-1",
+            "name": "Tourniquet",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "ขาด",
+            "missing": "2",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0002",
+            "carId": "car-1",
+            "name": "ชามรูปไต",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0003",
+            "carId": "car-1",
+            "name": "เครื่องวัดความดัน (ติดผนัง)",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0004",
+            "carId": "car-1",
+            "name": "เครื่องวัดความดัน (พกพา)",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0005",
+            "carId": "car-1",
+            "name": "Stethoscope",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0006",
+            "carId": "car-1",
+            "name": "Laryngoscope + Blade",
+            "standard": "1 ชุด",
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0007",
+            "carId": "car-1",
+            "name": "Micropore",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0008",
+            "carId": "car-1",
+            "name": "Transpore",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0009",
+            "carId": "car-1",
+            "name": "เครื่อง Suction",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0010",
+            "carId": "car-1",
+            "name": "Macgril forcep",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0011",
+            "carId": "car-1",
+            "name": "เสาน้ำเกลือ",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0012",
+            "carId": "car-1",
+            "name": "ถังขยะติดเชื้อ",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0013",
+            "carId": "car-1",
+            "name": "ถังขยะทั่วไป",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0014",
+            "carId": "car-1",
+            "name": "เครื่องAED (ระบุจำนวนขีดแบต)",
+            "standard": 1,
+            "isBattery": true,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "4/4 ขีด",
+            "batteryLevel": 4
+          },
+          {
+            "id": "car-1-item-0015",
+            "carId": "car-1",
+            "name": "เครื่องวัด O2 Sat mobile",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0016",
+            "carId": "car-1",
+            "name": "Slide Board",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0017",
+            "carId": "car-1",
+            "name": "Alcohol jelly",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0018",
+            "carId": "car-1",
+            "name": "ถุงมือเบอร์ M",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0019",
+            "carId": "car-1",
+            "name": "ถุงมือเบอร์ S",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0020",
+            "carId": "car-1",
+            "name": "Aquapak 340 ml",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0021",
+            "carId": "car-1",
+            "name": "Lubricgel",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0022",
+            "carId": "car-1",
+            "name": "Betadine",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0023",
+            "carId": "car-1",
+            "name": "0.9% NSS 100 cc",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0024",
+            "carId": "car-1",
+            "name": "0.9% NSS 1000 cc",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0025",
+            "carId": "car-1",
+            "name": "5% DN/2 1000 cc",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0026",
+            "carId": "car-1",
+            "name": "70% Alcohol",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0027",
+            "carId": "car-1",
+            "name": "Set IV",
+            "standard": 2,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0028",
+            "carId": "car-1",
+            "name": "Set Infusion",
+            "standard": 2,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0029",
+            "carId": "car-1",
+            "name": "3-way",
+            "standard": 2,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0030",
+            "carId": "car-1",
+            "name": "Extension",
+            "standard": 2,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0031",
+            "carId": "car-1",
+            "name": "สาย Suction No.14",
+            "standard": 3,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0032",
+            "carId": "car-1",
+            "name": "Syringe ขนาด 20 ml",
+            "standard": 2,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0033",
+            "carId": "car-1",
+            "name": "Syringe ขนาด 10 ml",
+            "standard": 5,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0034",
+            "carId": "car-1",
+            "name": "Syringe ขนาด 5 ml",
+            "standard": 5,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0035",
+            "carId": "car-1",
+            "name": "Syringe ขนาด 3 ml",
+            "standard": 5,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0036",
+            "carId": "car-1",
+            "name": "เข็มเบอร์ 18",
+            "standard": 5,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0037",
+            "carId": "car-1",
+            "name": "เข็มเบอร์ 21",
+            "standard": 5,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0038",
+            "carId": "car-1",
+            "name": "เข็มเบอร์ 24",
+            "standard": 5,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0039",
+            "carId": "car-1",
+            "name": "IV catheter No.20",
+            "standard": 3,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0040",
+            "carId": "car-1",
+            "name": "IV catheter No.22",
+            "standard": 3,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0041",
+            "carId": "car-1",
+            "name": "IV catheter No.24",
+            "standard": 3,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0042",
+            "carId": "car-1",
+            "name": "Bacteria Filter",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0043",
+            "carId": "car-1",
+            "name": "Endotracheal tube ID 6.5",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0044",
+            "carId": "car-1",
+            "name": "Endotracheal tube ID 7",
+            "standard": 2,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0045",
+            "carId": "car-1",
+            "name": "Endotracheal tube ID 7.5",
+            "standard": 2,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0046",
+            "carId": "car-1",
+            "name": "Endotracheal tube ID 8",
+            "standard": 2,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0047",
+            "carId": "car-1",
+            "name": "Stylet",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0048",
+            "carId": "car-1",
+            "name": "O2 Mask with Bag",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0049",
+            "carId": "car-1",
+            "name": "O2 cannula",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0050",
+            "carId": "car-1",
+            "name": "ชุด Ambu Bag + สายต่อ O2",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0051",
+            "carId": "car-1",
+            "name": "Oral Airway (4 ชิ้น No.3,4)",
+            "standard": "1 ชุด",
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0052",
+            "carId": "car-1",
+            "name": "Nasal Airway No.7.5",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0053",
+            "carId": "car-1",
+            "name": "ถุงมือ Sterile No.6.5",
+            "standard": 3,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0054",
+            "carId": "car-1",
+            "name": "ถุงมือ Sterile No.7",
+            "standard": 3,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0055",
+            "carId": "car-1",
+            "name": "สำลี 5 ก้อน",
+            "standard": 4,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0056",
+            "carId": "car-1",
+            "name": "Gauze Bandage",
+            "standard": 2,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0057",
+            "carId": "car-1",
+            "name": "ไม้พันสำลี",
+            "standard": 4,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0058",
+            "carId": "car-1",
+            "name": "ก๊อส 3x3",
+            "standard": 4,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0059",
+            "carId": "car-1",
+            "name": "ไฟฉาย",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0060",
+            "carId": "car-1",
+            "name": "เครื่องเจาะ DTX",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0061",
+            "carId": "car-1",
+            "name": "O2 ถังใหญ่ (หน่วย PSI)",
+            "standard": 2,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          },
+          {
+            "id": "car-1-item-0062",
+            "carId": "car-1",
+            "name": "O2 ถังเล็ก (หน่วย PSI)",
+            "standard": 1,
+            "isBattery": false,
+            "expire": "",
+            "active": true,
+            "status": "Checked",
+            "missing": "",
+            "batteryLevel": null
+          }
+        ]
+      }
+    ],
+    "drafts": [],
+    "metadata": [
+      {
+        "id": "schema",
+        "version": 5
+      },
+      {
+        "id": "legacy",
+        "reports": [],
+        "items": null
+      }
+    ],
+    "restocks": [
+      {
+        "id": "d7c7cea3-45ef-4715-87ff-d9e64f191afa",
+        "no": "RT-20261012-001",
+        "carId": "car-1",
+        "car": "รถ Refer (3ชฏ3250)",
+        "checkId": "c675eb16-29de-40a3-af16-a5146ea5bcc4",
+        "createdBy": "MOCK-01",
+        "createdByName": "ทดสอบ พยาบาลหนึ่ง",
+        "createdAt": "2026-10-12T02:26:44.525Z",
+        "reason": "ตรวจพบของขาด",
+        "note": "",
+        "status": "fulfilled",
+        "items": [
+          {
+            "itemId": "car-1-item-0001",
+            "name": "Tourniquet",
+            "standard": 1,
+            "actualQty": "",
+            "qtyRequested": "2",
+            "qtyIssued": "2",
+            "qtyFilled": "2"
+          }
+        ],
+        "actions": [
+          {
+            "type": "create",
+            "at": "2026-10-12T02:26:44.525Z",
+            "by": "MOCK-01",
+            "byName": "ทดสอบ พยาบาลหนึ่ง",
+            "note": "ตรวจพบของขาด",
+            "lines": []
+          },
+          {
+            "type": "submit",
+            "at": "2026-10-12T02:26:52.023Z",
+            "by": "MOCK-01",
+            "byName": "ทดสอบ พยาบาลหนึ่ง",
+            "note": "ตรวจพบของขาด",
+            "lines": []
+          },
+          {
+            "type": "issue",
+            "at": "2026-10-12T02:27:04.131Z",
+            "by": "MOCK-02",
+            "byName": "ทดสอบ พยาบาลสอง",
+            "note": "จ่ายก่อน 1 ชิ้น",
+            "lines": [
+              {
+                "itemId": "car-1-item-0001",
+                "qty": "1"
+              }
+            ]
+          },
+          {
+            "type": "issue",
+            "at": "2026-10-12T02:27:17.623Z",
+            "by": "MOCK-02",
+            "byName": "ทดสอบ พยาบาลสอง",
+            "note": "",
+            "lines": [
+              {
+                "itemId": "car-1-item-0001",
+                "qty": "1"
+              }
+            ]
+          },
+          {
+            "type": "fill",
+            "at": "2026-10-12T02:27:18.099Z",
+            "by": "MOCK-01",
+            "byName": "ทดสอบ พยาบาลหนึ่ง",
+            "note": "เติมลงรถเรียบร้อย",
+            "lines": [
+              {
+                "itemId": "car-1-item-0001",
+                "qty": "2"
+              }
+            ]
+          },
+          {
+            "type": "fulfil",
+            "at": "2026-10-12T02:27:20.051Z",
+            "by": "MOCK-01",
+            "byName": "ทดสอบ พยาบาลหนึ่ง",
+            "note": "",
+            "lines": []
+          }
+        ]
+      },
+      {
+        "id": "r-wait-test",
+        "no": "RT-20261012-002",
+        "carId": "car-2",
+        "car": "รถ Refer (ฆง8434)",
+        "checkId": null,
+        "createdBy": "MOCK-02",
+        "createdByName": "ทดสอบ พยาบาลสอง",
+        "createdAt": "2026-10-12T02:29:41.539Z",
+        "reason": "แก้เหตุผลหลัง conflict",
+        "note": "",
+        "status": "cancelled",
+        "items": [
+          {
+            "itemId": "car-2-item-0001",
+            "name": "หน้ากากอนามัย (Mask)",
+            "standard": 1,
+            "actualQty": "",
+            "qtyRequested": "5",
+            "qtyIssued": "",
+            "qtyFilled": ""
+          }
+        ],
+        "actions": [
+          {
+            "type": "create",
+            "at": "2026-10-12T02:29:41.539Z",
+            "by": "MOCK-02",
+            "byName": "ทดสอบ พยาบาลสอง",
+            "note": "",
+            "lines": []
+          },
+          {
+            "type": "submit",
+            "at": "2026-10-12T02:29:41.539Z",
+            "by": "MOCK-02",
+            "byName": "ทดสอบ พยาบาลสอง",
+            "note": "",
+            "lines": []
+          },
+          {
+            "type": "cancel",
+            "at": "2026-10-12T02:33:26.388Z",
+            "by": "MOCK-02",
+            "byName": "ทดสอบ พยาบาลสอง",
+            "note": "ถูกยกเลิกจากเครื่องอื่น",
+            "lines": []
+          },
+          {
+            "type": "cancel",
+            "at": "2026-10-12T02:33:54.940Z",
+            "by": "MOCK-02",
+            "byName": "ทดสอบ พยาบาลสอง",
+            "note": "ถูกยกเลิกจากเครื่องอื่น",
+            "lines": []
+          }
+        ]
+      },
+      {
+        "id": "8f3c4f8a-b8fd-4615-8d5f-ee344b057fa1",
+        "no": "RT-20261012-003",
+        "carId": "car-1",
+        "car": "รถ Refer (3ชฏ3250)",
+        "checkId": null,
+        "createdBy": "MOCK-02",
+        "createdByName": "ทดสอบ พยาบาลสอง",
+        "createdAt": "2026-10-12T02:39:44.842Z",
+        "reason": "",
+        "note": "",
+        "status": "fulfilled",
+        "items": [
+          {
+            "itemId": "car-1-item-0000",
+            "name": "หน้ากากอนามัย (Mask)",
+            "standard": 1,
+            "actualQty": "1",
+            "qtyRequested": "5",
+            "qtyIssued": "",
+            "qtyFilled": ""
+          }
+        ],
+        "actions": [
+          {
+            "type": "create",
+            "at": "2026-10-12T02:39:44.842Z",
+            "by": "MOCK-02",
+            "byName": "ทดสอบ พยาบาลสอง",
+            "note": "",
+            "lines": []
+          },
+          {
+            "type": "submit",
+            "at": "2026-10-12T02:39:44.842Z",
+            "by": "MOCK-02",
+            "byName": "ทดสอบ พยาบาลสอง",
+            "note": "",
+            "lines": []
+          },
+          {
+            "type": "fulfil",
+            "at": "2026-10-12T02:39:59.349Z",
+            "by": "MOCK-02",
+            "byName": "ทดสอบ พยาบาลสอง",
+            "note": "",
+            "lines": []
+          }
+        ]
+      }
+    ]
+  }
+}
