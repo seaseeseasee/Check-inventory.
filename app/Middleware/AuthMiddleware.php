@@ -1,0 +1,85 @@
+<?php
+declare(strict_types=1);
+
+namespace App\Middleware;
+
+use App\Services\AuthService;
+use App\Helpers\Response;
+
+class AuthMiddleware
+{
+    private AuthService $authService;
+
+    public function __construct()
+    {
+        $this->authService = new AuthService();
+    }
+
+    public function handle(): void
+    {
+        // Start session if not already started
+        if (session_status() === PHP_SESSION_NONE) {
+            $this->configureSession();
+            session_start();
+        }
+
+        // Validate origin for non-GET requests
+        $this->authService->validateOrigin();
+
+        // Check authentication for API routes
+        $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+        $scriptDir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+        if ($scriptDir !== '' && str_starts_with($path, $scriptDir . '/')) {
+            $path = substr($path, strlen($scriptDir));
+        }
+        $isApi = str_starts_with($path, '/api/');
+        
+        if ($isApi) {
+            $action = $_GET['action'] ?? '';
+            $publicActions = ['login'];
+            
+            // Extract the actual endpoint from path
+            $endpoint = $path;
+            if (preg_match('/^\/api\/(\w+)/', $path, $matches)) {
+                $endpoint = '/api/' . $matches[1];
+            }
+            
+            // Public endpoints that don't require auth
+            $publicEndpoints = [
+                '/api/auth/login',
+                '/api/auth/me', // session probe: reports authenticated=false when logged out
+            ];
+            
+            $isPublic = false;
+            foreach ($publicEndpoints as $public) {
+                if (str_starts_with($path, $public)) {
+                    $isPublic = true;
+                    break;
+                }
+            }
+            
+            if (!$isPublic) {
+                if (!$this->authService->checkAuth()) {
+                    Response::unauthorized('Login required');
+                }
+            }
+        }
+    }
+
+    private function configureSession(): void
+    {
+        $origin = $_ENV['APP_ORIGIN'] ?? 'http://localhost';
+        $secure = (parse_url($origin, PHP_URL_SCHEME) === 'https')
+            && !in_array(parse_url($origin, PHP_URL_HOST), ['localhost', '127.0.0.1', '[::1]'], true);
+        
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => '/',
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Strict',
+        ]);
+        session_name('refer_session');
+        ini_set('session.use_strict_mode', '1');
+    }
+}

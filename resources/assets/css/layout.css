@@ -1,0 +1,338 @@
+/* ========================================
+   LAYOUT - Header, Sidebar, Container, Footer
+   ======================================== */
+
+/* App Top Bar */
+.app-top {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  box-shadow: 0 4px 18px rgba(15, 118, 110, 0.18);
+}
+
+#mainHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, var(--teal-700), var(--teal-600) 55%, var(--teal-500));
+  color: #fff;
+}
+
+.brand-logo {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  background: #fff;
+  border-radius: 12px;
+  padding: 4px;
+  object-fit: contain;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+#headerTitle {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.signout {
+  width: auto;
+  margin: 0;
+  min-height: 40px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  flex-shrink: 0;
+}
+
+.signout:active {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.signout:focus-visible {
+  outline: 3px solid var(--teal-300);
+  outline-offset: 2px;
+}
+
+/* Navigation Tabs */
+.nav-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab-btn {
+  flex: 1 1 0;
+  min-width: 96px;
+  width: auto;
+  margin: 0;
+  min-height: 46px;
+  padding: 8px 6px;
+  font-size: 13px;
+  font-weight: 700;
+  background: #f8fafc;
+  color: var(--muted);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.tab-btn:hover {
+  background: #f1f5f9;
+  color: var(--ink);
+}
+
+.tab-btn.active {
+  background: var(--teal-100);
+  color: var(--teal-700);
+  border-color: var(--teal-300);
+}
+
+.tab-btn:focus-visible {
+  outline: 3px solid var(--teal-300);
+  outline-offset: 2px;
+}
+
+/* Storage Note Bar */
+.storage-note {
+  padding: 7px 14px;
+  font-size: 12px;
+  color: var(--teal-700);
+  background: var(--teal-50);
+  border-bottom: 1px solid var(--teal-100);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.storage-note[data-state="error"] {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-bottom-color: #fecaca;
+}
+
+/* Main Container */
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 var(--space-3);
+}
+
+/* Card */
+.card {
+  background: var(--card);
+  border: 1px solid rgba(13, 148, 136, 0.10);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  margin: 14px 12px;
+}
+
+.card h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: var(--teal-700);
+}
+
+.card > p {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Form Elements */
+label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin: 12px 0 6px;
+}
+
+input:not([type="file"]),
+select,
+textarea {
+  width: 100%;
+  padding: 12px;
+  min-height: 46px;
+  font-size: 16px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font-family: inherit;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--teal-300);
+  outline-offset: 1px;
+  border-color: var(--teal-600);
+}
+
+/* Validation error state (set via aria-invalid by JS) */
+input[aria-invalid="true"] {
+  border-color: #f87171;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.15);
+}
+
+input[type="file"] {
+  width: 100%;
+  font-size: 14px;
+  padding: 18px 12px;
+  border: 1.5px dashed var(--teal-200);
+  border-radius: 10px;
+  background: var(--teal-50);
+}
+
+input[type="date"] {
+  padding: 10px 12px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+}
+
+/* Buttons */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  width: 100%;
+  margin: 0 0 8px;
+  min-height: 48px;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--teal-600), var(--teal-700));
+  transition: transform 0.06s, filter 0.15s;
+}
+
+button:hover {
+  filter: brightness(1.02);
+}
+
+button:active {
+  transform: scale(0.985);
+  filter: brightness(0.97);
+}
+
+button:focus-visible {
+  outline: 3px solid var(--teal-300);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.secondary {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+button.gray {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+button.danger {
+  background: var(--bad);
+}
+
+button.warning {
+  background: var(--warn);
+  color: #111827;
+}
+
+.small-btn {
+  width: auto;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 13px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1.5px solid var(--line);
+}
+
+.small-btn:hover {
+  background: #e2e8f0;
+}
+
+.small-btn.gray {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.btn-row button {
+  flex: 1;
+  margin: 0;
+}
+
+/* Empty State */
+.empty {
+  margin: 0;
+  padding: 18px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  background: #f8fafc;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+
+/* Muted Text */
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Search Box */
+.search-box {
+  margin: 12px 0;
+}
+
+.search-box input {
+  margin: 0;
+}
+
+/* Page Title */
+.page-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.page-title h1 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--teal-800);
+}
+
+.page-title .btn-row {
+  margin: 0;
+}

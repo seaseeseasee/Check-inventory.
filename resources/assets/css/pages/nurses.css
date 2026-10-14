@@ -1,0 +1,25 @@
+/* ========================================
+   PAGE: NURSES
+   ======================================== */
+
+#nurseDirectoryTable .nurse-card {
+  margin-bottom: 8px;
+}
+
+#nurseEditor {
+  margin-bottom: 16px;
+}
+
+#nurseEditor .editor {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+@media (max-width: 480px) {
+  #nurseEditor .editor {
+    grid-template-columns: 1fr;
+  }
+}
+
+#nurseSearch {
+  margin: 0;
+}

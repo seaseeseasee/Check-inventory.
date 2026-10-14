@@ -1,0 +1,112 @@
+/* ========================================
+   PAGE: ADMIN
+   ======================================== */
+
+.admin-dashboard {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.admin-stat-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  text-align: center;
+}
+
+.admin-stat-card .value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--teal-700);
+}
+
+.admin-stat-card .label {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.admin-section {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.admin-section h3 {
+  margin: 0 0 12px;
+  color: var(--teal-700);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-table th {
+  background: var(--bg);
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.admin-table tr:hover td {
+  background: var(--bg);
+}
+
+.admin-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.badge-admin { background: #fef3c7; color: #92400e; }
+.badge-staff { background: #e0f2fe; color: #0284c7; }
+.badge-active { background: #d1fae5; color: #065f46; }
+.badge-inactive { background: #fee2e2; color: #991b1b; }
+
+.admin-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.admin-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.admin-btn:hover {
+  background: var(--bg);
+}
+
+.admin-btn.danger {
+  color: var(--bad);
+  border-color: var(--bad-soft);
+}
+
+.admin-btn.danger:hover {
+  background: var(--bad-soft);
+}

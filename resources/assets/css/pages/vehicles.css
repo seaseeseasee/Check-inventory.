@@ -1,0 +1,213 @@
+/* ========================================
+   PAGE: VEHICLES / STOCK
+   ======================================== */
+
+#stockTable .stock-card {
+  margin-bottom: 8px;
+}
+
+#stockTable .stock-card.is-off {
+  opacity: 0.62;
+}
+
+#stockTable .stock-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+#stockTable .stock-fields label {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+
+#stockTable .stock-fields input {
+  min-height: 44px;
+  padding: 8px 10px;
+}
+
+#stockTable .small-btn {
+  width: 100%;
+}
+
+@media (max-width: 480px) {
+  #stockTable .stock-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========================================
+   COPY ITEMS FROM ANOTHER VEHICLE
+   ======================================== */
+
+.stock-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+  margin-bottom: 12px;
+}
+
+.stock-toolbar .small-btn {
+  margin: 0;
+}
+
+.copy-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 320px;
+  padding: 8px 12px;
+  border: 1.5px dashed var(--line);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.copy-box label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.copy-box select {
+  margin: 0;
+  flex: 1 1 160px;
+  min-width: 140px;
+  min-height: 44px;
+}
+
+.copy-start-btn {
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 10px;
+  border: none;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+#copyPreview {
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1.5px dashed #f59e0b;
+  border-radius: 14px;
+  background: #fffbeb;
+}
+
+.copy-preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.copy-preview-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-preview-from {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.copy-preview-note {
+  margin: 4px 0 10px;
+  font-size: 13px;
+  color: #92400e;
+}
+
+.copy-row {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.copy-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-row-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.copy-row-top input[data-copy-field="name"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.copy-row-remove {
+  flex: 0 0 auto;
+  min-height: 40px;
+  margin: 0;
+  padding: 6px 10px;
+}
+
+.copy-row-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr 140px;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.copy-row-fields label {
+  display: block;
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.copy-row-fields input,
+.copy-row-fields select {
+  margin: 0;
+  min-height: 44px;
+}
+
+.copy-preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.copy-preview-actions button {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .copy-row-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .copy-preview-actions {
+    flex-direction: column-reverse;
+  }
+
+  .copy-preview-actions button {
+    width: 100%;
+  }
+}

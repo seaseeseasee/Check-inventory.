@@ -1,0 +1,54 @@
+/* ========================================
+   PAGE: INSPECTIONS (CHECKLIST)
+   ======================================== */
+
+.top-info {
+  background: var(--teal-50);
+  border: 1px solid var(--teal-100);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+#itemTable {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#itemTable .item-card {
+  animation: slideIn 0.2s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Checklist specific */
+#checkPage .card {
+  padding: 16px;
+}
+
+#checkPage .btn-row {
+  margin-bottom: 16px;
+}
+
+#checkPage .check-sticky {
+  top: 160px;
+}
+
+/* Battery level indicator */
+.bat-btn[aria-pressed="true"] {
+  background: var(--teal-700);
+  color: #fff;
+  border-color: var(--teal-700);
+}

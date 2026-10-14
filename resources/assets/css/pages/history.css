@@ -1,0 +1,49 @@
+/* ========================================
+   PAGE: HISTORY / REPORTS
+   ======================================== */
+
+#historyInspectionsTable,
+#historyRestockTable {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#historyInspectionsTable .history-item,
+#historyRestockTable .history-item {
+  animation: slideIn 0.2s ease;
+}
+
+#historyInspectionsTable .history-item.hidden,
+#historyRestockTable .history-item.hidden {
+  display: none;
+}
+
+.seg {
+  margin-bottom: 12px;
+}
+
+.report-toolbar {
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  margin-bottom: 12px;
+}
+
+@media (max-width: 480px) {
+  .date-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .filter-chips {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+  }
+  
+  .chip-btn {
+    flex: 0 0 auto;
+    min-width: 80px;
+  }
+}

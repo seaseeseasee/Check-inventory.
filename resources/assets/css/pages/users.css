@@ -1,0 +1,25 @@
+/* ========================================
+   PAGE: USERS (Admin)
+   ======================================== */
+
+#userDirectoryTable .nurse-card {
+  margin-bottom: 8px;
+}
+
+#userEditor {
+  margin-bottom: 16px;
+}
+
+#userEditor .editor {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+@media (max-width: 480px) {
+  #userEditor .editor {
+    grid-template-columns: 1fr;
+  }
+}
+
+#userSearch {
+  margin: 0;
+}
