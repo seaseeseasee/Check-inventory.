@@ -102,7 +102,8 @@ function applyWarehouseFilter(filter) {
 }
 
 async function refreshWarehouseAll() {
-  await Promise.all([loadWarehouseOverview(), loadWarehouseTransactions()]);
+  // ทะเบียนรถกลางต้องใช้ใน "รถ/คัน" ของประวัติการเคลื่อนไหว (ledger เก็บแค่ car_id)
+  await Promise.all([window.vehicleRef.ensure(), loadWarehouseOverview(), loadWarehouseTransactions()]);
 }
 
 async function loadWarehouseOverview() {
@@ -320,7 +321,7 @@ async function loadWarehouseTransactions() {
       const qtyText = qty > 0 ? `+${whFmtQty(qty)}` : whFmtQty(qty);
 
       const metaParts = [`คงเหลือ ${whFmtQty(tx.balance_after)}`];
-      if (tx.car_name) metaParts.push(`🚗 ${tx.car_name}`);
+      if (tx.car_id || tx.car_name) metaParts.push(`🚗 ${vehiclePlate({ id: tx.car_id, name: tx.car_name })}`);
       if (tx.by_name) metaParts.push(`👤 ${tx.by_name}`);
       metaParts.push(UI.formatDateTimeThai(tx.at));
 

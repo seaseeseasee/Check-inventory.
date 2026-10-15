@@ -46,6 +46,7 @@ class RestockPage {
       this.vehicles = vehiclesRes.data || [];
       this.nurses = nursesRes.data || [];
       this.requests = restockRes.data || [];
+      window.vehicleRef.remember(this.vehicles);
     } catch (error) {
       console.error('Failed to load restock data:', error);
       window.toast.error('โหลดข้อมูลไม่สำเร็จ');
@@ -185,6 +186,7 @@ class RestockPage {
                 <th>มาตรฐาน</th>
                 <th>มีจริง</th>
                 <th>ต้องเติม</th>
+                <th>บนรถ (ก่อน→หลัง)</th>
                 <th>เติมแล้ว</th>
                 <th>เหลือ</th>
                 <th>ความคืบหน้า</th>
@@ -258,7 +260,7 @@ class RestockPage {
           <span class="chip chip-${request.status}">${statusLabels[request.status] || request.status}</span>
         </div>
         <div class="rs-meta">
-          <span class="plate-chip">${this.getPlate(request.car_id)}</span>
+          <span class="plate-chip">${UI.escape(vehiclePlate({ id: request.car_id, name: request.car_name }))}</span>
           <span>รถ: ${UI.escape(request.car_name)}</span>
           <span>${UI.formatDateTimeThai(request.created_at)}</span>
           ${request.assigned_to_user_id ? `<span>ผู้ดูแล: ${UI.escape(request.assigned_name || 'กำลังมอบหมาย')}</span>` : ''}
@@ -293,6 +295,24 @@ class RestockPage {
     const progress = requested > 0 ? Math.min(100, Math.round((shownNum / requested) * 100)) : 100;
     const delta = shownNum - filledSaved;
     const saveDisabled = !canEdit || delta < 1;
+    // ช่องนี้คือ "ยอดรวมที่เติมแล้วทั้งหมด" (ไม่ใช่ยอดที่เติมครั้งนี้) — ค่าที่ต่ำกว่ายอดที่บันทึกไว้จริง
+    // บันทึกไม่ได้ จึงต้องบอกผู้ใช้ตรง ๆ ว่าทำไมปุ่มถึงมืด (ข้อ 4.2 ห้ามตีความตัวเลขสองแบบปนกัน)
+    const belowSaved = delta < 0;
+    const saveTitle = canEdit
+      ? (belowSaved ? `กรอกได้เฉพาะยอดรวมที่มากกว่าที่บันทึกแล้ว (${this.fmtNum(filledSaved)})`
+                   : (delta < 1 ? 'ระบุจำนวนที่เติมเพิ่มก่อนบันทึก' : ''))
+      : '';
+
+    // ข้อ 4.3: ยอดบนรถ "ก่อนเติม → หลังเติม" อ่านจากแถวที่บันทึกไว้จริง ไม่เดายอดถ้ายังไม่เคยตรวจนับ
+    const stockBefore = this.numOrNull(item.vehicle_stock_before);
+    const stockAfter = this.numOrNull(item.vehicle_stock_after);
+    const stockTitle = stockBefore === null
+      ? 'รถคันนี้ยังไม่เคยถูกตรวจนับยอดคงเหลือ จึงยังไม่แสดงตัวเลข (ระบบจะตั้งยอดใหม่ตอนตรวจรถครั้งถัดไป)'
+      : 'ยอดบนรถหลังเติม = ยอดก่อนเติม + จำนวนที่เติมจริง'
+        + (delta > 0 ? ' (ตัวจางคือค่าที่จะเกิดหลังบันทึกครั้งนี้)' : '');
+    const stockHtml = stockBefore === null
+      ? '<span class="rs-stock unknown">ยังไม่เคยตรวจนับ</span>'
+      : `<span class="rs-stock">${this.fmtNum(stockBefore)} → <b>${this.fmtNum(stockAfter ?? stockBefore)}</b></span>`;
 
     const inputHtml = `
       <input type="number" min="0" max="${requested}" step="1"
@@ -309,7 +329,7 @@ class RestockPage {
         class="rs-row-save m-0 w-auto min-h-0 shrink-0 whitespace-nowrap rounded-lg border-0 bg-teal-600 px-3 py-2 text-xs font-bold text-white transition-colors duration-200 hover:bg-teal-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
         data-act="row-save" data-id="${request.id}" data-item-id="${UI.escape(item.item_id)}"
         ${saveDisabled ? 'disabled' : ''}
-        title="${saveDisabled && delta < 1 ? 'ระบุจำนวนที่เติมเพิ่มก่อนบันทึก' : ''}"
+        title="${UI.escape(saveTitle)}"
       >${request.status === 'PENDING' ? 'เริ่มเติม' : '＋ บันทึก'}</button>
     ` : '<span class="text-xs text-slate-400">—</span>';
 
@@ -319,8 +339,11 @@ class RestockPage {
         <td class="num">${UI.escape(item.standard)}</td>
         <td class="num">${UI.escape(item.actual_qty || '-')}</td>
         <td class="num">${UI.escape(item.qty_requested)}</td>
+        <td class="num rs-stock-cell" data-before="${stockBefore === null ? '' : stockBefore}" data-after="${stockAfter === null ? '' : stockAfter}" title="${UI.escape(stockTitle)}">${stockHtml}</td>
         <td class="num">${inputHtml}</td>
-        <td class="num rs-left">${remaining > 0 ? remaining : '<span class="chip chip-ok">ครบ</span>'}</td>
+        <td class="num rs-left">${belowSaved
+          ? `<span class="chip chip-miss">ต่ำกว่าที่บันทึกแล้ว ${this.fmtNum(filledSaved)}</span>`
+          : (remaining > 0 ? this.fmtNum(remaining) : '<span class="chip chip-ok">ครบ</span>')}</td>
         <td class="num">
           <div style="min-width: 96px;">
             <div class="progress-track" style="height: 6px;">
@@ -352,11 +375,14 @@ class RestockPage {
     }
     const effective = isNaN(value) ? 0 : value;
     const filledSaved = parseFloat(tr.dataset.filled || '0');
+    const belowSaved = effective < filledSaved;
 
     const leftCell = tr.querySelector('.rs-left');
     if (leftCell) {
       const remaining = Math.max(0, requested - effective);
-      leftCell.innerHTML = remaining > 0 ? String(remaining) : '<span class="chip chip-ok">ครบ</span>';
+      leftCell.innerHTML = belowSaved
+        ? `<span class="chip chip-miss">ต่ำกว่าที่บันทึกแล้ว ${this.fmtNum(filledSaved)}</span>`
+        : (remaining > 0 ? String(remaining) : '<span class="chip chip-ok">ครบ</span>');
     }
 
     const progress = requested > 0 ? Math.min(100, Math.round((effective / requested) * 100)) : 100;
@@ -369,10 +395,40 @@ class RestockPage {
     if (saveBtn && saveBtn.dataset.busy !== '1') {
       const delta = effective - filledSaved;
       saveBtn.disabled = delta < 1;
-      saveBtn.title = delta < 1 ? 'ระบุจำนวนที่เติมเพิ่มก่อนบันทึก' : '';
+      saveBtn.title = belowSaved
+        ? `กรอกได้เฉพาะยอดรวมที่มากกว่าที่บันทึกแล้ว (${this.fmtNum(filledSaved)})`
+        : (delta < 1 ? 'ระบุจำนวนที่เติมเพิ่มก่อนบันทึก' : '');
+    }
+
+    // พรีวิว "ยอดบนรถหลังบันทึก" จากค่าที่บันทึกจริงใน DB + ส่วนต่างที่ยังไม่บันทึก
+    const stockCell = tr.querySelector('.rs-stock-cell');
+    if (stockCell) {
+      const before = this.numOrNull(stockCell.dataset.before);
+      const after = this.numOrNull(stockCell.dataset.after);
+      if (before === null) {
+        stockCell.innerHTML = '<span class="rs-stock unknown">ยังไม่เคยตรวจนับ</span>';
+      } else {
+        const saved = after === null ? before : after;
+        const add = Math.max(0, effective - filledSaved);
+        const projected = Math.round((saved + add) * 100) / 100;
+        stockCell.innerHTML = `<span class="rs-stock">${this.fmtNum(before)} → <b>${this.fmtNum(saved)}</b>`
+          + (add > 0 ? ` <span class="rs-stock-projected">+ ${this.fmtNum(add)} = ${this.fmtNum(projected)}</span>` : '')
+          + '</span>';
+      }
     }
 
     this.fillDrafts.set(tr.dataset.key, input.value);
+  }
+
+  numOrNull(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  fmtNum(value) {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? String(Math.round(n * 100) / 100) : '-';
   }
 
   replaceRequest(updated) {
@@ -383,15 +439,6 @@ class RestockPage {
     } else {
       this.requests.push(updated);
     }
-  }
-
-  getPlate(carId) {
-    const plates = {
-      'car-1': '3ชฏ3250',
-      'car-2': 'ฆง8434',
-      'car-3': '5กล1034',
-    };
-    return plates[carId] || carId;
   }
 
   async handleAction(action, button) {
@@ -466,15 +513,46 @@ class RestockPage {
 
       const updatedItem = (result.data?.items || []).find(i => i.item_id === itemId);
       const newFilled = parseFloat(updatedItem?.qty_filled || 0);
-      if (newFilled >= requested) {
-        window.toast.success(`บันทึกแล้ว — ${item.name} ครบตามมาตรฐาน`);
-      } else {
-        window.toast.success(`บันทึกการเติมแล้ว — ${item.name} (+${delta})`);
-      }
+      this.notifyRestockResult(result.data?.restock_result, item.name, newFilled >= requested);
     } catch (error) {
       window.toast.error('บันทึกไม่สำเร็จ: ' + (error?.message || 'กรุณาลองใหม่'));
     } finally {
       this.render();
+    }
+  }
+
+  /**
+   * แสดงผลจากการบันทึกการเติม 1 ครั้ง (ข้อ 4): เติมจริงเท่าไหร่ / ข้ามอะไร / คลังใกล้หมดหรือของไม่พอ
+   */
+  notifyRestockResult(res, nameHint, completed = false) {
+    if (!res) {
+      window.toast.success('บันทึกการเติมแล้ว');
+      return;
+    }
+
+    const applied = res.applied || [];
+    const untracked = res.untracked || [];
+    if (applied.length > 0) {
+      const detail = applied.map(a => `${a.name} +${a.qty}`).join(', ');
+      const whNote = untracked.length > 0
+        ? ' • ยอดบนรถอัปเดตแล้ว (คลังกลางยังไม่ถูกตัด เพราะยังไม่ได้ตรวจนับคลัง)'
+        : ' • ยอดบนรถกับคลังกลางอัปเดตแล้ว';
+      window.toast.success(`เติมขึ้นรถแล้ว: ${detail}${whNote}`);
+    }
+
+    (res.skipped || []).forEach(s => {
+      window.toast.warning(`ข้าม “${s.name || s.item_id || '-'}”: ${s.reason}`);
+    });
+    untracked.forEach(u => {
+      window.toast.warning(`คลังกลาง “${u.name}” ยังไม่เคยรับเข้า/ปรับยอด — เติมขึ้นรถ ${u.qty} แล้วแต่ไม่ได้ตัดคลัง กรุณาตรวจนับคลังกลางในเมนูคลังสต็อก`);
+    });
+    (res.warnings || []).forEach(w => window.toast.warning(w));
+    (res.alerts || []).forEach(a => {
+      window.toast.warning(`คลังกลาง “${a.name}” เหลือ ${a.balance} (ขั้นต่ำ ${a.min}) — ควรเบิกเข้าคลัง`);
+    });
+
+    if (res.status === 'COMPLETED' || completed) {
+      window.toast.success('รายการนี้เติมครบตามมาตรฐานแล้ว (ระบบปิดงานให้อัตโนมัติ)');
     }
   }
 
@@ -562,11 +640,11 @@ class RestockPage {
 
         this.replaceRequest(result.data);
         items.forEach(it => this.fillDrafts.delete(`${requestId}:${it.item_id}`));
-        window.toast.success('บันทึกการเติมสำเร็จ');
+        this.notifyRestockResult(result.data?.restock_result);
         this.closeRestockSheet();
         this.render();
       } catch (error) {
-        window.toast.error('บันทึกไม่สำเร็จ: ' + error.message);
+        window.toast.error('บันทึกไม่สำเร็จ: ' + (error?.message || 'กรุณาลองใหม่'));
       }
     }
   }

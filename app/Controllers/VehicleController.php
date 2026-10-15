@@ -4,23 +4,30 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Services\InspectionService;
-use App\Services\StockService;
+use App\Services\VehicleService;
 use App\Config\Database;
 use App\Middleware\RoleMiddleware;
 use App\Models\Item;
-use App\Helpers\Response;
 
+/**
+ * ทะเบียนรถและอุปกรณ์ประจำรถ (Tab Stock)
+ *
+ * อ่าน:  index/show เปิดให้ผู้ใช้งานที่ login แล้ว (หน้าตรวจรถ/หน้ารอเติมใช้ร่วมกัน)
+ * เขียน: ทุกคำสั่ง (สร้าง/แก้/ลบ รถและอุปกรณ์) ต้องเป็น role "admin" เท่านั้น
+ *        — ซ่อนปุ่มอย่างเดียวไม่ได้ ถือเป็นการตรวจสิทธิ์ฝั่ง client เท่านั้น
+ *        ตรรกะทั้งหมดอยู่ที่ VehicleService (route /api/admin/* เรียกเข้า service เดียวกัน)
+ */
 class VehicleController extends Controller
 {
     private InspectionService $inspectionService;
+    private VehicleService $vehicleService;
     private RoleMiddleware $roleMiddleware;
-    private StockService $stockService;
 
     public function __construct()
     {
         $this->inspectionService = new InspectionService();
+        $this->vehicleService = new VehicleService();
         $this->roleMiddleware = new RoleMiddleware();
-        $this->stockService = new StockService();
     }
 
     public function index(): void
@@ -41,105 +48,70 @@ class VehicleController extends Controller
         $this->success($vehicle);
     }
 
-    public function updateItem(string $itemId): void
+    // ==================== รถ: CRUD ====================
+
+    /** POST /api/vehicles — สร้างรถใหม่ + สร้างชุดอุปกรณ์มาตรฐานให้ใน transaction เดียว */
+    public function store(): void
     {
-        $input = $this->getInput();
-        
-        $itemModel = new \App\Models\Item();
-        $existing = $itemModel->find($itemId);
-        if (!$existing) {
-            $this->notFound('Item not found');
-        }
-
-        $data = [];
-        if (isset($input['standard'])) $data['standard'] = $input['standard'];
-        if (isset($input['expiry_text'])) $data['expiry_text'] = $input['expiry_text'];
-        if (isset($input['active'])) $data['active'] = $input['active'];
-        if (isset($input['name'])) $data['name'] = $input['name'];
-
-        if (empty($data)) {
-            $this->error('No data to update');
-        }
-
-        $itemModel->update($itemId, $data);
-        $this->success($itemModel->find($itemId));
+        $this->roleMiddleware->requireAdmin();
+        $vehicle = $this->vehicleService->createVehicle($this->getInput(), $this->actor());
+        $this->success($vehicle, 201);
     }
 
+    /** PUT /api/vehicles/{id} — แก้ชื่อ/ทะเบียน/ยี่ห้อ-รุ่น/สถานะ/เลขไมล์/หมายเหตุ */
+    public function update(string $id): void
+    {
+        $this->roleMiddleware->requireAdmin();
+        $vehicle = $this->vehicleService->updateVehicle($id, $this->getInput(), $this->actor());
+        $this->success($vehicle);
+    }
+
+    /**
+     * DELETE /api/vehicles/{id}
+     * body: { mode: 'auto' | 'disable' } — auto ลบได้เฉพาะรถที่ไม่มีประวัติผูก
+     *       ถ้ามีประวัติจะตอบ 409 พร้อมจำนวนที่ผูก และ UI เสนอ "งดใช้งานแทน" (mode=disable)
+     */
+    public function destroy(string $id): void
+    {
+        $this->roleMiddleware->requireAdmin();
+        $input = $this->getInput();
+        $mode = strtolower(trim((string)($input['mode'] ?? 'auto')));
+        if (!in_array($mode, ['auto', 'disable', 'force'], true)) {
+            $mode = 'auto';
+        }
+        $result = $this->vehicleService->deleteVehicle($id, $this->actor(), $mode);
+        $this->success($result);
+    }
+
+    // ==================== อุปกรณ์: CRUD ====================
+
+    /** POST /api/vehicles/{carId}/items */
     public function addItem(string $vehicleId): void
     {
+        $this->roleMiddleware->requireAdmin();
+        $item = $this->vehicleService->addItem($vehicleId, $this->getInput(), $this->actor());
+        $this->success($item, 201);
+    }
+
+    /** PUT /api/items/{itemId} */
+    public function updateItem(string $itemId): void
+    {
+        $this->roleMiddleware->requireAdmin();
+        $item = $this->vehicleService->updateItem($itemId, $this->getInput(), $this->actor());
+        $this->success($item);
+    }
+
+    /** DELETE /api/items/{itemId} — body: { mode: 'auto' | 'disable' } */
+    public function deleteItem(string $itemId): void
+    {
+        $this->roleMiddleware->requireAdmin();
         $input = $this->getInput();
-        
-        $vehicle = $this->inspectionService->getVehicle($vehicleId);
-        if (!$vehicle) {
-            $this->notFound('Vehicle not found');
+        $mode = strtolower(trim((string)($input['mode'] ?? 'auto')));
+        if (!in_array($mode, ['auto', 'disable'], true)) {
+            $mode = 'auto';
         }
-
-        $validator = new \App\Helpers\Validator($input, [
-            'name' => 'required|string|max:255',
-            'standard' => 'required|string|max:100',
-            'is_battery' => 'boolean',
-        ]);
-
-        if (!$validator->validate()) {
-            $this->validationError($validator->errors());
-        }
-
-        $itemModel = new \App\Models\Item();
-        $itemId = generate_id();
-        $itemModel->create([
-            'id' => $itemId,
-            'car_id' => $vehicleId,
-            'name' => $input['name'],
-            'standard' => $input['standard'],
-            'expiry_text' => '',
-            'is_battery' => $input['is_battery'] ?? false,
-            'active' => true,
-        ]);
-
-        // Optional: ตั้งสต็อกกลางจากฟอร์มเพิ่มอุปกรณ์ (สต็อกปัจจุบัน + ขั้นต่ำ)
-        $stockInfo = null;
-        $currentRaw = $input['current_stock'] ?? null;
-        $minRaw = $input['min_stock'] ?? null;
-        $hasCurrent = $currentRaw !== null && $currentRaw !== '';
-        $hasMin = $minRaw !== null && $minRaw !== '';
-
-        if ($hasCurrent || $hasMin) {
-            if ($hasCurrent && (!is_numeric($currentRaw) || (float)$currentRaw < 0 || (float)$currentRaw > 1000000)) {
-                $this->validationError(['current_stock' => 'สต็อกปัจจุบันต้องเป็นตัวเลข 0 - 1,000,000']);
-            }
-            if ($hasMin && (!is_numeric($minRaw) || (float)$minRaw < 0 || (float)$minRaw > 1000000)) {
-                $this->validationError(['min_stock' => 'จุดเตือนขั้นต่ำต้องเป็นตัวเลข 0 - 1,000,000']);
-            }
-
-            $actor = $this->roleMiddleware->getCurrentUser();
-            $vehicleLabel = trim((string)($vehicle['name'] ?? '') . ' ' . (string)($vehicle['plate'] ?? ''));
-
-            try {
-                $item = $this->stockService->setStockForItemName(
-                    (string)$input['name'],
-                    $hasCurrent ? (float)$currentRaw : null,
-                    $hasMin ? (float)$minRaw : null,
-                    $actor['id'] ?? null,
-                    $actor['full_name'] ?? '',
-                    $vehicleLabel !== '' ? 'รถ ' . $vehicleLabel : ''
-                );
-                if ($item !== null) {
-                    $stockInfo = [
-                        'name' => $item['name'],
-                        'current_qty' => $item['current_qty'],
-                        'min_qty' => $item['min_qty'],
-                        'status' => $item['status'] ?? null,
-                    ];
-                }
-            } catch (\Throwable $e) {
-                // อุปกรณ์ถูกเพิ่มแล้ว — รายงานปัญหาสต็อกเป็นคำเตือนโดยไม่ทำให้คำขอล้มทั้งรายการ
-                $stockInfo = ['error' => $e->getMessage()];
-            }
-        }
-
-        $created = $itemModel->find($itemId) ?? [];
-        $created['stock'] = $stockInfo;
-        $this->success($created, 201);
+        $result = $this->vehicleService->deleteItem($itemId, $this->actor(), $mode);
+        $this->success($result);
     }
 
     /**
@@ -190,6 +162,10 @@ class VehicleController extends Controller
                 $expiry,
                 !empty($item['is_battery']) ? 1 : 0,
                 1,
+                // target/unit สกัดจาก standard ใหม่ always — หน้า "รอเติม" คำนวณจาก
+                // target_qty ถ้าคัดลอกแล้วไม่ได้ค่านี้ คำขอเติมของรายการใหม่จะไม่มีตัวเลข
+                VehicleService::deriveTarget($standard)['qty'],
+                VehicleService::deriveTarget($standard)['unit'],
             ];
         }
 
@@ -197,9 +173,11 @@ class VehicleController extends Controller
         $db->beginTransaction();
         try {
             $table = (new Item())->getTable();
-            $placeholders = implode(', ', array_fill(0, count($rows), '(?, ?, ?, ?, ?, ?, ?)'));
+            $placeholders = implode(', ', array_fill(0, count($rows), '(?, ?, ?, ?, ?, ?, ?, ?, ?)'));
             $stmt = $db->prepare(
-                "INSERT INTO {$table} (id, car_id, name, standard, expiry_text, is_battery, active) VALUES {$placeholders}"
+                "INSERT INTO {$table}
+                 (id, car_id, name, standard, expiry_text, is_battery, active, target_qty, unit)
+                 VALUES {$placeholders}"
             );
             $stmt->execute(array_merge(...$rows));
             $db->commit();
@@ -209,5 +187,11 @@ class VehicleController extends Controller
         }
 
         $this->success(['created' => count($rows)], 201);
+    }
+
+    /** ผู้ใช้งานปัจจุบันสำหรับอ้างอิงในบันทึก (payload ที่ส่งเข้า service) */
+    private function actor(): ?array
+    {
+        return $this->roleMiddleware->getCurrentUser();
     }
 }

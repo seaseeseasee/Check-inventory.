@@ -15,14 +15,25 @@ class Vehicle extends Model
     public function getItems(): array
     {
         $itemModel = new Item();
-        return $itemModel->where('car_id', $this->primaryKey);
+        return $itemModel->getByVehicle($this->primaryKey);
     }
 
-    public function getActiveItems(): array
+    public function getActiveItems(string $vehicleId): array
     {
         $itemModel = new Item();
-        return $itemModel->where('car_id', $this->primaryKey)
-            ->where('active', 1);
+        return $itemModel->getActiveByVehicle($vehicleId);
+    }
+
+    /**
+     * ล๊อคแถวรถก่อนแก้ (กันสองหน้าจอแก้ทะเบียน/สถานะชนกัน)
+     * ต้องเรียกภายใน transaction ที่ผู้เรียกเป็นผู้ commit/rollback เอง
+     */
+    public function lockById(string $id): ?array
+    {
+        $stmt = $this->db->prepare("SELECT * FROM {$this->table} WHERE {$this->primaryKey} = ? FOR UPDATE");
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+        return $row ? $this->cast($row) : null;
     }
 
     public function getLatestInspection(): ?array

@@ -109,8 +109,9 @@ class ApiClient {
     return this.request(endpoint, { method: 'PATCH', body: data });
   }
 
-  delete(endpoint) {
-    return this.request(endpoint, { method: 'DELETE' });
+  delete(endpoint, data) {
+    // DELETE ที่มี body (จำเป็นสำหรับ { mode: 'disable' } ของคำสั่งลบรถ/อุปกรณ์)
+    return this.request(endpoint, { method: 'DELETE', body: data });
   }
 }
 
@@ -144,10 +145,15 @@ window.nurseApi = {
 };
 
 // Vehicle helpers
+// เส้นทาง /api/vehicles* เป็นชุดที่หน้า "ทะเบียนรถและอุปกรณ์ประจำรถ" ใช้ (ข้าง server ตรวจ role admin ทุกคำสั่งเขียน)
 window.vehicleApi = {
   getAll: () => api.get('/vehicles'),
   get: (id) => api.get(`/vehicles/${id}`),
+  create: (data) => api.post('/vehicles', data),
+  update: (id, data) => api.put(`/vehicles/${id}`, data),
+  remove: (id, data) => api.delete(`/vehicles/${id}`, data || { mode: 'auto' }),
   updateItem: (itemId, data) => api.put(`/items/${itemId}`, data),
+  deleteItem: (itemId, data) => api.delete(`/items/${itemId}`, data || { mode: 'auto' }),
   addItem: (vehicleId, data) => api.post(`/vehicles/${vehicleId}/items`, data),
   copyItems: (vehicleId, data) => api.post(`/vehicles/${vehicleId}/items/copy`, data),
 };
@@ -162,17 +168,13 @@ window.inspectionApi = {
 };
 
 // Restock helpers
+// หมายเหตุ: เส้นทาง createDraft/updateDraft/submit/issue/fill/fulfil ถูกถอดออกจากเซิร์ฟเวอร์แล้ว
+// งานเติมอุปกรณ์ทั้งหมดใช้ staffApi.*Restock (/api/staff/restock/*) ซึ่งมีตรวจสิทธิ์เจ้าของงาน
 window.restockApi = {
   getAll: () => api.get('/restock'),
   get: (id) => api.get(`/restock/${id}`),
   getForVehicle: (carId) => api.get(`/vehicles/${carId}/restock`),
   getActiveByCheck: (checkId) => api.get(`/checks/${checkId}/restock`),
-  createDraft: (data) => api.post('/restock/draft', data),
-  updateDraft: (id, data) => api.put(`/restock/${id}/draft`, data),
-  submit: (id, data) => api.post(`/restock/${id}/submit`, data),
-  issue: (id, data) => api.post(`/restock/${id}/issue`, data),
-  fill: (id, data) => api.post(`/restock/${id}/fill`, data),
-  fulfil: (id, data) => api.post(`/restock/${id}/fulfil`, data),
   cancel: (id, data) => api.post(`/restock/${id}/cancel`, data),
 };
 

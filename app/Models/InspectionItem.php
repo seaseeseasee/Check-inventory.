@@ -7,11 +7,16 @@ class InspectionItem extends Model
 {
     protected string $table = 'refer_check_items';
     protected string $primaryKey = 'check_id';
-    protected array $fillable = ['check_id', 'item_id', 'sort_order', 'name', 'standard', 'expiry_text', 'is_battery', 'status', 'detail', 'battery_level'];
+    protected array $fillable = ['check_id', 'item_id', 'sort_order', 'name', 'standard', 'expiry_text', 'is_battery', 'status', 'detail', 'battery_level', 'qty_before', 'actual_qty', 'used_qty', 'qty_target', 'unit'];
     protected array $casts = [
         'is_battery' => 'boolean',
         'sort_order' => 'integer',
         'battery_level' => 'integer',
+        // NULL-safe (see Model::castValue): "ยังไม่เคยตรวจนับ" stays NULL, never collapses to 0.
+        'qty_before' => 'float',
+        'actual_qty' => 'float',
+        'used_qty' => 'float',
+        'qty_target' => 'float',
     ];
 
     public function getByCheck(string $checkId): array

@@ -315,14 +315,11 @@ class StaffController extends Controller
             $this->validationError($validator->errors());
         }
 
-        // Validate all items checked
-        foreach ($input['results'] as $item) {
-            if ($item['status'] === 'ยังไม่ตรวจ') {
-                $this->error('All items must be checked');
-            }
-            if ($item['isBattery'] && !isset($item['batteryLevel'])) {
-                $this->error('Battery level required for battery items');
-            }
+        // ตรวจกติกาฝั่งเซิร์ฟเวอร์ด้วยสูตรเดียวกับที่แสดงบนหน้าจอ (ข้อ 2.4 / 7.4)
+        // → ตอบ 422 พร้อมข้อความไทยรายรายการ แทนที่จะปล่อยให้เกิด 500 กลาง transaction
+        $errors = $this->inspectionService->validateSubmission((string)$input['car_id'], $input['results']);
+        if (!empty($errors)) {
+            $this->validationError($errors);
         }
 
         $draft = $this->inspectionService->getDraft($input['car_id']);
@@ -331,6 +328,16 @@ class StaffController extends Controller
         }
 
         $currentUser = $this->roleMiddleware->getCurrentUser();
+
+        // สิทธิ์เจ้าของร่าง: บัญชีอื่นไม่สามารถส่งรอบตรวจแทนเจ้าของร่างได้
+        // (ข้อ 7.8 — การซ่อนปุ่มอย่างเดียวห้ามถือเป็นมาตรการ)
+        if (($currentUser['role'] ?? '') === 'staff' && ($currentUser['nurse_id'] ?? '') !== $draft['nurse_id']) {
+            $this->error(
+                'ร่างการตรวจนี้เป็นของ ' . $draft['nurse_name'] . ' กรุณาเริ่มการตรวจใหม่ในชื่อของท่าน',
+                403
+            );
+        }
+
         $now = (new \DateTime())->format('Y-m-d\TH:i:s.u\Z');
         $inspectionData = array_merge($draft, [
             'completed_at' => $now,
@@ -340,8 +347,8 @@ class StaffController extends Controller
         // Pass current user ID/name for restock request tracking + stock transaction log
         $result = $this->inspectionService->saveInspection(
             $inspectionData,
-            $currentUser['id'],
-            $currentUser['full_name'] ?? ''
+            $currentUser['id'] ?? null,
+            (string)($currentUser['full_name'] ?? '')
         );
         $this->success($result);
     }
@@ -380,10 +387,10 @@ class StaffController extends Controller
         $this->roleMiddleware->requireStaff();
         
         $user = $this->roleMiddleware->getCurrentUser();
-        $result = $this->restockService->startRestock($id, $user['id'], $user['full_name']);
+        $result = $this->restockService->startRestock($id, (string)($user['id'] ?? ''), (string)($user['full_name'] ?? ''), $user);
         
         if (!$result) {
-            $this->error('Cannot start restock: invalid request or status');
+            $this->error('ไม่พบคำขอเติมอุปกรณ์นี้');
         }
         $this->success($result);
     }
@@ -406,27 +413,28 @@ class StaffController extends Controller
             $this->validationError($validator->errors());
         }
 
-        // Validate items
-        foreach ($input['items'] as $item) {
+        // Validate items (ข้อ 7.4/7.5 — ตัวเลขมากกว่า 0 เท่านั้น)
+        foreach ($input['items'] as $index => $item) {
             if (!isset($item['item_id']) || !isset($item['qty'])) {
-                $this->validationError(['items' => 'Each item must have item_id and qty']);
+                $this->validationError(['items' => 'ทุกรายการต้องมีรหัสอุปกรณ์ (item_id) และจำนวน (qty)']);
             }
             if (!is_numeric($item['qty']) || (float)$item['qty'] <= 0) {
-                $this->validationError(['items' => 'Quantity must be a positive number']);
+                $this->validationError(['items' => 'จำนวนที่เติมต้องเป็นตัวเลขมากกว่า 0 (รายการลำดับที่ ' . ((int)$index + 1) . ')']);
             }
         }
 
         $user = $this->roleMiddleware->getCurrentUser();
         $result = $this->restockService->recordRestock(
             $id,
-            $user['id'],
-            $user['full_name'],
+            (string)($user['id'] ?? ''),
+            (string)($user['full_name'] ?? ''),
             $input['items'],
-            $input['note'] ?? ''
+            $input['note'] ?? '',
+            $user
         );
         
         if (!$result) {
-            $this->error('Cannot record restock: invalid request or status');
+            $this->error('ไม่พบคำขอเติมอุปกรณ์นี้');
         }
         $this->success($result);
     }
@@ -442,10 +450,10 @@ class StaffController extends Controller
         $note = $input['note'] ?? '';
         
         $user = $this->roleMiddleware->getCurrentUser();
-        $result = $this->restockService->completeRestock($id, $user['id'], $user['full_name'], $note);
+        $result = $this->restockService->completeRestock($id, (string)($user['id'] ?? ''), (string)($user['full_name'] ?? ''), $note, $user);
         
         if (!$result) {
-            $this->error('Cannot complete restock: invalid request, status, or incomplete quantities');
+            $this->error('ไม่พบคำขอเติมอุปกรณ์นี้');
         }
         $this->success($result);
     }
@@ -468,10 +476,10 @@ class StaffController extends Controller
         }
 
         $user = $this->roleMiddleware->getCurrentUser();
-        $result = $this->restockService->cancelRestock($id, $user['id'], $user['full_name'], $input['reason']);
+        $result = $this->restockService->cancelRestock($id, (string)($user['id'] ?? ''), (string)($user['full_name'] ?? ''), $input['reason'], $user);
         
         if (!$result) {
-            $this->error('Cannot cancel restock: invalid request or status');
+            $this->error('ไม่พบคำขอเติมอุปกรณ์นี้');
         }
         $this->success($result);
     }

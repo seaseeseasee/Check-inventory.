@@ -57,7 +57,10 @@
 
     <div id="inspectionItemTable" class="list"></div>
 
-    <div class="save-bar"><button type="button" class="secondary" onclick="submitInspection()">💾 บันทึกผลตรวจ</button></div>
+    <div class="save-bar">
+      <p id="inspectionSaveHint" class="save-hint"></p>
+      <button id="inspectionSubmitBtn" type="button" class="secondary" onclick="submitInspection()">💾 บันทึกผลตรวจ</button>
+    </div>
   </div>
 </div>
 
@@ -104,10 +107,19 @@
 <div id="tabContentStock" class="hidden">
   <div class="card">
     <h2>ทะเบียนรถและอุปกรณ์ประจำรถ</h2>
-    <label for="stockCar">เลือกรถ</label>
-    <select id="stockCar"></select>
-    <p>จำนวนและวันหมดอายุแยกตามรถแต่ละคัน</p>
-    
+
+    <div class="vehicle-pick">
+      <div class="vehicle-pick-main">
+        <label for="stockCar">เลือกรถ</label>
+        <select id="stockCar"></select>
+      </div>
+      <div class="vehicle-pick-actions">
+        <button type="button" id="btnEditVehicle" class="small-btn secondary">✏️ แก้ไขข้อมูลรถ</button>
+        <button type="button" id="btnDeleteVehicle" class="small-btn danger">🗑 ลบรถ</button>
+      </div>
+    </div>
+    <p id="stockCarMeta" class="vehicle-meta">จำนวนและวันหมดอายุแยกตามรถแต่ละคัน</p>
+
     <div id="addItemForm" class="hidden">
       <h3>เพิ่มอุปกรณ์ใหม่</h3>
       <form id="stockAddForm">
@@ -116,6 +128,10 @@
           <div><label for="stockStandard">จำนวนมาตรฐาน</label><input id="stockStandard" placeholder="จำนวนมาตรฐาน เช่น 10 หรือ 1 ชุด" required></div>
           <div><label for="stockExpiry">วันหมดอายุ</label><input id="stockExpiry" type="date"></div>
           <div><label for="stockBattery">เป็นแบตเตอรี่</label><select id="stockBattery"><option value="false">ไม่ใช่</option><option value="true">ใช่</option></select></div>
+          <div>
+            <label for="stockOnboard">ยอดคงเหลือบนรถ (ชิ้น)</label>
+            <input id="stockOnboard" type="number" min="0" step="any" inputmode="decimal" placeholder="เว้นว่าง = ยังไม่ตรวจนับ">
+          </div>
           <div>
             <label for="stockCurrent">สต็อกปัจจุบันในคลัง</label>
             <input id="stockCurrent" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 20 (เว้นว่าง = ไม่แตะคลัง)">

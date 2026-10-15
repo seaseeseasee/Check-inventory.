@@ -29,6 +29,7 @@ class DashboardPage {
         result = await window.api.get('/staff/dashboard');
         this.data = this.normalizeStaffData(result.data);
       }
+      window.vehicleRef.remember(this.data?.vehicles || []);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
       window.toast.error('โหลดข้อมูลแดชบอร์ดไม่สำเร็จ');
@@ -151,7 +152,7 @@ class DashboardPage {
       return `
         <article class="dash-car${alertClass}">
           <div class="dash-car-head">
-            <span class="plate-chip">${UI.escape(this.getPlate(vehicle.id))}</span>
+            <span class="plate-chip">${UI.escape(vehiclePlate(vehicle))}</span>
             <span class="chip ${draft ? 'chip-warn' : isToday ? 'chip-ok' : 'chip-off'}">
               ${draft ? 'มีร่างค้าง' : isToday ? 'ตรวจแล้ววันนี้' : 'ยังไม่ตรวจวันนี้'}
             </span>
@@ -194,7 +195,7 @@ class DashboardPage {
               <span class="chip chip-${req.status}">${this.getStatusLabel(req.status)}</span>
             </div>
             <div class="rs-meta">
-              <span class="plate-chip">${this.getPlate(req.car_id)}</span>
+              <span class="plate-chip">${UI.escape(vehiclePlate({ id: req.car_id, name: req.car_name }))}</span>
               <span>รถ: ${UI.escape(req.car_name)}</span>
               <span>${UI.formatDateTimeThai(req.created_at)}</span>
             </div>
@@ -219,7 +220,7 @@ class DashboardPage {
           return `
             <article class="dash-car${isToday ? '' : ''}">
               <div class="dash-car-head">
-                <span class="plate-chip">${this.getPlate(vehicle.id)}</span>
+                <span class="plate-chip">${UI.escape(vehiclePlate(vehicle))}</span>
                 <span class="chip ${isToday ? 'chip-ok' : 'chip-off'}">
                   ${isToday ? 'ตรวจแล้ววันนี้' : 'ยังไม่ตรวจวันนี้'}
                 </span>
@@ -250,15 +251,6 @@ class DashboardPage {
       'CANCELLED': 'ยกเลิก',
     };
     return labels[status] || status;
-  }
-
-  getPlate(carId) {
-    const plates = {
-      'car-1': '3ชฏ3250',
-      'car-2': 'ฆง8434',
-      'car-3': '5กล1034',
-    };
-    return plates[carId] || carId;
   }
 
   startInspection(carId) {

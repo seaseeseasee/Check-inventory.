@@ -28,6 +28,7 @@ class HistoryPage {
       const [inspectionsRes, restockRes] = await Promise.all([
         window.historyApi.getInspections(),
         window.historyApi.getRestock(),
+        window.vehicleRef.ensure(),
       ]);
       this.inspections = inspectionsRes.data || [];
       this.restockRequests = restockRes.data || [];
@@ -89,7 +90,7 @@ class HistoryPage {
             ${chip}
           </div>
           <div class="report-meta">
-            <span class="plate-chip">${UI.escape(this.getPlate(check.car_id))}</span>
+            <span class="plate-chip">${UI.escape(vehiclePlate({ id: check.car_id, name: check.car_name }))}</span>
             <span>${UI.escape(check.car_name || '')}</span>
             <span>ผู้ตรวจ: ${UI.escape(check.nurse_name || '-')}</span>
             <span>เวร ${UI.escape(check.shift_name || '-')}</span>
@@ -128,13 +129,52 @@ class HistoryPage {
       box.innerHTML = items.map(item => {
         const level = item.battery_level === null || item.battery_level === undefined ? null : Number(item.battery_level);
         const attn = item.status === 'ขาด' || item.status === 'ใช้ไป' || (item.is_battery && level !== null && level < 4);
-        return `<p class="${attn ? 'attn' : ''}">${UI.escape(item.name)}: ${UI.escape(item.status)}${item.detail ? ' ' + UI.escape(item.detail) : ''} | หมดอายุ ${UI.escape(item.expiry_text || '-')}</p>`;
+        const audit = this.renderStockAudit(item);
+        return `<p class="${attn ? 'attn' : ''}">${UI.escape(item.name)}: ${UI.escape(item.status)}${item.detail ? ' ' + UI.escape(item.detail) : ''} | หมดอายุ ${UI.escape(item.expiry_text || '-')}${audit}</p>`;
       }).join('') || '<p class="muted">ไม่มีรายการในรอบนี้</p>';
     } catch (error) {
       det.dataset.loaded = '';
       box.innerHTML = '<p class="attn">โหลดรายการไม่สำเร็จ — ลองเปิดใหม่อีกครั้ง</p>';
       window.toast.error('โหลดรายละเอียดการตรวจไม่สำเร็จ');
     }
+  }
+
+  // ตัวเลขจากฐานข้อมูลเท่านั้น — ค่าว่าง/NULL แปลว่า "ไม่ได้บันทึกตัวเลข" ห้ามแสดงเป็น 0
+  numOrNull(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  }
+
+  fmtQty(value) {
+    const text = String(value);
+    return text.includes('.') ? text.replace(/\.?0+$/, '') : text;
+  }
+
+  // เส้นทางการเงินของรอบตรวจ: บนรถก่อนตรวจ → คงเหลือจริง → ใช้ไป → ต้องเติม
+  renderStockAudit(item) {
+    const unit = item.unit ? ' ' + UI.escape(String(item.unit)) : '';
+    const before = this.numOrNull(item.qty_before);
+    const actual = this.numOrNull(item.actual_qty);
+    const used = this.numOrNull(item.used_qty);
+    const target = this.numOrNull(item.qty_target);
+
+    if (before === null && actual === null && used === null) {
+      return `<span class="hist-audit muted">ตัวเลขยอดคงเหลือ: ไม่ได้บันทึกในรอบนี้</span>`;
+    }
+
+    const bits = [];
+    if (before !== null) bits.push(`บนรถก่อนตรวจ ${this.fmtQty(before)}${unit}`);
+    else bits.push('รถคันนี้ยังไม่เคยนับยอดก่อนรอบนี้');
+    if (actual !== null) bits.push(`คงเหลือจริง ${this.fmtQty(actual)}${unit}`);
+    if (used !== null) bits.push(`ใช้ไป ${this.fmtQty(used)}${unit}`);
+    if (target !== null && actual !== null) {
+      const refill = Math.max(0, target - actual);
+      bits.push(refill > 0
+        ? `ต้องเติม ${this.fmtQty(refill)}${unit}`
+        : `ครบเป้าหมาย ${this.fmtQty(target)}${unit}`);
+    }
+    return `<span class="hist-audit">${bits.join(' · ')}</span>`;
   }
 
   renderRestockList() {
@@ -207,7 +247,7 @@ class HistoryPage {
             <span class="chip chip-${request.status}">${statusLabels[request.status] || request.status}</span>
           </div>
           <div class="rs-meta">
-            <span class="plate-chip">${UI.escape(this.getPlate(request.car_id))}</span>
+            <span class="plate-chip">${UI.escape(vehiclePlate({ id: request.car_id, name: request.car_name }))}</span>
             <span>รถ: ${UI.escape(request.car_name)}</span>
             <span>${UI.formatDateTimeThai(request.created_at)}</span>
             ${request.assigned_to_user_id ? `<span>ผู้ดูแล: ${UI.escape(request.assigned_name || 'กำลังมอบหมาย')}</span>` : ''}
@@ -253,15 +293,18 @@ class HistoryPage {
     // Car filter chips
     const carContainer = document.getElementById('historyCarChips');
     if (carContainer) {
-      const carIds = [...new Set([
-        ...this.inspections.map(i => i.car_id),
-        ...this.restockRequests.map(r => r.car_id),
-      ])];
-      
+      // รถแต่ละคันอาจมีชื่อต่างกันในแถวประวัติ (กรณีถูกลบออกจากระทะเบียนแล้ว)
+      const carHints = new Map();
+      [...this.inspections, ...this.restockRequests].forEach(row => {
+        if (row.car_id && !carHints.has(row.car_id)) {
+          carHints.set(row.car_id, { id: row.car_id, name: row.car_name });
+        }
+      });
+
       carContainer.innerHTML = `
         <button type="button" class="chip-btn${this.filters.car === 'all' ? ' on' : ''}" onclick="historyPage.setCarFilter('all')">ทุกคัน</button>
-        ${carIds.map(id => `
-          <button type="button" class="chip-btn${this.filters.car === id ? ' on' : ''}" onclick="historyPage.setCarFilter('${id}')">${this.getPlate(id)}</button>
+        ${[...carHints.keys()].map(id => `
+          <button type="button" class="chip-btn${this.filters.car === id ? ' on' : ''}" onclick="historyPage.setCarFilter('${UI.escape(id)}')">${UI.escape(vehiclePlate(carHints.get(id)))}</button>
         `).join('')}
       `;
     }
@@ -361,15 +404,6 @@ class HistoryPage {
           : '';
       }
     }
-  }
-
-  getPlate(carId) {
-    const plates = {
-      'car-1': '3ชฏ3250',
-      'car-2': 'ฆง8434',
-      'car-3': '5กล1034',
-    };
-    return plates[carId] || carId;
   }
 
   async refresh() {
