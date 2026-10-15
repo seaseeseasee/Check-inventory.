@@ -112,6 +112,13 @@ $route = match (true) {
     preg_match('/^\/api\/stock\/([^\/]+)\/receive$/', $path, $matches) && $method === 'POST' => ['StockController', 'receive', $matches[1]],
     preg_match('/^\/api\/stock\/([^\/]+)\/adjust$/', $path, $matches) && $method === 'POST' => ['StockController', 'adjust', $matches[1]],
 
+    // Wards/departments (ทะเบียนวอร์ด/หน่วยงานของตารางพยาบาล)
+    // อ่าน: ทุก role ที่ login แล้ว — เขียน: ตรวจ role admin ที่ DepartmentController อีกชั้น
+    $path === '/api/departments' && $method === 'GET' => ['DepartmentController', 'index'],
+    $path === '/api/departments' && $method === 'POST' => ['DepartmentController', 'store'],
+    preg_match('/^\/api\/departments\/([^\/]+)$/', $path, $matches) && $method === 'PUT' => ['DepartmentController', 'update', $matches[1]],
+    preg_match('/^\/api\/departments\/([^\/]+)$/', $path, $matches) && $method === 'DELETE' => ['DepartmentController', 'destroy', $matches[1]],
+
     // Legacy routes (for backward compatibility)
     $path === '/api/dashboard' && $method === 'GET' => ['DashboardController', 'index'],
     $path === '/api/dashboard/stats' && $method === 'GET' => ['DashboardController', 'stats'],

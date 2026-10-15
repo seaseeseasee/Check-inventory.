@@ -20,6 +20,8 @@ use App\Models\Vehicle;
  * ข้อตกลงของระบบที่คลาสนี้ต้องรักษา:
  *  1) "ยังไม่เคยตรวจนับ" = refer_items.stock_updated_at IS NULL (ห้ามตีความเป็น 0)
  *     — การแก้ "ยอดบนรถ" จากหน้าจอ admin เป็นการตรวจนับชนิดหนึ่ง จึงต้องเขียน stamp ไปด้วย
+ *     — การคัดลอกรายการ (รถใหม่/คัดลอกเป็นชุด) ต้องยก current_qty ของต้นทางมาด้วย
+ *       แต่เฉพาะแถวที่มี stamp จริง เท่านั้น ส่วนแถวที่ยังไม่เคยนับให้คงค่าว่างไว้
  *  2) refer_items.current_qty ต้อง >= 0 (มี CHECK constraint) — ตรวจก่อนส่งถึงจะได้
  *     ข้อความภาษาไทยแทน SQL error
  *  3) จำนวนมาตรฐาน (standard) เป็นต้นทางของ target_qty/unit ที่ใช้คำนวณ "ต้องเติมกี่ชิ้น"
@@ -52,6 +54,22 @@ class VehicleService
         $this->itemModel = new Item();
         $this->metadata = new Metadata();
         $this->stockService = new StockService();
+    }
+
+    /**
+     * รถที่ "งดใช้งาน" (status=disabled) ต้องไม่เริ่มรอบตรวจใหม่ — history/ทะเบียนยังอ่านได้
+     * controller ทั้งสองเส้นทาง (/api/staff/inspections/start และ legacy /api/inspections/start)
+     * เรียกใช้ร่วมกัน เพราะการซ่อนปุ่มฝั่ง client เพียงอย่างเดียวยืนยันสิทธิ์ไม่ได้
+     */
+    public static function assertInspectable(?array $vehicle): void
+    {
+        if (($vehicle['status'] ?? '') === 'disabled') {
+            throw new ApiException(
+                'รถคันนี้ถูกงดใช้งานแล้ว — เปิดกลับที่แท็บ "ทะเบียนรถ/อุปกรณ์" ก่อนเริ่มตรวจเช็ค',
+                409,
+                ['code' => 'VEHICLE_DISABLED']
+            );
+        }
     }
 
     // ==================== อ่านข้อมูล ====================
@@ -213,6 +231,20 @@ class VehicleService
         $vehicle['item_source'] = $seed['source'];
         $vehicle['item_source_label'] = $seed['label'];
         $vehicle['copied_items'] = $inserted; // เข้ากับ client เดิม (adminApi.createVehicle)
+
+        // รายงานให้หน้าจอรู้ว่า "ยอดบนรถ" ถูกยกมาเท่าไร (ไม่รวมแถวที่ยังไม่เคยตรวจนับ)
+        $stockCopied = 0;
+        $inactiveCopied = 0;
+        foreach ($seed['items'] as $row) {
+            if (self::parseQty($row['current_qty'] ?? null) !== null) {
+                $stockCopied++;
+            }
+            if (array_key_exists('active', $row) && empty($row['active'])) {
+                $inactiveCopied++;
+            }
+        }
+        $vehicle['stock_copied'] = $stockCopied;
+        $vehicle['items_inactive'] = $inactiveCopied;
         return $vehicle;
     }
 
@@ -240,7 +272,9 @@ class VehicleService
                 throw new ApiException('ไม่พบรถต้นทางที่เลือก: ' . $copyId, 422,
                     ['errors' => ['copy_source_vehicle_id' => ['ไม่พบรถต้นทาง']]]);
             }
-            $rows = $this->getItems($copyId);
+            // "คัดลอกจากคันอื่น" = ยกโครงสร้างของคันต้นทางมาทั้งชุด รวมแถวที่พักใช้งาน
+            // เพื่อให้สถานะ active ติดมาด้วย (ผู้ใช้ออกตรวจนับ/เปิดใช้ได้เองภายหลัง)
+            $rows = $this->getItems($copyId, true);
             if (count($rows) > 300) {
                 throw new ApiException('รถต้นทางมีอุปกรณ์เกิน 300 รายการ — คัดลอกได้ครั้งละไม่เกิน 300', 422);
             }
@@ -318,7 +352,10 @@ class VehicleService
 
     /**
      * แปลงแถวแหล่งที่มา → โครงที่ insertItems รับ
-     * (ไม่คัด current_qty มาด้วย — รถคันใหม่ "ยังไม่เคยตรวจนับ" ตามข้อตกลงข้อ 1)
+     *
+     * "ยอดคงเหลือบนรถ" ติดมากับชุดคัดลอกด้วย (current_qty + stamp) แต่เฉพาะแถวที่
+     * ต้นทางเคยตรวจนับจริง (stock_updated_at มีค่า) — แถวที่ยังไม่เคยนับต้องคงสถานะ
+     * "ยังไม่เคยตรวจนับ" ไว้ ไม่แต่งยอด 0 ขึ้นมาใหม่ (ข้อตกลงข้อ 1)
      */
     private function toSeedRows(array $rows): array
     {
@@ -334,14 +371,44 @@ class VehicleService
                 'standard' => $standard,
                 'expiry_text' => trim((string)($row['expiry_text'] ?? '')),
                 'is_battery' => !empty($row['is_battery']),
+                // แม่แบบใน refer_metadata ไม่มีคอลัมน์ active → ถือว่าใช้อยู่
+                'active' => array_key_exists('active', $row) ? !empty($row['active']) : true,
+                'current_qty' => self::copiedQty($row),
             ];
         }
         return $out;
     }
 
     /**
+     * ยอดคงเหลือที่ "คัดลอกต่อ" ได้จากแถวต้นทาง — คืน NULL เมื่อไม่มียอดจริง
+     * (NULL = ให้แถวใหม่เป็น "ยังไม่เคยตรวจนับ" ส่วน 0 คือ "นับแล้ว 0 ชิ้น" ซึ่งต่างกัน)
+     */
+    private static function copiedQty(array $row): ?float
+    {
+        $hasReading = trim((string)($row['stock_updated_at'] ?? '')) !== '';
+        if (!$hasReading) {
+            return null;
+        }
+        return self::parseQty($row['current_qty'] ?? null);
+    }
+
+    /** ค่าตัวเลขที่ปลอดภัยสำหรับ current_qty (ว่าง/ไม่ใช่ตัวเลข/ติดลบ → NULL) */
+    private static function parseQty(mixed $raw): ?float
+    {
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        if (!is_numeric($raw)) {
+            return null;
+        }
+        $qty = (float)$raw;
+        return $qty >= 0 ? $qty : null;
+    }
+
+    /**
      * เขียน refer_items หลายแถวใน transaction ของผู้เรียก
      * target_qty/unit สกัดจาก standard ใหม่ทุกครั้ง (ข้อตกลงข้อ 3)
+     * current_qty/stock_updated_at ติดมาจากแหล่งคัดลอกเฉพาะแถวที่มียอดจริง (ข้อตกลงข้อ 1)
      */
     private function insertItems(string $carId, array $rows): int
     {
@@ -351,11 +418,14 @@ class VehicleService
 
         $db = Database::getConnection();
         $table = $this->itemModel->getTable();
+        $stamp = $this->now();
         $values = [];
         $params = [];
         foreach ($rows as $row) {
             $target = self::deriveTarget($row['standard']);
-            $values[] = '(?, ?, ?, ?, ?, ?, ?, ?, 1)';
+            $qty = self::parseQty($row['current_qty'] ?? null);
+            $active = array_key_exists('active', $row) ? !empty($row['active']) : true;
+            $values[] = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
             $params[] = 'itm-' . substr(generate_id(), 0, 12);
             $params[] = $carId;
             $params[] = $row['name'];
@@ -364,14 +434,122 @@ class VehicleService
             $params[] = !empty($row['is_battery']) ? 1 : 0;
             $params[] = $target['qty'];
             $params[] = $target['unit'];
+            $params[] = $active ? 1 : 0;
+            $params[] = $qty ?? 0;
+            // ไม่แต่ง stamp ให้แถวที่ไม่มีข้อมูลตรวจนับ
+            $params[] = $qty === null ? null : $stamp;
         }
 
         $stmt = $db->prepare(
-            "INSERT INTO {$table} (id, car_id, name, standard, expiry_text, is_battery, target_qty, unit, active)
+            "INSERT INTO {$table} (id, car_id, name, standard, expiry_text, is_battery, target_qty, unit, active, current_qty, stock_updated_at)
              VALUES " . implode(', ', $values)
         );
         $stmt->execute($params);
         return count($rows);
+    }
+
+    /**
+     * คัดลอกรายการอุปกรณ์เป็นชุดเข้ารถปลายทาง (หน้า ทะเบียนรถ/อุปกรณ์)
+     *
+     * CLIENT เป็นผู้ตรวจทานรายการก่อนส่ง จึงรับค่า "สุดท้าย" ที่ผู้ใช้อาจแก้มาแล้ว
+     * ทุกรายการอยู่ใน INSERT เดียว ภายใน transaction เดียว (ข้อตกลงข้อ 5)
+     *
+     *  row: name*, standard*, expiry_text, is_battery, active,
+     *       current_qty (ว่าง/null = ไม่เคยตรวจนับ | ตัวเลข = ยอดที่คัดลอกต่อ)
+     *
+     * @return array{created:int,stock_copied:int,active_copied:int,inactive_copied:int,vehicle_id:string}
+     */
+    public function copyItemsToVehicle(string $carId, array $items, ?array $actor): array
+    {
+        $vehicle = $this->vehicleModel->find($carId);
+        if (!$vehicle) {
+            throw new ApiException('ไม่พบรถคันนี้ในระบบ: ' . $carId, 404);
+        }
+        if (empty($items)) {
+            throw new ApiException('ไม่มีรายการอุปกรณ์ที่จะคัดลอก', 422,
+                ['errors' => ['items' => ['ไม่มีรายการอุปกรณ์ที่จะคัดลอก']]]);
+        }
+        if (count($items) > 300) {
+            throw new ApiException('คัดลอกได้ครั้งละไม่เกิน 300 รายการ', 422,
+                ['errors' => ['items' => ['คัดลอกได้ครั้งละไม่เกิน 300 รายการ']]]);
+        }
+
+        $rows = [];
+        $stockCopied = 0;
+        $inactiveCopied = 0;
+        foreach (array_values($items) as $index => $item) {
+            if (!is_array($item)) {
+                throw new ApiException('รายการที่ ' . ($index + 1) . ': รูปแบบไม่ถูกต้อง', 422,
+                    ['errors' => ['items' => ['รายการที่ ' . ($index + 1) . ': รูปแบบไม่ถูกต้อง']]]);
+            }
+
+            $name = trim((string)($item['name'] ?? ''));
+            $standard = trim((string)($item['standard'] ?? ''));
+            $expiry = trim((string)($item['expiry_text'] ?? ''));
+
+            if ($name === '') {
+                throw new ApiException('รายการที่ ' . ($index + 1) . ': ต้องมีชื่ออุปกรณ์', 422,
+                    ['errors' => ['items' => ['รายการที่ ' . ($index + 1) . ': ต้องมีชื่ออุปกรณ์']]]);
+            }
+            if ($standard === '') {
+                throw new ApiException('รายการที่ ' . ($index + 1) . ': ต้องมีจำนวนมาตรฐาน', 422,
+                    ['errors' => ['items' => ['รายการที่ ' . ($index + 1) . ': ต้องมีจำนวนมาตรฐาน']]]);
+            }
+            if (mb_strlen($name) > 255 || mb_strlen($standard) > 100 || mb_strlen($expiry) > 100) {
+                throw new ApiException('รายการที่ ' . ($index + 1) . ': ข้อความยาวเกินกำหนด', 422,
+                    ['errors' => ['items' => ['รายการที่ ' . ($index + 1) . ': ข้อความยาวเกินกำหนด']]]);
+            }
+
+            // ค่าว่าง = "ยังไม่เคยตรวจนับ" ส่วนตัวเลข = ยอดบนรถที่คัดลอก/กรอกต่อ
+            $qtyRaw = $item['current_qty'] ?? null;
+            $qtyText = ($qtyRaw === null) ? '' : trim((string)$qtyRaw);
+            if ($qtyText !== '' && !is_numeric($qtyText)) {
+                throw new ApiException('รายการที่ ' . ($index + 1) . ': ยอดคงเหลือบนรถต้องเป็นตัวเลข', 422,
+                    ['errors' => ['items' => ['รายการที่ ' . ($index + 1) . ': ยอดคงเหลือบนรถต้องเป็นตัวเลข']]]);
+            }
+            $qty = self::parseQty($qtyText);
+            if ($qtyText !== '' && $qty === null) {
+                throw new ApiException('รายการที่ ' . ($index + 1) . ': ยอดคงเหลือบนรถต้องมากกว่าหรือเท่ากับ 0', 422,
+                    ['errors' => ['items' => ['รายการที่ ' . ($index + 1) . ': ยอดคงเหลือบนรถต้องมากกว่าหรือเท่ากับ 0']]]);
+            }
+
+            $active = array_key_exists('active', $item) ? !empty($item['active']) : true;
+            if ($qty !== null) {
+                $stockCopied++;
+            }
+            if (!$active) {
+                $inactiveCopied++;
+            }
+
+            $rows[] = [
+                'name' => $name,
+                'standard' => $standard,
+                'expiry_text' => $expiry,
+                'is_battery' => !empty($item['is_battery']),
+                'active' => $active,
+                'current_qty' => $qty,
+            ];
+        }
+
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $created = $this->insertItems($carId, $rows);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+
+        return [
+            'created' => $created,
+            'stock_copied' => $stockCopied,
+            'active_copied' => $created - $inactiveCopied,
+            'inactive_copied' => $inactiveCopied,
+            'vehicle_id' => $carId,
+        ];
     }
 
     // ==================== รถ: แก้ไข ====================

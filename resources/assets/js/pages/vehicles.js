@@ -463,7 +463,9 @@ class VehiclesPage {
 
     let sourceItems;
     try {
-      const res = await window.vehicleApi.get(sourceId);
+      // แอดมินดึงผ่านทะเบียนรถ (ได้แถวที่ "พักใช้งาน" ด้วย) เพื่อคัดลอกสถานะ active มาครบ
+      const isAdmin = window.auth && typeof window.auth.isAdmin === 'function' && window.auth.isAdmin();
+      const res = isAdmin ? await window.adminApi.getVehicle(sourceId) : await window.vehicleApi.get(sourceId);
       sourceItems = res.data?.items || [];
     } catch (error) {
       window.toast.error('ดึงข้อมูลรถต้นทางไม่สำเร็จ: ' + error.message);
@@ -475,28 +477,45 @@ class VehiclesPage {
       return;
     }
 
-    const confirmed = await this.confirmCopyDialog(sourceLabel, targetLabel, sourceItems.length, this.copyStaging.length > 0);
+    const stockCount = sourceItems.filter(item => String(item.stock_updated_at || '').trim() !== '').length;
+
+    const confirmed = await this.confirmCopyDialog(
+      sourceLabel, targetLabel, sourceItems.length, this.copyStaging.length > 0, stockCount
+    );
     if (!confirmed) return;
 
-    this.copyStaging = sourceItems.map(item => ({
-      name: item.name || '',
-      standard: item.standard || '',
-      expiry_text: item.expiry_text || '',
-      is_battery: !!item.is_battery,
-    }));
+    this.copyStaging = sourceItems.map(item => {
+      const counted = String(item.stock_updated_at || '').trim() !== '';
+      return {
+        name: item.name || '',
+        standard: item.standard || '',
+        expiry_text: item.expiry_text || '',
+        is_battery: !!item.is_battery,
+        active: item.active !== false && item.active !== 0,
+        // ยอดคงเหลือติดมาเฉพาะแถวที่ต้นทาง "เคยตรวจนับจริง" — แถวที่ไม่เคยนับต้องว่างไว้
+        // เพราะ 0 กับ "ยังไม่เคยตรวจนับ" ความหมายคนละอย่างบนหน้ารอเติม
+        current_qty: counted ? String(item.current_qty ?? '') : '',
+        counted,
+        stock_stamp: counted ? this.fmtStamp(item.stock_updated_at) : '',
+      };
+    });
     this.copySourceLabel = sourceLabel;
     this.renderCopyPreview();
-    window.toast.info(`ดึงรายการจาก ${sourceLabel} จำนวน ${sourceItems.length} รายการ — ตรวจสอบก่อนกดยืนยัน`);
+    window.toast.info(
+      `ดึงรายการจาก ${sourceLabel} จำนวน ${sourceItems.length} รายการ `
+      + `— คัดลอกยอดคงเหลือบนรถมา ${stockCount} รายการ (ตรวจสอบก่อนกดยืนยัน)`
+    );
   }
 
-  confirmCopyDialog(sourceLabel, targetLabel, count, replacing = false) {
+  confirmCopyDialog(sourceLabel, targetLabel, count, replacing = false, stockCount = 0) {
     return new Promise((resolve) => {
       const modal = new Modal({
         title: 'ยืนยันการคัดลอกอุปกรณ์',
         size: 'sm',
         content: `
           <p class="mb-2">คุณต้องการคัดลอกรายการอุปกรณ์จากรถคัน <strong>${UI.escape(sourceLabel)}</strong> ใช่หรือไม่?</p>
-          <p class="mb-2 text-sm">ระบบจะนำอุปกรณ์ทั้งหมด <strong>${count} รายการ</strong> มาแสดงในรถคัน <strong>${UI.escape(targetLabel)}</strong> เพื่อให้ตรวจสอบ/แก้ไขก่อนบันทึก — ยังไม่มีการบันทึกจนกว่าจะกด “ยืนยันคัดลอก”</p>
+          <p class="mb-2">ระบบจะนำอุปกรณ์ทั้งหมด <strong>${count} รายการ</strong> มาแสดงในรถคัน <strong>${UI.escape(targetLabel)}</strong> เพื่อให้ตรวจสอบ/แก้ไขก่อนบันทึก — ยังไม่มีการบันทึกจนกว่าจะกด “ยืนยันคัดลอก”</p>
+          <p class="mb-2 text-sm">สิ่งที่คัดลอกมาด้วย: จำนวนมาตรฐาน, วันหมดอายุ, สถานะใช้งาน/พัก, แบตเตอรี่ และ <strong>ยอดคงเหลือบนรถ ${stockCount} รายการ</strong> (รายการที่ต้นทางยังไม่เคยตรวจนับจะปล่อยว่าง ไม่ใส่เป็น 0)</p>
           ${replacing ? '<p class="mb-2 text-sm" style="color: var(--warn);">⚠️ มีรายการรอคัดลอกอยู่ก่อนแล้ว — รายการชุดใหม่นี้จะแทนที่ชุดเดิม</p>' : ''}
         `,
         onClose: () => resolve(false),
@@ -558,6 +577,23 @@ class VehiclesPage {
                 : `<input type="text" data-copy-field="expiry_text" value="${UI.escape(row.expiry_text)}" placeholder="ข้อความวันหมดอายุ เช่น 10 / 15/12/2569">`}
             </div>
             <div>
+              <label>ยอดคงเหลือบนรถ</label>
+              <input type="number" min="0" step="any" inputmode="decimal" data-copy-field="current_qty"
+                value="${UI.escape(String(row.current_qty ?? ''))}"
+                placeholder="${row.counted ? 'เว้นว่าง = ไม่คัดลอกยอด' : 'ยังไม่เคยตรวจนับ'}"
+                aria-label="ยอดคงเหลือบนรถของรายการที่ ${idx + 1}">
+              <p class="copy-row-hint">${row.counted
+                ? `คัดลอกจากต้นทาง • ยอดล่าสุด ${UI.escape(row.stock_stamp || '')}`
+                : 'ต้นทางยังไม่เคยตรวจนับ — กรอกตัวเลขถ้าได้ตรวจนับของจริงบนคันนี้แล้ว'}</p>
+            </div>
+            <div>
+              <label>สถานะ</label>
+              <select data-copy-field="active">
+                <option value="true" ${row.active !== false ? 'selected' : ''}>ใช้งาน</option>
+                <option value="false" ${row.active === false ? 'selected' : ''}>พักใช้งาน</option>
+              </select>
+            </div>
+            <div>
               <label>เป็นแบตเตอรี่</label>
               <select data-copy-field="is_battery">
                 <option value="false" ${!row.is_battery ? 'selected' : ''}>ไม่ใช่</option>
@@ -572,6 +608,7 @@ class VehiclesPage {
     if (fromEl) fromEl.textContent = `จากรถคัน ${this.copySourceLabel}`;
     if (countChip) countChip.textContent = `รอคัดลอก ${this.copyStaging.length} รายการ`;
     if (confirmBtn) confirmBtn.textContent = `ยืนยันคัดลอก ${this.copyStaging.length} รายการ`;
+    this.renderCopyStockSummary();
 
     list.querySelectorAll('[data-copy-field]').forEach(input => {
       input.addEventListener('input', () => this.onCopyFieldChange(input));
@@ -583,13 +620,33 @@ class VehiclesPage {
     });
   }
 
+  renderCopyStockSummary() {
+    const el = document.getElementById('copyPreviewStock');
+    if (!el) return;
+    const withStock = this.copyStaging.filter(row => String(row.current_qty ?? '').trim() !== '').length;
+    const resting = this.copyStaging.filter(row => row.active === false).length;
+    el.textContent = `มียอดคงเหลือบนรถติดมา ${withStock}/${this.copyStaging.length} รายการ`
+      + (resting > 0 ? ` • พักใช้งาน ${resting} รายการ` : '');
+    el.classList.toggle('hidden', this.copyStaging.length === 0);
+  }
+
   onCopyFieldChange(input) {
     const rowEl = input.closest('.copy-row');
     const idx = Number(rowEl?.dataset.idx);
     const field = input.dataset.copyField;
     if (!rowEl || Number.isNaN(idx) || !this.copyStaging[idx]) return;
 
-    this.copyStaging[idx][field] = field === 'is_battery' ? input.value === 'true' : input.value;
+    if (field === 'is_battery' || field === 'active') {
+      this.copyStaging[idx][field] = input.value === 'true';
+    } else if (field === 'current_qty') {
+      // พิมพ์ตัวเลขเอง = ถือเป็นยอดที่นับจริงบนคันนี้ แม้ต้นทางจะยังไม่เคยตรวจนับ
+      this.copyStaging[idx].current_qty = input.value.trim();
+      if (this.copyStaging[idx].current_qty !== '') this.copyStaging[idx].counted = true;
+    } else {
+      this.copyStaging[idx][field] = input.value;
+    }
+
+    if (field === 'current_qty') this.renderCopyStockSummary();
 
     if (field === 'name') {
       const dupEl = rowEl.querySelector('[data-copy-dup]');
@@ -616,6 +673,11 @@ class VehiclesPage {
         window.toast.error(`รายการที่ ${i + 1}: กรอกชื่ออุปกรณ์และจำนวนมาตรฐานให้ครบก่อนยืนยัน`);
         return;
       }
+      const qtyText = String(row.current_qty ?? '').trim();
+      if (qtyText !== '' && (!Number.isFinite(Number(qtyText)) || Number(qtyText) < 0)) {
+        window.toast.error(`รายการที่ ${i + 1}: ยอดคงเหลือบนรถต้องเป็นตัวเลข 0 ขึ้นไป`);
+        return;
+      }
     }
 
     const btn = document.getElementById('btnCopyConfirm');
@@ -627,11 +689,19 @@ class VehiclesPage {
           standard: String(row.standard).trim(),
           expiry_text: String(row.expiry_text || '').trim(),
           is_battery: !!row.is_battery,
+          active: row.active !== false,
+          // null = ไม่มีข้อมูลตรวจนับ → ฝั่งเซิร์ฟเวอร์จะปล่อย "ยังไม่เคยตรวจนับ" ไว้
+          current_qty: String(row.current_qty ?? '').trim() === '' ? null : String(row.current_qty).trim(),
         })),
       });
       const created = res.data?.created ?? this.copyStaging.length;
+      const stockCopied = Number(res.data?.stock_copied ?? 0);
+      const inactiveCopied = Number(res.data?.inactive_copied ?? 0);
       this.clearCopyStaging();
-      window.toast.success(`คัดลอกอุปกรณ์แล้ว ${created} รายการ`);
+      window.toast.success(
+        `คัดลอกอุปกรณ์แล้ว ${created} รายการ • พร้อมยอดคงเหลือบนรถ ${stockCopied} รายการ`
+        + (inactiveCopied > 0 ? ` • พักใช้งาน ${inactiveCopied} รายการ` : '')
+      );
       await this.loadItems(this.currentVehicleId);
     } catch (error) {
       window.toast.error('คัดลอกไม่สำเร็จ: ' + (error.message || 'ไม่ทราบสาเหตุ'));
@@ -684,7 +754,7 @@ class VehiclesPage {
             ${this.vehicles.map(item => `<option value="${UI.escape(item.id)}">${UI.escape(vehiclePlate(item))}</option>`).join('')}
           </select>
         </div>
-        <p class="mt-1 text-xs leading-relaxed text-slate-500">ระบบจะออกตรวจเช็กรถพร้อมใช้งานทันที — แต่จะไม่ก๊อปปี้ "ยอดคงเหลือบนรถ" มาด้วย เพราะต้องนับของจริงบนคันใหม่</p>
+        <p id="vehSeedNote" class="mt-1 text-xs leading-relaxed text-slate-500">กำลังเตรียมข้อมูล…</p>
       </div>
     `;
 
@@ -772,9 +842,48 @@ class VehiclesPage {
     if (!isEdit) {
       const source = form.querySelector('#vehItemSource');
       const wrap = form.querySelector('#vehCopyWrap');
+      const copySel = form.querySelector('#vehCopySource');
+      const note = form.querySelector('#vehSeedNote');
+
+      const updateSeedNote = async () => {
+        if (!note) return;
+        const mode2 = source ? source.value : 'default';
+        if (mode2 === 'none') {
+          note.textContent = 'สร้างรถโดยไม่มีรายการอุปกรณ์ — ต้องเพิ่มเองทีหลัง';
+          return;
+        }
+        if (mode2 !== 'copy') {
+          note.textContent = 'ใช้ชุดอุปกรณ์มาตรฐานกลาง จึงยังไม่มี "ยอดคงเหลือบนรถ" ของคันใด — ต้องตรวจนับจริงบนคันใหม่'
+            + ' (เลือก "คัดลอกจาก รถคันอื่นที่มีอยู่แล้ว" ถ้าต้องการยกยอดมาด้วย)';
+          return;
+        }
+        const id = copySel ? copySel.value : '';
+        if (!id) {
+          note.textContent = 'เลือกรถต้นทางเพื่อพรีวิวจำนวนรายการและยอดคงเหลือที่จะคัดลอก';
+          return;
+        }
+        note.textContent = 'กำลังโหลดข้อมูลรถต้นทาง…';
+        try {
+          const isAdmin = window.auth && typeof window.auth.isAdmin === 'function' && window.auth.isAdmin();
+          const res = isAdmin ? await window.adminApi.getVehicle(id) : await window.vehicleApi.get(id);
+          const items = res.data?.items || [];
+          const withStock = items.filter(i => String(i.stock_updated_at || '').trim() !== '').length;
+          const resting = items.filter(i => i.active === false || i.active === 0).length;
+          note.textContent = `จะคัดลอก ${items.length} รายการ`
+            + ` • มียอดคงเหลือบนรถติดมา ${withStock} รายการ`
+            + (resting > 0 ? ` • สถานะ พักใช้งาน ${resting} รายการ` : '')
+            + ' — ตัวเลขที่ยกมาเป็นการคัดลอก ไม่ใช่การนับของจริงบนคันใหม่ ควรตรวจนับอีกครั้ง';
+        } catch (error) {
+          note.textContent = 'โหลดข้อมูลรถต้นทางไม่สำเร็จ — ระบบจะคัดลอกตามข้อมูลจริงเมื่อเซิร์ฟเวอร์ทำรายการสำเร็จ';
+        }
+      };
+
       source?.addEventListener('change', () => {
         wrap?.classList.toggle('hidden', source.value !== 'copy');
+        updateSeedNote();
       });
+      copySel?.addEventListener('change', updateSeedNote);
+      updateSeedNote();
     }
 
     modal.open();
@@ -905,10 +1014,16 @@ class VehiclesPage {
       const res = await window.vehicleApi.create(payload);
       const created = res.data || {};
       const items = Number(created.items_created || 0);
+      const stockCopied = Number(created.stock_copied || 0);
+      const inactive = Number(created.items_inactive || 0);
       const sourceLabel = created.item_source_label || '';
       window.toast.success(
         `เพิ่มรถใหม่แล้ว: ${created.name || created.plate || payload.plate}`
-        + (items > 0 ? ` — สร้างรายการอุปกรณ์ ${items} รายการ (${sourceLabel})` : ' — ยังไม่มีรายการอุปกรณ์เริ่มต้น')
+        + (items > 0
+          ? ` — สร้างรายการอุปกรณ์ ${items} รายการ (${sourceLabel})`
+            + ` • คัดลอกยอดคงเหลือบนรถ ${stockCopied} รายการ`
+            + (inactive > 0 ? ` • พักใช้งาน ${inactive}` : '')
+          : ' — ยังไม่มีรายการอุปกรณ์เริ่มต้น')
       );
       this._vehicleModal?.destroy();
       await this.loadVehicles();

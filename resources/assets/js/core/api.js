@@ -144,6 +144,15 @@ window.nurseApi = {
   delete: (id) => api.delete(`/nurses/${id}`),
 };
 
+// Ward / department helpers (ทะเบียนวอร์ดของตารางพยาบาล)
+// อ่าน: ทุก role ที่ login / เขียน: server ตรวจ role admin — หน้าจอจึงซ่อนปุ่มเฉพาะ admin เท่านั้น
+window.departmentApi = {
+  getAll: () => api.get('/departments'),
+  create: (data) => api.post('/departments', data),
+  update: (id, data) => api.put(`/departments/${id}`, data),
+  remove: (id, data) => api.delete(`/departments/${id}`, data || { mode: 'auto' }),
+};
+
 // Vehicle helpers
 // เส้นทาง /api/vehicles* เป็นชุดที่หน้า "ทะเบียนรถและอุปกรณ์ประจำรถ" ใช้ (ข้าง server ตรวจ role admin ทุกคำสั่งเขียน)
 window.vehicleApi = {

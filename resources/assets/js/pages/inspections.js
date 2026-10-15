@@ -74,8 +74,13 @@ class InspectionPage {
   renderVehicleSelection() {
     const container = document.getElementById('inspectionCarGrid');
     if (!container) return;
-    
-    container.innerHTML = this.vehicles.map(vehicle => `
+
+    // รถ "งดใช้งาน" ยังอยู่ในทะเบียน/ประวัติ แต่ไม่อยู่ในรอบตรวจ — เซิร์ฟเวอร์ยืนยันอีกชั้น
+    // ที่ StaffController::startInspection (การซ่อนปุ่มอย่างเดียวเชื่อถือไม่ได้)
+    const usable = this.vehicles.filter(v => v.status !== 'disabled');
+    const hiddenCount = this.vehicles.length - usable.length;
+
+    const cards = usable.map(vehicle => `
       <button type="button" 
         class="car-symbol" 
         data-car-id="${UI.escape(vehicle.id)}" 
@@ -88,6 +93,23 @@ class InspectionPage {
         <span class="car-stat">ยังไม่มีประวัติ</span>
       </button>
     `).join('');
+
+    container.innerHTML = (cards || '<p class="empty">ยังไม่มีรถที่พร้อมตรวจเช็ค — เพิ่มรถที่แท็บ "ทะเบียนรถ/อุปกรณ์"</p>')
+      + (hiddenCount > 0
+        ? `<p class="car-grid-note">มีรถที่งดใช้งาน ${hiddenCount} คันไม่แสดงในรายการนี้ (เปิดกลับได้ที่แท็บ "ทะเบียนรถ/อุปกรณ์")</p>`
+        : '');
+  }
+
+  selectVehicle(carId) {
+    const vehicle = this.vehicles.find(v => String(v.id) === String(carId));
+    if (vehicle && vehicle.status === 'disabled') {
+      window.toast.warning(`รถ ${vehiclePlate(vehicle)} งดใช้งานอยู่ — เปิดกลับที่แท็บ "ทะเบียนรถ/อุปกรณ์" ก่อนเริ่มตรวจ`);
+      return;
+    }
+
+    document.querySelectorAll('.car-symbol').forEach(btn => {
+      btn.setAttribute('aria-pressed', btn.dataset.carId === carId);
+    });
   }
 
   renderNurseSelect() {
@@ -165,12 +187,6 @@ class InspectionPage {
     // ต้อง URL-encode: double quote ใน data URI จะปิด attribute src ของ <img> ทำให้อิโมจิหลุดออกมาแสดงบนหน้าจอ
     const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚑</text></svg>";
     return 'data:image/svg+xml,' + encodeURIComponent(svg);
-  }
-
-  selectVehicle(carId) {
-    document.querySelectorAll('.car-symbol').forEach(btn => {
-      btn.setAttribute('aria-pressed', btn.dataset.carId === carId);
-    });
   }
 
   async handleStartInspection(event) {

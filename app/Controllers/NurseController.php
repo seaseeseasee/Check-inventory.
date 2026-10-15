@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Services\InspectionService;
+use App\Services\DepartmentService;
+use App\Config\Database;
 use App\Helpers\Response;
 use App\Helpers\Validator;
 use App\Middleware\RoleMiddleware;
@@ -13,11 +15,13 @@ use App\Models\User;
 class NurseController extends Controller
 {
     private InspectionService $inspectionService;
+    private DepartmentService $departmentService;
     private RoleMiddleware $roleMiddleware;
 
     public function __construct()
     {
         $this->inspectionService = new InspectionService();
+        $this->departmentService = new DepartmentService();
         $this->roleMiddleware = new RoleMiddleware();
     }
 
@@ -39,12 +43,14 @@ class NurseController extends Controller
 
     public function store(): void
     {
+        // ตารางพยาบาลเป็นหน้า admin — ตรวจสิทธิ์ฝั่งเซิร์ฟเวอร์ก่อนแตะข้อมูล
+        $this->roleMiddleware->requireAdmin();
+
         $input = $this->getInput();
         
         $validator = new Validator($input, [
             'id' => 'required|string|max:100',
             'name' => 'required|string|max:255',
-            'department' => 'required|string|max:255',
             'phone' => 'string|max:100',
             'start_text' => 'string|max:100',
             'end_text' => 'string|max:100',
@@ -81,7 +87,6 @@ class NurseController extends Controller
         $data = [
             'id' => $input['id'],
             'name' => $input['name'],
-            'department' => $input['department'],
             'phone' => $input['phone'] ?? '',
             'start_text' => $input['start_text'] ?? '',
             'end_text' => $input['end_text'] ?? '',
@@ -89,7 +94,23 @@ class NurseController extends Controller
             'active' => $input['active'] ?? true,
         ];
 
-        $nurseModel->create($data);
+        // ผูกพยาบาลกับวอร์ดจากทะเบียน master (department_id ที่เลือก หรือชื่อข้อความเดิมตอนนำเข้า Excel)
+        // ชื่อที่เก็บลง refer_nurses.department จะคัดจากแถว master เสมอ ไม่ใช้ text ที่ client ส่งมา
+        // ทั้งสองแถว (สร้างวอร์ดใหม่ถ้าจำเป็น + สร้างพยาบาล) อยู่ใน transaction เดียวกัน
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $department = $this->departmentService->resolveForNurse($input);
+            $data['department'] = $department['name'];
+            $data['department_id'] = $department['id'];
+            $nurseModel->create($data);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
 
         if ($username !== '') {
             try {
@@ -111,6 +132,8 @@ class NurseController extends Controller
 
     public function update(string $id): void
     {
+        $this->roleMiddleware->requireAdmin();
+
         $input = $this->getInput();
         
         $nurseModel = new Nurse();
@@ -121,7 +144,6 @@ class NurseController extends Controller
 
         $validator = new Validator($input, [
             'name' => 'required|string|max:255',
-            'department' => 'required|string|max:255',
             'phone' => 'string|max:100',
             'start_text' => 'string|max:100',
             'end_text' => 'string|max:100',
@@ -135,7 +157,6 @@ class NurseController extends Controller
 
         $data = [
             'name' => $input['name'],
-            'department' => $input['department'],
             'phone' => $input['phone'] ?? '',
             'start_text' => $input['start_text'] ?? '',
             'end_text' => $input['end_text'] ?? '',
@@ -167,7 +188,22 @@ class NurseController extends Controller
             }
         }
 
-        $nurseModel->update($id, $data);
+        // อ่าน nurse เดิม + เขียนยอดใหม่ + (กรณีกรอกชื่อใหม่) สร้างแถวในทะเบียนวอร์ด
+        // ต้องสำเร็จพร้อมกัน จึงครอบด้วย transaction เดียว
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $department = $this->departmentService->resolveForNurse($input, $existing['department_id'] ?? null);
+            $data['department'] = $department['name'];
+            $data['department_id'] = $department['id'];
+            $nurseModel->update($id, $data);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
 
         if ($username !== '') {
             if ($linked === null) {
@@ -208,20 +244,34 @@ class NurseController extends Controller
 
     public function destroy(string $id): void
     {
+        // พักใช้งานพยาบาล + ปิดบัญชีที่ผูกกัน ต้องสำเร็จทั้งคู่ ไม่งั้นข้อมูลจะขัดกัน
+        $this->roleMiddleware->requireAdmin();
+
         $nurseModel = new Nurse();
         $existing = $nurseModel->find($id);
         if (!$existing) {
             $this->notFound('Nurse not found');
         }
 
-        // Soft delete - just mark as inactive
-        $nurseModel->update($id, ['active' => false]);
-
-        // A พักใช้งาน nurse must not be able to log in
         $userModel = new User();
         $linked = $userModel->findByNurseId($id);
-        if ($linked !== null) {
-            $userModel->updateUser($linked['id'], ['active' => false]);
+
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            // Soft delete - just mark as inactive
+            $nurseModel->update($id, ['active' => false]);
+
+            // A พักใช้งาน nurse must not be able to log in
+            if ($linked !== null) {
+                $userModel->updateUser($linked['id'], ['active' => false]);
+            }
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
         }
 
         $this->success(['id' => $id]);

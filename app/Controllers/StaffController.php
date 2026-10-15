@@ -6,6 +6,7 @@ namespace App\Controllers;
 use App\Services\InspectionService;
 use App\Services\RestockService;
 use App\Services\AuthService;
+use App\Services\VehicleService;
 use App\Models\Vehicle;
 use App\Models\Nurse;
 use App\Models\Item;
@@ -154,6 +155,7 @@ class StaffController extends Controller
         if (!$vehicle) {
             $this->notFound('Vehicle not found');
         }
+        VehicleService::assertInspectable($vehicle);
 
         $nurses = $this->nurseModel->getActive();
         $nurse = array_filter($nurses, fn($n) => $n['id'] === $input['nurse_id']);

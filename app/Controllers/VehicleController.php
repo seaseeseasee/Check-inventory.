@@ -5,9 +5,7 @@ namespace App\Controllers;
 
 use App\Services\InspectionService;
 use App\Services\VehicleService;
-use App\Config\Database;
 use App\Middleware\RoleMiddleware;
-use App\Models\Item;
 
 /**
  * ทะเบียนรถและอุปกรณ์ประจำรถ (Tab Stock)
@@ -115,78 +113,25 @@ class VehicleController extends Controller
     }
 
     /**
-     * Bulk-copy equipment items onto a vehicle in one statement.
-     * The client reviews/edits the staged list first; values arrive here
-     * as the final payload and are inserted in a single multi-row INSERT.
+     * POST /api/vehicles/{id}/items/copy — คัดลอกอุปกรณ์เป็นชุดเข้ารถปลายทาง
+     *
+     * หน้าจอร่างรายการให้ตรวจทานก่อน แล้วส่งค่าสุดท้าย (ชื่อ/จำนวนมาตรฐาน/วันหมดอายุ/
+     * แบตเตอรี่/สถานะ/ยอดคงเหลือบนรถ) เข้ามา — ตรรกะตรวจสอบ+INSERT อยู่ที่
+     * VehicleService::copyItemsToVehicle () ซึ่งเป็นชุดเดียวกับ "เพิ่มรถใหม่พร้อมคัดลอก"
      */
     public function copyItems(string $vehicleId): void
     {
         $this->roleMiddleware->requireAdmin();
 
-        $vehicle = $this->inspectionService->getVehicle($vehicleId);
-        if (!$vehicle) {
-            $this->notFound('Vehicle not found');
-        }
-
         $input = $this->getInput();
         $items = $input['items'] ?? null;
 
-        if (!is_array($items) || empty($items)) {
-            $this->validationError(['items' => 'ไม่มีรายการอุปกรณ์ที่จะคัดลอก']);
-        }
-        if (count($items) > 300) {
-            $this->validationError(['items' => 'คัดลอกได้ครั้งละไม่เกิน 300 รายการ']);
-        }
-
-        $rows = [];
-        foreach (array_values($items) as $index => $item) {
-            $name = trim((string)($item['name'] ?? ''));
-            $standard = trim((string)($item['standard'] ?? ''));
-            $expiry = trim((string)($item['expiry_text'] ?? ''));
-
-            if ($name === '') {
-                $this->validationError(['items' => 'รายการที่ ' . ($index + 1) . ': ต้องมีชื่ออุปกรณ์']);
-            }
-            if ($standard === '') {
-                $this->validationError(['items' => 'รายการที่ ' . ($index + 1) . ': ต้องมีจำนวนมาตรฐาน']);
-            }
-            if (mb_strlen($name) > 255 || mb_strlen($standard) > 100 || mb_strlen($expiry) > 100) {
-                $this->validationError(['items' => 'รายการที่ ' . ($index + 1) . ': ข้อความยาวเกินกำหนด']);
-            }
-
-            $rows[] = [
-                generate_id(),
-                $vehicleId,
-                $name,
-                $standard,
-                $expiry,
-                !empty($item['is_battery']) ? 1 : 0,
-                1,
-                // target/unit สกัดจาก standard ใหม่ always — หน้า "รอเติม" คำนวณจาก
-                // target_qty ถ้าคัดลอกแล้วไม่ได้ค่านี้ คำขอเติมของรายการใหม่จะไม่มีตัวเลข
-                VehicleService::deriveTarget($standard)['qty'],
-                VehicleService::deriveTarget($standard)['unit'],
-            ];
-        }
-
-        $db = Database::getConnection();
-        $db->beginTransaction();
-        try {
-            $table = (new Item())->getTable();
-            $placeholders = implode(', ', array_fill(0, count($rows), '(?, ?, ?, ?, ?, ?, ?, ?, ?)'));
-            $stmt = $db->prepare(
-                "INSERT INTO {$table}
-                 (id, car_id, name, standard, expiry_text, is_battery, active, target_qty, unit)
-                 VALUES {$placeholders}"
-            );
-            $stmt->execute(array_merge(...$rows));
-            $db->commit();
-        } catch (\Throwable $e) {
-            $db->rollBack();
-            $this->error('คัดลอกไม่สำเร็จ: ' . $e->getMessage());
-        }
-
-        $this->success(['created' => count($rows)], 201);
+        $result = $this->vehicleService->copyItemsToVehicle(
+            $vehicleId,
+            is_array($items) ? $items : [],
+            $this->actor()
+        );
+        $this->success($result, 201);
     }
 
     /** ผู้ใช้งานปัจจุบันสำหรับอ้างอิงในบันทึก (payload ที่ส่งเข้า service) */

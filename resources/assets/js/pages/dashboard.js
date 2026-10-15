@@ -143,6 +143,8 @@ class DashboardPage {
       const draft = drafts[vehicle.id];
       const expiring = expiringByVehicle[vehicle.id] || [];
       const isToday = last && new Date(last.completed_at).toDateString() === new Date().toDateString();
+      // รถ "งดใช้งาน" ยังแสดงในภาพรวมพร้อมประวัติ แต่เริ่มรอบตรวจใหม่ไม่ได้ (เซิร์ฟเวอร์ยืนยันที่ startInspection)
+      const disabled = vehicle.status === 'disabled';
       
       let alertClass = '';
       if (draft || restockStats.my_requests > 0 || expiring.length > 0) {
@@ -156,6 +158,7 @@ class DashboardPage {
             <span class="chip ${draft ? 'chip-warn' : isToday ? 'chip-ok' : 'chip-off'}">
               ${draft ? 'มีร่างค้าง' : isToday ? 'ตรวจแล้ววันนี้' : 'ยังไม่ตรวจวันนี้'}
             </span>
+            ${disabled ? '<span class="chip chip-off">งดใช้งาน</span>' : ''}
           </div>
           <p class="dash-last">
             ${last 
@@ -172,7 +175,9 @@ class DashboardPage {
           ` : ''}
           ${draft ? `<p class="dash-last">ร่างนี้ทำต่อได้เฉพาะผู้ตรวจและเวรเดิม</p>` : ''}
           <div class="rs-actions">
-            <button type="button" class="act-btn ok" onclick="dashboardPage.startInspection('${vehicle.id}')">ตรวจคันนี้</button>
+            ${disabled
+              ? '<span class="dash-disabled-note">งดใช้งาน — เปิดกลับที่แท็บ "ทะเบียนรถ/อุปกรณ์" จึงจะตรวจได้</span>'
+              : `<button type="button" class="act-btn ok" onclick="dashboardPage.startInspection('${vehicle.id}')">ตรวจคันนี้</button>`}
             <button type="button" class="act-btn gray" onclick="dashboardPage.viewRestock('${vehicle.id}')">ดูการเติม</button>
           </div>
         </article>
@@ -216,6 +221,7 @@ class DashboardPage {
         ${vehicles.map(vehicle => {
           const last = lastInspections[vehicle.id];
           const isToday = last && new Date(last.completed_at).toDateString() === new Date().toDateString();
+          const disabled = vehicle.status === 'disabled';
           
           return `
             <article class="dash-car${isToday ? '' : ''}">
@@ -224,6 +230,7 @@ class DashboardPage {
                 <span class="chip ${isToday ? 'chip-ok' : 'chip-off'}">
                   ${isToday ? 'ตรวจแล้ววันนี้' : 'ยังไม่ตรวจวันนี้'}
                 </span>
+                ${disabled ? '<span class="chip chip-off">งดใช้งาน</span>' : ''}
               </div>
               <p class="dash-last">
                 ${last 
@@ -232,7 +239,9 @@ class DashboardPage {
                 }
               </p>
               <div class="rs-actions">
-                <button type="button" class="act-btn ok" onclick="dashboardPage.startInspection('${vehicle.id}')">ตรวจคันนี้</button>
+                ${disabled
+                  ? '<span class="dash-disabled-note">งดใช้งาน — เปิดกลับที่แท็บ "ทะเบียนรถ/อุปกรณ์" จึงจะตรวจได้</span>'
+                  : `<button type="button" class="act-btn ok" onclick="dashboardPage.startInspection('${vehicle.id}')">ตรวจคันนี้</button>`}
                 <button type="button" class="act-btn gray" onclick="dashboardPage.viewRestock('${vehicle.id}')">ดูการเติม</button>
               </div>
             </article>

@@ -23,3 +23,109 @@
 #nurseSearch {
   margin: 0;
 }
+
+/* ---------- ป้ายวอร์ด + ตัวกรอง ---------- */
+
+.nurse-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ward-chip {
+  white-space: nowrap;
+}
+
+#nurseDeptFilter {
+  width: auto;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+/* ---------- ทะเบียนวอร์ด (modal จัดการวอร์ด) ---------- */
+
+.ward-list {
+  display: grid;
+  gap: 8px;
+  max-height: 55vh;
+  overflow: auto;
+}
+
+.ward-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.ward-row.is-off {
+  background: #f8fafc;
+}
+
+.ward-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ward-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.ward-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ward-actions .small-btn {
+  white-space: nowrap;
+}
+
+.small-btn.red {
+  background: var(--bad-soft);
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.small-btn.red:hover {
+  background: #fee2e2;
+}
+
+.ward-active-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.ward-active-toggle input {
+  width: auto;
+  margin: 2px 0 0;
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .ward-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ward-actions .small-btn {
+    flex: 1;
+  }
+}

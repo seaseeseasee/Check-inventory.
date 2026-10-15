@@ -8,6 +8,7 @@ use App\Services\RestockService;
 use App\Services\AuthService;
 use App\Services\StockService;
 use App\Services\VehicleService;
+use App\Services\DepartmentService;
 use App\Config\Database;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -24,6 +25,7 @@ class AdminController extends Controller
     private AuthService $authService;
     private StockService $stockService;
     private VehicleService $vehicleService;
+    private DepartmentService $departmentService;
     private User $userModel;
     private Vehicle $vehicleModel;
     private Nurse $nurseModel;
@@ -37,6 +39,7 @@ class AdminController extends Controller
         $this->authService = new AuthService();
         $this->stockService = new StockService();
         $this->vehicleService = new VehicleService();
+        $this->departmentService = new DepartmentService();
         $this->userModel = new User();
         $this->vehicleModel = new Vehicle();
         $this->nurseModel = new Nurse();
@@ -273,7 +276,6 @@ class AdminController extends Controller
         $validator = new Validator($input, [
             'id' => 'required|string|max:100',
             'name' => 'required|string|max:255',
-            'department' => 'required|string|max:255',
             'phone' => 'string|max:100',
             'start_text' => 'string|max:100',
             'end_text' => 'string|max:100',
@@ -293,7 +295,6 @@ class AdminController extends Controller
         $data = [
             'id' => $input['id'],
             'name' => $input['name'],
-            'department' => $input['department'],
             'phone' => $input['phone'] ?? '',
             'start_text' => $input['start_text'] ?? '',
             'end_text' => $input['end_text'] ?? '',
@@ -301,7 +302,22 @@ class AdminController extends Controller
             'active' => $input['active'] ?? true,
         ];
 
-        $this->nurseModel->create($data);
+        // วอร์ดมาจากทะเบียน master (department_id หรือชื่อเดิมแบบ text) — ห้ามเชื่อ text จาก client
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $department = $this->departmentService->resolveForNurse($input);
+            $data['department'] = $department['name'];
+            $data['department_id'] = $department['id'];
+            $this->nurseModel->create($data);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+
         $this->success(['id' => $data['id']], 201);
     }
 
@@ -321,7 +337,6 @@ class AdminController extends Controller
 
         $validator = new Validator($input, [
             'name' => 'required|string|max:255',
-            'department' => 'required|string|max:255',
             'phone' => 'string|max:100',
             'start_text' => 'string|max:100',
             'end_text' => 'string|max:100',
@@ -335,7 +350,6 @@ class AdminController extends Controller
 
         $data = [
             'name' => $input['name'],
-            'department' => $input['department'],
             'phone' => $input['phone'] ?? '',
             'start_text' => $input['start_text'] ?? '',
             'end_text' => $input['end_text'] ?? '',
@@ -343,7 +357,21 @@ class AdminController extends Controller
             'active' => $input['active'] ?? $existing['active'],
         ];
 
-        $this->nurseModel->update($id, $data);
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $department = $this->departmentService->resolveForNurse($input, $existing['department_id'] ?? null);
+            $data['department'] = $department['name'];
+            $data['department_id'] = $department['id'];
+            $this->nurseModel->update($id, $data);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+
         $this->success(['id' => $id]);
     }
 

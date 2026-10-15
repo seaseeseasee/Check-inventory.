@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Services\InspectionService;
+use App\Services\VehicleService;
 use App\Helpers\Response;
 use App\Helpers\Validator;
 use App\Middleware\RoleMiddleware;
@@ -69,6 +70,7 @@ class InspectionController extends Controller
         if (!$vehicle) {
             $this->notFound('Vehicle not found');
         }
+        VehicleService::assertInspectable($vehicle);
 
         $nurse = $this->inspectionService->getAllNurses();
         $nurse = array_values(array_filter($nurse, fn($n) => $n['id'] === $input['nurse_id']));
