@@ -7,7 +7,7 @@ class Nurse extends Model
 {
     protected string $table = 'refer_nurses';
     protected string $primaryKey = 'id';
-    protected array $fillable = ['id', 'name', 'department', 'phone', 'active', 'start_text', 'end_text', 'note'];
+    protected array $fillable = ['id', 'name', 'department', 'department_id', 'phone', 'active', 'start_text', 'end_text', 'note'];
     protected array $casts = [
         'active' => 'boolean',
     ];

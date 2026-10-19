@@ -61,6 +61,45 @@ class StockService
         return $this->transactionModel->getRecent($limit, $stockItemId);
     }
 
+    /**
+     * ยอดคงเหลือ "คลังกลาง" ตามชื่ออุปกรณ์ (read-only, ไม่มี lock)
+     * ใช้แสดงในหน้าตรวจรถว่าของชื่อนี้ในคลังมีเท่าไร / ขั้นต่ำเท่าไร
+     *
+     * @param string[]|null $names จำกัดเฉพาะชื่อที่ต้องการ (null = ทั้งคลัง)
+     * @return array<string,array{name:string,qty:float,min:float,unit:string}>
+     */
+    public function getQtyByNameMap(?array $names = null): array
+    {
+        if ($names !== null) {
+            $names = array_values(array_unique(array_filter(array_map('trim', $names), fn($n) => $n !== '')));
+            if (empty($names)) {
+                return [];
+            }
+        }
+
+        $sql = "SELECT name, current_qty, min_qty, unit FROM " . $this->stockItemModel->getTable()
+             . " WHERE active = 1";
+        $params = [];
+        if ($names !== null) {
+            $sql .= " AND name IN (" . implode(',', array_fill(0, count($names), '?')) . ")";
+            $params = $names;
+        }
+
+        $stmt = $this->stockItemModel->query($sql, $params);
+        $map = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $map[$row['name']] = [
+                'name' => $row['name'],
+                'qty' => (float)$row['current_qty'],
+                'min' => (float)$row['min_qty'],
+                'unit' => (string)$row['unit'],
+                // 'unset' = ยอด 0 และไม่มีขั้นต่ำ → ยังไม่เคยตั้งยอดคลัง ห้าม UI ทำให้ดูเหมือน "ของหมด"
+                'status' => $this->computeStatus($row),
+            ];
+        }
+        return $map;
+    }
+
     public function getItemWithStatus(string $id): ?array
     {
         $item = $this->stockItemModel->find($id);
@@ -98,7 +137,10 @@ class StockService
         }
 
         $db = Database::getConnection();
-        $db->beginTransaction();
+        $ownsTx = !$db->inTransaction();
+        if ($ownsTx) {
+            $db->beginTransaction();
+        }
         try {
             $row = $this->lockItem($id);
             if (!$row) {
@@ -129,9 +171,13 @@ class StockService
                 'at' => $now,
             ]);
 
-            $db->commit();
+            if ($ownsTx) {
+                $db->commit();
+            }
         } catch (\Throwable $e) {
-            $db->rollBack();
+            if ($ownsTx) {
+                $db->rollBack();
+            }
             throw $e;
         }
 
@@ -154,7 +200,10 @@ class StockService
         }
 
         $db = Database::getConnection();
-        $db->beginTransaction();
+        $ownsTx = !$db->inTransaction();
+        if ($ownsTx) {
+            $db->beginTransaction();
+        }
         try {
             $row = $this->lockItem($id);
             if (!$row) {
@@ -204,9 +253,13 @@ class StockService
                 'at' => $now,
             ]);
 
-            $db->commit();
+            if ($ownsTx) {
+                $db->commit();
+            }
         } catch (\Throwable $e) {
-            $db->rollBack();
+            if ($ownsTx) {
+                $db->rollBack();
+            }
             throw $e;
         }
 
@@ -235,7 +288,10 @@ class StockService
         }
 
         $db = Database::getConnection();
-        $db->beginTransaction();
+        $ownsTx = !$db->inTransaction();
+        if ($ownsTx) {
+            $db->beginTransaction();
+        }
         try {
             $row = $this->lockItemByName($name);
             $now = (new \DateTime())->format('Y-m-d\TH:i:s.u\Z');
@@ -274,7 +330,9 @@ class StockService
                     'at' => $now,
                 ]);
 
-                $db->commit();
+                if ($ownsTx) {
+                    $db->commit();
+                }
                 return $this->getItemWithStatus($id);
             }
 
@@ -285,7 +343,9 @@ class StockService
             $newMin = $minQty !== null ? round($minQty, 2) : $oldMin;
 
             if ($newCurrent === $oldCurrent && $newMin === $oldMin) {
-                $db->commit();
+                if ($ownsTx) {
+                    $db->commit();
+                }
                 return $this->getItemWithStatus($id);
             }
 
@@ -321,61 +381,69 @@ class StockService
                 'at' => $now,
             ]);
 
-            $db->commit();
+            if ($ownsTx) {
+                $db->commit();
+            }
             return $this->getItemWithStatus($id);
         } catch (\Throwable $e) {
-            $db->rollBack();
+            if ($ownsTx) {
+                $db->rollBack();
+            }
             throw $e;
         }
     }
 
     /**
-     * ตัดสต็อกอัตโนมัติเมื่อบันทึกผลการตรวจรถ (เฉพาะรายการสถานะ "ใช้ไป")
-     * จำนวนที่ตัด = max(0, จำนวนมาตรฐาน − จำนวนที่เหลือจริง) เท่ากับยอดที่ขอเติม
-     * ฟังก์ชันนี้ไม่เปิด transaction เอง เพราะถูกเรียกภายใน transaction ของ saveInspection
+     * ตัดคลังกลาง "เมื่อเติมของขึ้นรถจริง" (ISSUE)
      *
-     * @return array รายการแจ้งเตือนสต็อกต่ำกว่าขั้นต่ำหลังตัดแล้ว
+     * หลักการ (ตาม Business Logic ที่อนุมัติ): ของถือว่าออกจากคลังก็ต่อเมื่อถูกยกขึ้นรถจริง
+     * เท่านั้น จึงจะสอดคล้องกับ "ยอดคงเหลือบนรถ = ยอดก่อนเติม + ยอดที่เติมจริง"
+     * และทำให้ยอดคลังกับยอดรถ reconciled กันได้จริง (รอบตรวจรถลดยอดเฉพาะบนรถ ไม่ได้หยิบของจากคลัง)
+     *
+     * ถ้าของในคลังไม่พอจะ throw ทันที เพื่อให้ transaction ของผู้เรียก rollback ทั้งชุด
+     * — กันสถานะ "รถได้ของ แต่คลังไม่ถูกตัด" หรือตัดบางส่วนแล้วค้างกลางคัน
+     * ยกเว้นกรณี "คลังยังไม่เปิดสมุดบัญชี" (ยอด 0 และไม่มีประวัติ ledger เลย) ซึ่งจะไม่ throw
+     * แต่คืนกลับมาใน untracked เพื่อไม่ให้ระบบงานจริงค้างในช่วงที่ยังไม่เคยตรวจนับคลัง
+     *
+     * ฟังก์ชันนี้ไม่เปิด transaction เอง และล็อกแถวคลังตามลำดับชื่อ (ksort)
+     * เพื่อป้องกัน deadlock เมื่อหลายรถเติมพร้อมกัน
+     *
+     * @param array $lines   แต่ละรายการ ['name' => string, 'qty' => float]
+     * @param array $context ['car_id','car_name','check_id','request_no']
+     * @return array{issued: array, alerts: array, untracked: array}
      */
-    public function deductForInspection(array $inspectionData, ?string $userId = null, string $userName = ''): array
+    public function issueForRestockFill(array $lines, array $context, ?string $userId = null, string $userName = ''): array
     {
-        // รวมจำนวนที่ต้องตัดต่อชื่ออุปกรณ์ (เฉพาะ "ใช้ไป")
-        $toDeduct = [];
-        foreach ($inspectionData['results'] ?? [] as $item) {
-            if (($item['status'] ?? '') !== 'ใช้ไป') {
+        $toIssue = [];
+        foreach ($lines as $line) {
+            $name = trim((string)($line['name'] ?? ''));
+            $qty = round((float)($line['qty'] ?? 0), 2);
+            if ($name === '' || $qty <= 0) {
                 continue;
             }
-            $name = trim((string)($item['name'] ?? ''));
-            if ($name === '') {
-                continue;
-            }
-            $standard = $this->parseLeadingQty((string)($item['standard'] ?? ''));
-            $actual = $this->parseLeadingQty((string)($item['missing'] ?? ''));
-            $qty = round(max(0, $standard - $actual), 2);
-            if ($qty <= 0) {
-                continue;
-            }
-            if (!isset($toDeduct[$name])) {
-                $toDeduct[$name] = 0.0;
-            }
-            $toDeduct[$name] = round($toDeduct[$name] + $qty, 2);
+            $toIssue[$name] = round(($toIssue[$name] ?? 0) + $qty, 2);
         }
 
-        if (empty($toDeduct)) {
-            return [];
+        if (empty($toIssue)) {
+            return ['issued' => [], 'alerts' => [], 'untracked' => []];
         }
+        ksort($toIssue, SORT_STRING);
 
-        $actorName = $userName !== '' ? $userName : (string)($inspectionData['nurse_name'] ?? '');
-        $carId = $inspectionData['car_id'] ?? null;
-        $carName = (string)($inspectionData['car_name'] ?? '');
-        $checkId = $inspectionData['id'] ?? null;
+        $carId = $context['car_id'] ?? null;
+        $carName = (string)($context['car_name'] ?? '');
+        $checkId = $context['check_id'] ?? null;
+        $requestNo = (string)($context['request_no'] ?? '');
 
+        $issued = [];
         $alerts = [];
-        foreach ($toDeduct as $name => $qty) {
-            // หารายการคลังตามชื่อ — ถ้ายังไม่มี ให้สร้างรายการใหม่ยอด 0/0 เพื่อรองรับการตัด
+        $untracked = [];
+
+        foreach ($toIssue as $name => $qty) {
             $row = $this->lockItemByName($name);
             $now = (new \DateTime())->format('Y-m-d\TH:i:s.u\Z');
 
             if (!$row) {
+                // ยังไม่มีรายการคลังชื่อนี้ → สร้างยอด 0/0 ไว้รองรับการตัดจ่าย
                 $id = 'stk-' . generate_id();
                 $this->stockItemModel->create([
                     'id' => $id,
@@ -393,50 +461,90 @@ class StockService
             $id = $row['id'];
             $current = (float)$row['current_qty'];
             $min = (float)$row['min_qty'];
-            $balance = round(max(0, $current - $qty), 2);
-            $deducted = round($current - $balance, 2);
+
+            if ($current < $qty) {
+                // "คลังยังไม่เปิดสมุดบัญชี" = ไม่เคยมีการรับเข้า/ปรับยอด/จ่ายออกใน ledger เลย และยอดเป็น 0
+                // กรณีนี้ปล่อยให้เติมขึ้นรถได้ แต่ไม่สร้างแถว ISSUE ปลอม แล้วแจ้งให้ผู้ดูแลไปตรวจนับคลัง
+                // เมื่อผู้ดูแลรับของเข้าคลังครั้งแรก (มี ledger row) การตัดจ่ายจะกลับมาบังคับเข้มทันที
+                if ($current <= 0 && !$this->hasLedgerRows($id)) {
+                    $untracked[] = [
+                        'stock_item_id' => $id,
+                        'name' => $name,
+                        'qty' => $qty,
+                        'status' => 'untracked',
+                    ];
+                    continue;
+                }
+
+                throw new \RuntimeException(sprintf(
+                    'คลังกลางมี "%s" เหลือ %s ไม่พอเติมขึ้นรถ %s — กรุณารับของเข้าคลังหรือลดจำนวนที่เติมก่อนบันทึก',
+                    $name,
+                    $this->fmtQty($current),
+                    $this->fmtQty($qty)
+                ));
+            }
+
+            $balance = round($current - $qty, 2);
 
             $this->stockItemModel->update($id, [
                 'current_qty' => $balance,
                 'updated_at' => $now,
             ]);
 
-            if ($deducted > 0) {
-                $this->transactionModel->create([
-                    'id' => generate_id(),
-                    'stock_item_id' => $id,
-                    'name' => $name,
-                    'type' => self::TYPE_ISSUE,
-                    'qty' => -$deducted,
-                    'balance_after' => $balance,
-                    'car_id' => $carId,
-                    'car_name' => $carName,
-                    'check_id' => $checkId,
-                    'by_user_id' => $userId,
-                    'by_name' => $actorName,
-                    'note' => $this->truncateNote('ตัดจ่ายอัตโนมัติจากการตรวจรถ: ใช้ไป ' . $this->fmtQty($qty)
-                        . ($carName !== '' ? ' • รถ ' . $carName : '')),
-                    'at' => $now,
-                ]);
-            }
+            $this->transactionModel->create([
+                'id' => generate_id(),
+                'stock_item_id' => $id,
+                'name' => $name,
+                'type' => self::TYPE_ISSUE,
+                'qty' => -$qty,
+                'balance_after' => $balance,
+                'car_id' => $carId,
+                'car_name' => $carName,
+                'check_id' => $checkId,
+                'by_user_id' => $userId,
+                'by_name' => $userName,
+                'note' => $this->truncateNote('จ่ายจากคลังเพื่อเติมขึ้นรถ ' . $this->fmtQty($qty)
+                    . ($carName !== '' ? ' • รถ ' . $carName : '')
+                    . ($requestNo !== '' ? ' • คำขอ ' . $requestNo : '')),
+                'at' => $now,
+            ]);
 
-            // แจ้งเตือนเมื่อคงเหลือต่ำกว่าขั้นต่ำหลังตัด (รวมกรณีตัดไม่ได้เพราะคลังหมด)
+            $issued[] = [
+                'stock_item_id' => $id,
+                'name' => $name,
+                'qty' => $qty,
+                'balance_after' => $balance,
+            ];
+
             if ($min > 0 && $balance < $min) {
                 $alerts[] = [
                     'stock_item_id' => $id,
                     'name' => $name,
                     'balance' => $balance,
                     'min' => $min,
-                    'deducted' => $deducted,
+                    'deducted' => $qty,
                     'status' => $balance <= 0 ? 'out' : 'low',
                 ];
             }
         }
 
-        return $alerts;
+        return ['issued' => $issued, 'alerts' => $alerts, 'untracked' => $untracked];
     }
 
     // ==================== Helpers ====================
+
+    /**
+     * มีประวัติการเคลื่อนไหวใน ledger ของรายการคลังนี้หรือไม่
+     * ใช้แยก "คลังยอด 0 เพราะจ่ายหมดจริง" (ต้องห้ามเติม) ออกจาก "คลังที่ยังไม่เคยตรวจนับ/เปิดสมุด" (เตือนได้)
+     */
+    private function hasLedgerRows(string $stockItemId): bool
+    {
+        $stmt = $this->transactionModel->query(
+            "SELECT 1 FROM " . $this->transactionModel->getTable() . " WHERE stock_item_id = ? LIMIT 1",
+            [$stockItemId]
+        );
+        return (bool)$stmt->fetch();
+    }
 
     private function lockItem(string $id): ?array
     {
@@ -454,14 +562,6 @@ class StockService
             [$name]
         )->fetch();
         return $row ?: null;
-    }
-
-    private function parseLeadingQty(string $value): float
-    {
-        if (preg_match('/^(\d+(?:\.\d+)?)/', $value, $m)) {
-            return (float)$m[1];
-        }
-        return 0.0;
     }
 
     private function fmtQty(float $qty): string

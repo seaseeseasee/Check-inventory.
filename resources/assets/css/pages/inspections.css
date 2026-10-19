@@ -52,3 +52,111 @@
   color: #fff;
   border-color: var(--teal-700);
 }
+/* ============================================
+   ยอดสต็อกบนหน้าตรวจรถ (ข้อ 1) + ช่องกรอก "คงเหลือจริง"
+   ============================================ */
+.stock-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 2px;
+}
+
+.stock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.stock-chip.onhand { background: var(--teal-100); border-color: #99f6e4; color: var(--teal-700); }
+.stock-chip.unknown { background: var(--warn-soft); border-color: #fcd34d; color: #92400e; }
+.stock-chip.target { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.stock-chip.wh.low { background: var(--bad-soft); border-color: #fca5a5; color: #991b1b; }
+
+.stock-asof {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.remaining-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.remaining-row {
+  margin: 10px 0 2px;
+  padding: 10px 12px;
+  border: 1px dashed #99f6e4;
+  border-radius: 12px;
+  background: #f0fdfa;
+}
+
+.remaining-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--teal-700);
+}
+
+/* layout.css ตั้ง style ให้ input ทุกตัว (0,1,1) → ใช้ class สองชั้น (0,2,0) เพื่อให้ชนะ */
+.remaining-row .remaining-input {
+  width: 140px;
+  min-height: 0;
+  padding: 10px 12px;
+  border: 1.5px solid #0d9488;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: right;
+  color: #0f172a;
+}
+
+.remaining-row .remaining-help {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.remaining-row .remaining-calc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.remaining-calc .sep { color: var(--line); }
+.remaining-calc .warn-text { color: #b45309; }
+
+.remaining-static {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--teal-700);
+}
+
+.save-bar .save-hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.save-bar button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}

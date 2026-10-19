@@ -7,6 +7,8 @@ use App\Services\InspectionService;
 use App\Services\RestockService;
 use App\Services\AuthService;
 use App\Services\StockService;
+use App\Services\VehicleService;
+use App\Services\DepartmentService;
 use App\Config\Database;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -22,6 +24,8 @@ class AdminController extends Controller
     private RestockService $restockService;
     private AuthService $authService;
     private StockService $stockService;
+    private VehicleService $vehicleService;
+    private DepartmentService $departmentService;
     private User $userModel;
     private Vehicle $vehicleModel;
     private Nurse $nurseModel;
@@ -34,6 +38,8 @@ class AdminController extends Controller
         $this->restockService = new RestockService();
         $this->authService = new AuthService();
         $this->stockService = new StockService();
+        $this->vehicleService = new VehicleService();
+        $this->departmentService = new DepartmentService();
         $this->userModel = new User();
         $this->vehicleModel = new Vehicle();
         $this->nurseModel = new Nurse();
@@ -187,199 +193,64 @@ class AdminController extends Controller
     }
 
     /**
-     * Get all vehicles with items (Admin)
+     * รถทุกคัน + ตัวเลขประกอบคำถามของหน้าจอ (จำนวนอุปกรณ์ / ประวัติตรวจ / งานเติมค้าง)
+     * ตรรกะทั้งหมดอยู่ที่ VehicleService ซึ่งเป็นตัวเดียวกับที่ /api/vehicles ใช้
+     * — แต่เดิมสอง route นี้เขียนซ้ำกันคนละแบบจึงพฤติกรรมไม่เท่ากัน
      */
     public function getVehicles(): void
     {
         $this->roleMiddleware->requireAdmin();
-        
-        $vehicles = $this->vehicleModel->all();
-        $this->success($vehicles);
+        $this->success($this->vehicleService->listVehicles());
     }
 
     /**
-     * Get vehicle with items (Admin)
+     * รถ 1 คันพร้อมอุปกรณ์ "ทุกแถว" (รวมที่พักใช้งาน) และผลประเมินว่าลบได้หรือไม่ได้
      */
     public function getVehicle(string $id): void
     {
         $this->roleMiddleware->requireAdmin();
-        
-        $vehicle = $this->vehicleModel->find($id);
-        if (!$vehicle) {
-            $this->notFound('Vehicle not found');
-        }
-
-        $items = $this->itemModel->getByVehicle($id);
-        $vehicle['items'] = $items;
-        $this->success($vehicle);
+        $this->success($this->vehicleService->getVehicleDetail($id));
     }
 
     /**
      * Create vehicle (Admin)
-     * Optionally copies the active equipment list from an existing vehicle
-     * in the same transaction — vehicle and items are written together or not at all.
+     * transaction เดียว: แถวรถ + ชุดอุปกรณ์มาตรฐาน (แม่แบบ/คัดลอกจากคันอื่น/ไม่สร้าง)
      */
     public function createVehicle(): void
     {
         $this->roleMiddleware->requireAdmin();
-        
-        $input = $this->getInput();
-
-        // Validator::string rejects missing keys, so optional fields must exist as ''.
-        $input += [
-            'name' => '',
-            'brand_model' => '',
-            'status' => '',
-            'odometer_initial' => '',
-            'notes' => '',
-            'copy_source_vehicle_id' => '',
-        ];
-        
-        $validator = new Validator($input, [
-            'plate' => 'required|string|max:50',
-            'name' => 'string|max:255',
-            'brand_model' => 'string|max:255',
-            'status' => 'string',
-            'notes' => 'string|max:500',
-            'copy_source_vehicle_id' => 'string|max:100',
-        ]);
-
-        if (!$validator->validate()) {
-            $this->validationError($validator->errors());
-        }
-
-        $plate = trim((string)$input['plate']);
-        if ($plate === '') {
-            $this->validationError(['plate' => 'กรุณากรอกทะเบียนรถ']);
-        }
-
-        $status = trim((string)$input['status']);
-        if ($status === '') {
-            $status = 'available';
-        }
-        if (!in_array($status, ['available', 'maintenance', 'disabled'], true)) {
-            $this->validationError(['status' => 'สถานะรถไม่ถูกต้อง']);
-        }
-
-        $odometerRaw = $input['odometer_initial'];
-        $odometer = null;
-        if ($odometerRaw !== '' && $odometerRaw !== null) {
-            if (!is_numeric($odometerRaw) || (int)$odometerRaw != $odometerRaw || (int)$odometerRaw < 0) {
-                $this->validationError(['odometer_initial' => 'เลขไมล์ต้องเป็นจำนวนเต็มไม่ติดลบ']);
-            }
-            $odometer = (int)$odometerRaw;
-        }
-
-        $duplicate = $this->vehicleModel->firstWhere('plate', $plate);
-        if ($duplicate) {
-            $this->error('ทะเบียนรถนี้มีอยู่ในระบบแล้ว: ' . ($duplicate['name'] ?? $plate), 409);
-        }
-
-        do {
-            $id = 'car-' . substr(generate_id(), 0, 12);
-        } while ($this->vehicleModel->find($id));
-
-        // Dropdowns show `name` only, so keep the plate visible there —
-        // matches the "รถ Refer (3ชฏ3250)" convention of existing rows.
-        $name = trim((string)$input['name']);
-        if ($name === '') {
-            $name = $plate;
-        } elseif (!str_contains($name, $plate)) {
-            $name .= ' (' . $plate . ')';
-        }
-
-        $copySource = trim((string)$input['copy_source_vehicle_id']);
-        $sourceItems = [];
-        if ($copySource !== '') {
-            if (!$this->vehicleModel->find($copySource)) {
-                $this->validationError(['copy_source_vehicle_id' => 'ไม่พบรถต้นทางที่เลือก']);
-            }
-            $sourceItems = $this->itemModel->getActiveByVehicle($copySource);
-            if (count($sourceItems) > 300) {
-                $this->validationError(['copy_source_vehicle_id' => 'รถต้นทางมีอุปกรณ์เกิน 300 รายการ — คัดลอกได้ครั้งละไม่เกิน 300']);
-            }
-        }
-
-        $copied = 0;
-        $db = Database::getConnection();
-        $db->beginTransaction();
-        try {
-            $this->vehicleModel->create([
-                'id' => $id,
-                'name' => $name,
-                'plate' => $plate,
-                'brand_model' => trim((string)$input['brand_model']) ?: null,
-                'status' => $status,
-                'odometer_initial' => $odometer,
-                'notes' => trim((string)$input['notes']) ?: null,
-            ]);
-
-            if ($sourceItems) {
-                $rows = array_map(fn(array $item) => [
-                    generate_id(),
-                    $id,
-                    $item['name'],
-                    $item['standard'],
-                    $item['expiry_text'] ?? '',
-                    !empty($item['is_battery']) ? 1 : 0,
-                    1,
-                ], $sourceItems);
-                $table = $this->itemModel->getTable();
-                $placeholders = implode(', ', array_fill(0, count($rows), '(?, ?, ?, ?, ?, ?, ?)'));
-                $stmt = $db->prepare("INSERT INTO {$table} (id, car_id, name, standard, expiry_text, is_battery, active) VALUES {$placeholders}");
-                $stmt->execute(array_merge(...$rows));
-                $copied = count($rows);
-            }
-
-            $db->commit();
-        } catch (\Throwable $e) {
-            $db->rollBack();
-            $this->error('เพิ่มรถไม่สำเร็จ: ' . $e->getMessage());
-        }
-
-        $this->success(['id' => $id, 'name' => $name, 'copied_items' => $copied], 201);
+        $vehicle = $this->vehicleService->createVehicle($this->getInput(), $this->roleMiddleware->getCurrentUser());
+        $this->success($vehicle, 201);
     }
 
     /**
-     * Update vehicle (Admin)
+     * Update vehicle (Admin) — name / plate / brand_model / status / odometer_initial / notes
+     * ตรวจทะเบียนชนคันอื่น + ล๊อคแถว + ครอบ transaction
      */
     public function updateVehicle(string $id): void
     {
         $this->roleMiddleware->requireAdmin();
-        
-        $input = $this->getInput();
-        
-        $existing = $this->vehicleModel->find($id);
-        if (!$existing) {
-            $this->notFound('Vehicle not found');
-        }
-
-        $validator = new Validator($input, [
-            'name' => 'required|string|max:255',
-        ]);
-
-        if (!$validator->validate()) {
-            $this->validationError($validator->errors());
-        }
-
-        $this->vehicleModel->update($id, ['name' => $input['name']]);
-        $this->success(['id' => $id]);
+        $vehicle = $this->vehicleService->updateVehicle($id, $this->getInput(), $this->roleMiddleware->getCurrentUser());
+        $this->success($vehicle);
     }
 
     /**
      * Delete vehicle (Admin)
+     *   body { mode: 'auto' }     → ลบถาวรได้เฉพาะรถที่ไม่มีประวัติผูก (FK ของตารางประวัติเป็น RESTRICT)
+     *   body { mode: 'disable' }  → ตั้งสถานะ "งดใช้งาน" แทน โดยเก็บอุปกรณ์/ประวัติไว้ครบ
+     * ถ้ามีประวัติผูก service จะโยน 409 พร้อมจำนวนที่ผูกให้ UI เสนอทางเลือกกับผู้ใช้งาน
      */
     public function deleteVehicle(string $id): void
     {
         $this->roleMiddleware->requireAdmin();
-        
-        $existing = $this->vehicleModel->find($id);
-        if (!$existing) {
-            $this->notFound('Vehicle not found');
+
+        $input = $this->getInput();
+        $mode = strtolower(trim((string)($input['mode'] ?? 'auto')));
+        if (!in_array($mode, ['auto', 'disable', 'force'], true)) {
+            $mode = 'auto';
         }
 
-        $this->vehicleModel->delete($id);
-        $this->success(['id' => $id]);
+        $this->success($this->vehicleService->deleteVehicle($id, $this->roleMiddleware->getCurrentUser(), $mode));
     }
 
     /**
@@ -405,7 +276,6 @@ class AdminController extends Controller
         $validator = new Validator($input, [
             'id' => 'required|string|max:100',
             'name' => 'required|string|max:255',
-            'department' => 'required|string|max:255',
             'phone' => 'string|max:100',
             'start_text' => 'string|max:100',
             'end_text' => 'string|max:100',
@@ -425,7 +295,6 @@ class AdminController extends Controller
         $data = [
             'id' => $input['id'],
             'name' => $input['name'],
-            'department' => $input['department'],
             'phone' => $input['phone'] ?? '',
             'start_text' => $input['start_text'] ?? '',
             'end_text' => $input['end_text'] ?? '',
@@ -433,7 +302,22 @@ class AdminController extends Controller
             'active' => $input['active'] ?? true,
         ];
 
-        $this->nurseModel->create($data);
+        // วอร์ดมาจากทะเบียน master (department_id หรือชื่อเดิมแบบ text) — ห้ามเชื่อ text จาก client
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $department = $this->departmentService->resolveForNurse($input);
+            $data['department'] = $department['name'];
+            $data['department_id'] = $department['id'];
+            $this->nurseModel->create($data);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+
         $this->success(['id' => $data['id']], 201);
     }
 
@@ -453,7 +337,6 @@ class AdminController extends Controller
 
         $validator = new Validator($input, [
             'name' => 'required|string|max:255',
-            'department' => 'required|string|max:255',
             'phone' => 'string|max:100',
             'start_text' => 'string|max:100',
             'end_text' => 'string|max:100',
@@ -467,7 +350,6 @@ class AdminController extends Controller
 
         $data = [
             'name' => $input['name'],
-            'department' => $input['department'],
             'phone' => $input['phone'] ?? '',
             'start_text' => $input['start_text'] ?? '',
             'end_text' => $input['end_text'] ?? '',
@@ -475,7 +357,21 @@ class AdminController extends Controller
             'active' => $input['active'] ?? $existing['active'],
         ];
 
-        $this->nurseModel->update($id, $data);
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $department = $this->departmentService->resolveForNurse($input, $existing['department_id'] ?? null);
+            $data['department'] = $department['name'];
+            $data['department_id'] = $department['id'];
+            $this->nurseModel->update($id, $data);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+
         $this->success(['id' => $id]);
     }
 
@@ -497,145 +393,59 @@ class AdminController extends Controller
 
     /**
      * Get items for a vehicle (Admin)
+     * คืนทุกแถว รวมรายการที่ "พักใช้งาน" ไว้แล้ว เพื่อให้เปิดกลับจากหน้าจอนี้ได้
      */
     public function getVehicleItems(string $vehicleId): void
     {
         $this->roleMiddleware->requireAdmin();
-        
         $vehicle = $this->vehicleModel->find($vehicleId);
         if (!$vehicle) {
             $this->notFound('Vehicle not found');
         }
 
-        $items = $this->itemModel->getByVehicle($vehicleId);
-        $this->success($items);
+        $this->success($this->vehicleService->getItems($vehicleId, true));
     }
 
     /**
      * Add item to vehicle (Admin)
+     *  name / standard / expiry_text / is_battery / onboard_qty (ยอดบนรถ = ตรวจนับ)
+     *  และ current_stock + min_stock สำหรับคลังกลาง — เขียนพร้อมกันใน transaction เดียว
      */
     public function addVehicleItem(string $vehicleId): void
     {
         $this->roleMiddleware->requireAdmin();
-        
-        $input = $this->getInput();
-        
-        $vehicle = $this->vehicleModel->find($vehicleId);
-        if (!$vehicle) {
-            $this->notFound('Vehicle not found');
-        }
-
-        $validator = new Validator($input, [
-            'name' => 'required|string|max:255',
-            'standard' => 'required|string|max:100',
-            'expiry_text' => 'string|max:100',
-            'is_battery' => 'boolean',
-        ]);
-
-        if (!$validator->validate()) {
-            $this->validationError($validator->errors());
-        }
-
-        $itemId = generate_id();
-        $this->itemModel->create([
-            'id' => $itemId,
-            'car_id' => $vehicleId,
-            'name' => $input['name'],
-            'standard' => $input['standard'],
-            'expiry_text' => $input['expiry_text'] ?? '',
-            'is_battery' => $input['is_battery'] ?? false,
-            'active' => true,
-        ]);
-
-        // Optional: ตั้งสต็อกกลางจากฟอร์มเพิ่มอุปกรณ์ (สต็อกปัจจุบัน + ขั้นต่ำ)
-        $stockInfo = null;
-        $currentRaw = $input['current_stock'] ?? null;
-        $minRaw = $input['min_stock'] ?? null;
-        $hasCurrent = $currentRaw !== null && $currentRaw !== '';
-        $hasMin = $minRaw !== null && $minRaw !== '';
-
-        if ($hasCurrent || $hasMin) {
-            if ($hasCurrent && (!is_numeric($currentRaw) || (float)$currentRaw < 0 || (float)$currentRaw > 1000000)) {
-                $this->validationError(['current_stock' => 'สต็อกปัจจุบันต้องเป็นตัวเลข 0 - 1,000,000']);
-            }
-            if ($hasMin && (!is_numeric($minRaw) || (float)$minRaw < 0 || (float)$minRaw > 1000000)) {
-                $this->validationError(['min_stock' => 'จุดเตือนขั้นต่ำต้องเป็นตัวเลข 0 - 1,000,000']);
-            }
-
-            $actor = $this->roleMiddleware->getCurrentUser();
-            $vehicleLabel = trim((string)($vehicle['name'] ?? '') . ' ' . (string)($vehicle['plate'] ?? ''));
-
-            try {
-                $item = $this->stockService->setStockForItemName(
-                    (string)$input['name'],
-                    $hasCurrent ? (float)$currentRaw : null,
-                    $hasMin ? (float)$minRaw : null,
-                    $actor['id'] ?? null,
-                    $actor['full_name'] ?? '',
-                    $vehicleLabel !== '' ? 'รถ ' . $vehicleLabel : ''
-                );
-                if ($item !== null) {
-                    $stockInfo = [
-                        'name' => $item['name'],
-                        'current_qty' => $item['current_qty'],
-                        'min_qty' => $item['min_qty'],
-                        'status' => $item['status'] ?? null,
-                    ];
-                }
-            } catch (\Throwable $e) {
-                // อุปกรณ์ถูกเพิ่มแล้ว — รายงานปัญหาสต็อกเป็นคำเตือนโดยไม่ทำให้คำขอล้มทั้งรายการ
-                $stockInfo = ['error' => $e->getMessage()];
-            }
-        }
-
-        $created = $this->itemModel->find($itemId) ?? [];
-        $created['stock'] = $stockInfo;
-        $this->success($created, 201);
+        $item = $this->vehicleService->addItem($vehicleId, $this->getInput(), $this->roleMiddleware->getCurrentUser());
+        $this->success($item, 201);
     }
 
     /**
      * Update item (Admin)
+     * แก้ standard แล้ว target_qty/unit จะถูกคำนวณใหม่ทันที (หน้ารอเติมใช้ค่านี้คำนวณ "ต้องเติมกี่ชิ้น")
      */
     public function updateItem(string $itemId): void
     {
         $this->roleMiddleware->requireAdmin();
-        
-        $input = $this->getInput();
-        
-        $existing = $this->itemModel->find($itemId);
-        if (!$existing) {
-            $this->notFound('Item not found');
-        }
-
-        $data = [];
-        if (isset($input['name'])) $data['name'] = $input['name'];
-        if (isset($input['standard'])) $data['standard'] = $input['standard'];
-        if (isset($input['expiry_text'])) $data['expiry_text'] = $input['expiry_text'];
-        if (isset($input['is_battery'])) $data['is_battery'] = $input['is_battery'];
-        if (isset($input['active'])) $data['active'] = $input['active'];
-
-        if (empty($data)) {
-            $this->error('No data to update');
-        }
-
-        $this->itemModel->update($itemId, $data);
-        $this->success($this->itemModel->find($itemId));
+        $item = $this->vehicleService->updateItem($itemId, $this->getInput(), $this->roleMiddleware->getCurrentUser());
+        $this->success($item);
     }
 
     /**
-     * Delete/Deactivate item (Admin)
+     * Delete item (Admin)
+     *   body { mode: 'auto' }    → ลบถาวรเมื่อไม่มีแถวใดอ้างถึง มิฉะนั้น "พักใช้งาน" (active=0)
+     *   body { mode: 'disable' } → พักใช้งานอย่างเดียว
+     * ประวัติการตรวจเดิม (refer_check_items) ยังอ่านได้ครบเพราะเก็บชื่อ/จำนวนไว้ในตัวมันเอง
      */
     public function deleteItem(string $itemId): void
     {
         $this->roleMiddleware->requireAdmin();
-        
-        $existing = $this->itemModel->find($itemId);
-        if (!$existing) {
-            $this->notFound('Item not found');
+
+        $input = $this->getInput();
+        $mode = strtolower(trim((string)($input['mode'] ?? 'auto')));
+        if (!in_array($mode, ['auto', 'disable'], true)) {
+            $mode = 'auto';
         }
 
-        $this->itemModel->update($itemId, ['active' => false]);
-        $this->success(['id' => $itemId]);
+        $this->success($this->vehicleService->deleteItem($itemId, $this->roleMiddleware->getCurrentUser(), $mode));
     }
 
     /**

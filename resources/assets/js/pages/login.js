@@ -59,6 +59,8 @@ class LoginPage {
       ];
       this.nurses = [];
     }
+
+    window.vehicleRef.remember(this.vehicles);
   }
 
   renderVehicleSelection() {
@@ -68,12 +70,12 @@ class LoginPage {
     container.innerHTML = this.vehicles.map((vehicle, index) => `
       <button type="button" 
         class="car-symbol" 
-        data-car-id="${vehicle.id}" 
+        data-car-id="${UI.escape(vehicle.id)}" 
         aria-pressed="false" 
-        aria-label="เลือกรถ ${this.getPlate(vehicle.id)}"
-        onclick="loginPage.selectVehicle('${vehicle.id}')">
+        aria-label="เลือกรถ ${UI.escape(vehiclePlate(vehicle))}"
+        onclick="loginPage.selectVehicle('${UI.escape(vehicle.id)}')">
         <img src="${this.getVehicleIcon(vehicle.id)}" alt="" width="64" height="64">
-        <span>${this.getPlate(vehicle.id)}</span>
+        <span>${UI.escape(vehiclePlate(vehicle))}</span>
         <span class="car-selected-mark">✓</span>
       </button>
     `).join('');
@@ -89,18 +91,10 @@ class LoginPage {
       `).join('');
   }
 
-  getPlate(carId) {
-    const plates = {
-      'car-1': '3ชฏ3250',
-      'car-2': 'ฆง8434',
-      'car-3': '5กล1034',
-    };
-    return plates[carId] || carId;
-  }
-
   getVehicleIcon(carId) {
-    // Return base64 encoded SVG or default icon
-    return 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🚑</text></svg>';
+    // ต้อง URL-encode: double quote ใน data URI จะปิด attribute src ของ <img> ทำให้อิโมจิหลุดออกมาแสดงบนหน้าจอ
+    const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚑</text></svg>";
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
 
   selectVehicle(carId) {

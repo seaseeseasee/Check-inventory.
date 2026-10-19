@@ -187,6 +187,7 @@
   <script src="<?= asset('js/core/api.js') ?>"></script>
   <script src="<?= asset('js/core/auth.js') ?>"></script>
   <script src="<?= asset('js/core/ui.js') ?>"></script>
+  <script src="<?= asset('js/core/vehicle.js') ?>"></script>
   <script src="<?= asset('js/core/system-status.js') ?>"></script>
   
   <!-- Component JS -->
@@ -252,15 +253,8 @@
       }
     }
     
-    // Global vehicle plate helper
-    function vehiclePlate(car) {
-      const plates = {
-        'car-1': '3ชฏ3250',
-        'car-2': 'ฆง8434',
-        'car-3': '5กล1034',
-      };
-      return typeof car === 'object' ? plates[car.id] || car.name : plates[car] || car;
-    }
+    // Global vehicle plate helper → ย้ายไป js/core/vehicle.js (window.vehiclePlate)
+    // เพื่อให้ทุกหน้าใช้กติกาเดียวกัน: plate จากฐานข้อมูลก่อน แล้วค่อย fallback
   </script>
 </body>
 </html>

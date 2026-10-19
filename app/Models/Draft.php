@@ -15,6 +15,18 @@ class Draft extends Model
         return $this->firstWhere('car_id', $carId);
     }
 
+    /**
+     * Lock the draft row of one vehicle (car_id is UNIQUE) for the surrounding
+     * transaction, so two people editing the same draft cannot overwrite each other.
+     */
+    public function lockByVehicle(string $carId): ?array
+    {
+        $stmt = $this->db->prepare("SELECT * FROM {$this->table} WHERE car_id = ? FOR UPDATE");
+        $stmt->execute([$carId]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
     public function getWithItems(string $id): ?array
     {
         $draft = $this->find($id);

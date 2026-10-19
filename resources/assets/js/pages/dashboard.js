@@ -29,6 +29,7 @@ class DashboardPage {
         result = await window.api.get('/staff/dashboard');
         this.data = this.normalizeStaffData(result.data);
       }
+      window.vehicleRef.remember(this.data?.vehicles || []);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
       window.toast.error('โหลดข้อมูลแดชบอร์ดไม่สำเร็จ');
@@ -142,6 +143,8 @@ class DashboardPage {
       const draft = drafts[vehicle.id];
       const expiring = expiringByVehicle[vehicle.id] || [];
       const isToday = last && new Date(last.completed_at).toDateString() === new Date().toDateString();
+      // รถ "งดใช้งาน" ยังแสดงในภาพรวมพร้อมประวัติ แต่เริ่มรอบตรวจใหม่ไม่ได้ (เซิร์ฟเวอร์ยืนยันที่ startInspection)
+      const disabled = vehicle.status === 'disabled';
       
       let alertClass = '';
       if (draft || restockStats.my_requests > 0 || expiring.length > 0) {
@@ -151,10 +154,11 @@ class DashboardPage {
       return `
         <article class="dash-car${alertClass}">
           <div class="dash-car-head">
-            <span class="plate-chip">${UI.escape(this.getPlate(vehicle.id))}</span>
+            <span class="plate-chip">${UI.escape(vehiclePlate(vehicle))}</span>
             <span class="chip ${draft ? 'chip-warn' : isToday ? 'chip-ok' : 'chip-off'}">
               ${draft ? 'มีร่างค้าง' : isToday ? 'ตรวจแล้ววันนี้' : 'ยังไม่ตรวจวันนี้'}
             </span>
+            ${disabled ? '<span class="chip chip-off">งดใช้งาน</span>' : ''}
           </div>
           <p class="dash-last">
             ${last 
@@ -171,7 +175,9 @@ class DashboardPage {
           ` : ''}
           ${draft ? `<p class="dash-last">ร่างนี้ทำต่อได้เฉพาะผู้ตรวจและเวรเดิม</p>` : ''}
           <div class="rs-actions">
-            <button type="button" class="act-btn ok" onclick="dashboardPage.startInspection('${vehicle.id}')">ตรวจคันนี้</button>
+            ${disabled
+              ? '<span class="dash-disabled-note">งดใช้งาน — เปิดกลับที่แท็บ "ทะเบียนรถ/อุปกรณ์" จึงจะตรวจได้</span>'
+              : `<button type="button" class="act-btn ok" onclick="dashboardPage.startInspection('${vehicle.id}')">ตรวจคันนี้</button>`}
             <button type="button" class="act-btn gray" onclick="dashboardPage.viewRestock('${vehicle.id}')">ดูการเติม</button>
           </div>
         </article>
@@ -194,7 +200,7 @@ class DashboardPage {
               <span class="chip chip-${req.status}">${this.getStatusLabel(req.status)}</span>
             </div>
             <div class="rs-meta">
-              <span class="plate-chip">${this.getPlate(req.car_id)}</span>
+              <span class="plate-chip">${UI.escape(vehiclePlate({ id: req.car_id, name: req.car_name }))}</span>
               <span>รถ: ${UI.escape(req.car_name)}</span>
               <span>${UI.formatDateTimeThai(req.created_at)}</span>
             </div>
@@ -215,14 +221,16 @@ class DashboardPage {
         ${vehicles.map(vehicle => {
           const last = lastInspections[vehicle.id];
           const isToday = last && new Date(last.completed_at).toDateString() === new Date().toDateString();
+          const disabled = vehicle.status === 'disabled';
           
           return `
             <article class="dash-car${isToday ? '' : ''}">
               <div class="dash-car-head">
-                <span class="plate-chip">${this.getPlate(vehicle.id)}</span>
+                <span class="plate-chip">${UI.escape(vehiclePlate(vehicle))}</span>
                 <span class="chip ${isToday ? 'chip-ok' : 'chip-off'}">
                   ${isToday ? 'ตรวจแล้ววันนี้' : 'ยังไม่ตรวจวันนี้'}
                 </span>
+                ${disabled ? '<span class="chip chip-off">งดใช้งาน</span>' : ''}
               </div>
               <p class="dash-last">
                 ${last 
@@ -231,7 +239,9 @@ class DashboardPage {
                 }
               </p>
               <div class="rs-actions">
-                <button type="button" class="act-btn ok" onclick="dashboardPage.startInspection('${vehicle.id}')">ตรวจคันนี้</button>
+                ${disabled
+                  ? '<span class="dash-disabled-note">งดใช้งาน — เปิดกลับที่แท็บ "ทะเบียนรถ/อุปกรณ์" จึงจะตรวจได้</span>'
+                  : `<button type="button" class="act-btn ok" onclick="dashboardPage.startInspection('${vehicle.id}')">ตรวจคันนี้</button>`}
                 <button type="button" class="act-btn gray" onclick="dashboardPage.viewRestock('${vehicle.id}')">ดูการเติม</button>
               </div>
             </article>
@@ -250,15 +260,6 @@ class DashboardPage {
       'CANCELLED': 'ยกเลิก',
     };
     return labels[status] || status;
-  }
-
-  getPlate(carId) {
-    const plates = {
-      'car-1': '3ชฏ3250',
-      'car-2': 'ฆง8434',
-      'car-3': '5กล1034',
-    };
-    return plates[carId] || carId;
   }
 
   startInspection(carId) {

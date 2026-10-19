@@ -35,6 +35,19 @@ class RestockRequest extends Model
         self::STATUS_CANCELLED,
     ];
 
+    /**
+     * สถานะที่ยัง "ไม่ปิดงาน" — ใช้กันสร้างรายการเติมซ้ำจากรอบตรวจใหม่
+     * และใช้หาจำนวนที่ยังค้างอยู่จริง (outstanding) ของรถแต่ละคัน
+     * รวมคำศัพท์แบบเดิม (draft/submitted) เพื่อให้ข้อมูลเก่าไม่หลุด
+     */
+    public const OPEN_STATUSES = [
+        self::STATUS_PENDING,
+        self::STATUS_IN_PROGRESS,
+        self::STATUS_PARTIAL,
+        self::STATUS_DRAFT,
+        self::STATUS_SUBMITTED,
+    ];
+
     public function getWithDetails(string $id): ?array
     {
         $request = $this->find($id);
@@ -56,6 +69,34 @@ class RestockRequest extends Model
         $stmt = $this->db->prepare("SELECT * FROM {$this->table} WHERE status = ? ORDER BY created_at DESC");
         $stmt->execute([$status]);
         return array_map([$this, 'cast'], $stmt->fetchAll());
+    }
+
+    /**
+     * Lock the request row for the surrounding transaction.
+     * Serialises status changes and action-log sequencing (PK request_id+seq) per request.
+     */
+    public function lockById(string $id): ?array
+    {
+        $stmt = $this->db->prepare("SELECT * FROM {$this->table} WHERE id = ? FOR UPDATE");
+        $stmt->execute([$id]);
+        $row = $stmt->fetch();
+        return $row ? $this->cast($row) : null;
+    }
+
+    /**
+     * Highest existing request number for a day prefix, used instead of COUNT(*)+1 so
+     * concurrent submits cannot collide on UNIQUE KEY uk_no.
+     *
+     * ต้องเป็น "current read" (FOR UPDATE) เพราะเรียกอยู่ภายใน transaction เดียวกับที่จะ INSERT:
+     * SELECT ธรรมดาใน REPEATABLE READ จะเห็นแต่ snapshot ของตัวเอง ทำให้ retry ได้เลขเดิมซ้ำ
+     * การอ่านแบบล็อกจะล็อกช่วง gap ของดัชนี uk_no ไว้ ทำให้คำขอพร้อมกันรันตามกันจริง ๆ
+     */
+    public function maxRequestNoForPrefix(string $prefix): ?string
+    {
+        $stmt = $this->db->prepare("SELECT MAX(no) FROM {$this->table} WHERE no LIKE ? FOR UPDATE");
+        $stmt->execute([$prefix . '%']);
+        $value = $stmt->fetchColumn();
+        return $value === null || $value === false ? null : (string)$value;
     }
 
     public function getByAssignedUser(string $userId): array

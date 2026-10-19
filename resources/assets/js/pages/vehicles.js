@@ -2,15 +2,29 @@
 // PAGE: VEHICLES / STOCK
 // ========================================
 
+const VEHICLE_STATUS_LABEL = {
+  available: 'พร้อมใช้งาน',
+  maintenance: 'กำลังซ่อมบำรุง',
+  disabled: 'งดใช้งาน',
+};
+
+const VEHICLE_STATUS_CHIP = {
+  available: 'chip-ok',
+  maintenance: 'chip-warn',
+  disabled: 'chip-off',
+};
+
 class VehiclesPage {
   constructor() {
     this.vehicles = [];
     this.currentVehicleId = null;
+    this.currentVehicle = null;
     this.items = [];
     this.showAddForm = false;
     this.editingItemId = null;
     this.copyStaging = [];
     this.copySourceLabel = '';
+    this._vehicleModal = null;
     this.init();
   }
 
@@ -22,23 +36,38 @@ class VehiclesPage {
 
   async loadVehicles() {
     try {
-      const res = await window.vehicleApi.getAll();
+      // เส้นทาง admin ให้ตัวเลขประกอบที่จำเป็นต้องใช้ตอนตัดสินใจ (จำนวนอุปกรณ์
+      // /ประวัติตรวจ/งานเติมค้าง) ซึ่ง مسیر /api/vehicles ปกติไม่มีให้
+      const res = window.auth && window.auth.isAdmin && window.auth.isAdmin()
+        ? await window.adminApi.getVehicles()
+        : await window.vehicleApi.getAll();
       this.vehicles = res.data || [];
     } catch (error) {
       console.error('Failed to load vehicles:', error);
-      window.toast.error('โหลดข้อมูลรถไม่สำเร็จ');
+      // ยังใช้ข้อมูลพื้นฐานต่อได้ แม้ endpoint admin จะตอบผิด (เช่น session หมดอายุ)
+      try {
+        const fallback = await window.vehicleApi.getAll();
+        this.vehicles = fallback.data || [];
+      } catch (inner) {
+        this.vehicles = [];
+        window.toast.error('โหลดข้อมูลรถไม่สำเร็จ');
+      }
     }
+
+    // ให้ helper ทะเบียนรถกลางรู้ค่า plate ล่าสุด (โหลดซ้ำทุกครั้งที่เพิ่ม/แก้/ลบรถ)
+    window.vehicleRef.remember(this.vehicles);
   }
 
   bindEvents() {
     // Vehicle select
     document.getElementById('stockCar')?.addEventListener('change', () => this.onVehicleChange());
-    
+
+    // Vehicle CRUD
+    document.getElementById('btnEditVehicle')?.addEventListener('click', () => this.showEditVehicleForm());
+    document.getElementById('btnDeleteVehicle')?.addEventListener('click', () => this.handleDeleteVehicle());
+
     // Add item form
     document.getElementById('stockAddForm')?.addEventListener('submit', (e) => this.handleAddItem(e));
-    document.getElementById('stockBattery')?.addEventListener('change', (e) => {
-      // Handle battery type change if needed
-    });
 
     // Copy items from another vehicle
     document.getElementById('btnCopyStart')?.addEventListener('click', () => this.handleCopyStart());
@@ -49,11 +78,19 @@ class VehiclesPage {
   renderVehicleSelect() {
     const select = document.getElementById('stockCar');
     if (!select) return;
-    
-    select.innerHTML = this.vehicles.map(v => 
-      `<option value="${UI.escape(v.id)}">${UI.escape(v.name || this.getPlate(v.id))}</option>`
-    ).join('');
-    
+
+    // จำคันที่เลือกไว้ก่อน rebuild — ไม่อย่างนั้นหลังแก้/เพิ่มรถ หน้าจะเด้งกลับไปคันแรก
+    const previous = this.currentVehicleId || select.value || '';
+
+    select.innerHTML = this.vehicles.map(v => {
+      const status = VEHICLE_STATUS_LABEL[v.status] ? ` • ${VEHICLE_STATUS_LABEL[v.status]}` : '';
+      return `<option value="${UI.escape(v.id)}">${UI.escape(vehiclePlate(v))}${UI.escape(status)}</option>`;
+    }).join('');
+
+    if (previous && this.vehicles.some(v => String(v.id) === String(previous))) {
+      select.value = previous;
+    }
+
     this.renderCopySourceSelect();
     this.onVehicleChange();
   }
@@ -65,53 +102,114 @@ class VehiclesPage {
 
     const sources = this.vehicles.filter(v => String(v.id) !== String(this.currentVehicleId));
     select.innerHTML = sources.length
-      ? sources.map(v => `<option value="${UI.escape(v.id)}">${UI.escape(v.name || this.getPlate(v.id))}</option>`).join('')
+      ? sources.map(v => `<option value="${UI.escape(v.id)}">${UI.escape(vehiclePlate(v))}</option>`).join('')
       : '<option value="">— ไม่มีรถคันอื่นให้คัดลอก —</option>';
     select.disabled = sources.length === 0;
     if (btn) btn.disabled = sources.length === 0;
-  }
-
-  getPlate(carId) {
-    const plates = {
-      'car-1': '3ชฏ3250',
-      'car-2': 'ฆง8434',
-      'car-3': '5กล1034',
-    };
-    return plates[carId] || carId;
   }
 
   async onVehicleChange() {
     const vehicleId = document.getElementById('stockCar')?.value;
     const hadStaging = this.copyStaging.length > 0;
     this.currentVehicleId = vehicleId;
+    this.currentVehicle = this.vehicles.find(v => String(v.id) === String(vehicleId)) || null;
     this.clearCopyStaging();
     if (hadStaging) {
       window.toast.info('สลับรถแล้ว — ล้างรายการรอคัดลอกที่ค้างอยู่');
     }
     this.renderCopySourceSelect();
+    this.renderVehicleMeta();
     await this.loadItems(vehicleId);
   }
 
+  /** แถบสรุปข้อมูลรถที่เลือก — บอกสถานะ + สิ่งที่ผูกอยู่ (ใช้ตอนจะลบรถ) */
+  renderVehicleMeta() {
+    const el = document.getElementById('stockCarMeta');
+    if (!el) return;
+    const v = this.currentVehicle;
+    if (!v) {
+      el.innerHTML = 'ยังไม่มีรถในระบบ — กด “เพิ่มรถใหม่” เพื่อเริ่ม';
+      return;
+    }
+
+    const status = VEHICLE_STATUS_LABEL[v.status] || v.status || '-';
+    const chip = VEHICLE_STATUS_CHIP[v.status] || 'chip-off';
+    const bits = [`<span class="chip ${chip}">${UI.escape(status)}</span>`];
+
+    if (v.active_item_count !== undefined) {
+      bits.push(`<span class="chip chip-info">อุปกรณ์ใช้งาน ${UI.escape(String(v.active_item_count))} รายการ</span>`);
+    }
+    if (v.check_count !== undefined) {
+      bits.push(`<span class="chip chip-pending">ประวัติตรวจ ${UI.escape(String(v.check_count))} ครั้ง</span>`);
+    }
+    if (v.open_restock_count !== undefined) {
+      const cls = Number(v.open_restock_count) > 0 ? 'chip-warn' : 'chip-pending';
+      bits.push(`<span class="chip ${cls}">งานเติมค้าง ${UI.escape(String(v.open_restock_count))}</span>`);
+    }
+
+    el.innerHTML = bits.join('');
+  }
+
   async loadItems(vehicleId) {
+    if (!vehicleId) {
+      this.items = [];
+      this.renderItems();
+      return;
+    }
     try {
-      const res = await window.vehicleApi.get(vehicleId);
-      this.items = res.data?.items || [];
+      // ใช้ endpoint admin เพื่อเห็นแถวที่ "พักใช้งาน" ด้วย (เปิดกลับ/ลบถาวรได้)
+      if (window.auth && window.auth.isAdmin && window.auth.isAdmin()) {
+        const res = await window.adminApi.getVehicle(vehicleId);
+        this.items = res.data?.items || [];
+        this.currentVehicle = Object.assign(
+          {},
+          this.currentVehicle || {},
+          this.vehicles.find(v => String(v.id) === String(vehicleId)) || {},
+          res.data || {}
+        );
+        this.renderVehicleMeta();
+      } else {
+        const res = await window.vehicleApi.get(vehicleId);
+        this.items = res.data?.items || [];
+      }
       this.renderItems();
     } catch (error) {
       console.error('Failed to load items:', error);
-      this.items = [];
-      this.renderItems();
+      try {
+        const res = await window.vehicleApi.get(vehicleId);
+        this.items = res.data?.items || [];
+        this.renderItems();
+      } catch (inner) {
+        this.items = [];
+        this.renderItems();
+        window.toast.error('โหลดอุปกรณ์ไม่สำเร็จ: ' + (inner.message || ''));
+      }
     }
   }
 
   renderItems() {
     const container = document.getElementById('stockTable');
     if (!container) return;
-    
-    container.innerHTML = this.items.map((item, index) => `
+
+    container.innerHTML = this.items.map((item) => {
+      const counted = item.stock_updated_at ? String(item.stock_updated_at) : '';
+      const stamp = counted
+        ? `<span class="stock-stamp">ยอดล่าสุด ${UI.escape(this.fmtStamp(counted))}</span>`
+        : '<span class="stock-stamp">ยังไม่เคยตรวจนับ</span>';
+
+      // refer_items.expiry_text เป็นข้อความอิสระ (ข้อมูลจริงส่วนใหญ่ไม่ใช่ yyyy-mm-dd เช่น "10")
+      // ถ้าบังคับ type="date" กับค่าแบบนั้น ช่องจะแสดงว่าง แล้วการกด "บันทึก" ครั้งถัดไป
+      // จะส่ง expiry_text = "" ไปล้างค่าเดิมทิ้ง — จึงใช้ input วันที่เฉพาะค่าที่รูปแบบวันที่จริง
+      const expiry = String(item.expiry_text ?? '');
+      const isIsoDate = /^\d{4}-\d{2}-\d{2}$/.test(expiry);
+      const expiryInput = isIsoDate
+        ? `<input type="date" value="${UI.escape(expiry)}" data-item-id="${item.id}" data-field="expiry_text" aria-label="วันหมดอายุ">`
+        : `<input type="text" value="${UI.escape(expiry)}" data-item-id="${item.id}" data-field="expiry_text" placeholder="ข้อความวันหมดอายุ เช่น 10 / 15/12/2569">`;
+
+      return `
       <article class="stock-card${item.active ? '' : ' is-off'}" data-item-id="${item.id}">
         <div class="stock-top">
-          <div class="stock-name">${UI.escape(item.name)}</div>
+          <input type="text" class="stock-name-input" value="${UI.escape(item.name)}" data-item-id="${item.id}" data-field="name" aria-label="ชื่ออุปกรณ์">
           <span class="chip ${item.active ? 'chip-ok' : 'chip-off'}">
             ${item.active ? 'ใช้งาน' : 'พัก'}
           </span>
@@ -122,8 +220,12 @@ class VehiclesPage {
             <input type="text" value="${UI.escape(item.standard)}" data-item-id="${item.id}" data-field="standard" placeholder="จำนวนมาตรฐาน">
           </div>
           <div>
-            <label>วันหมดอายุ</label>
-            <input type="date" value="${UI.escape(item.expiry_text)}" data-item-id="${item.id}" data-field="expiry_text" placeholder="วันหมดอายุ">
+            <label>วันหมดอายุ${isIsoDate ? '' : ' <span class="text-xs font-normal text-slate-500">(ข้อความเดิม)</span>'}</label>
+            ${expiryInput}
+          </div>
+          <div>
+            <label>ยอดคงเหลือบนรถ</label>
+            <input type="number" min="0" step="any" inputmode="decimal" value="${counted ? UI.escape(String(item.current_qty ?? '')) : ''}" data-item-id="${item.id}" data-field="onboard_qty" placeholder="${counted ? 'เว้นว่าง = ไม่แก้' : 'ยังไม่เคยตรวจนับ — กรอกเพื่อบันทึกยอด'}">
           </div>
           <div>
             <label>เป็นแบตเตอรี่</label>
@@ -133,6 +235,7 @@ class VehiclesPage {
             </select>
           </div>
         </div>
+        <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">${stamp}</div>
         <div style="display: flex; gap: 8px; margin-top: 8px;">
           <button type="button" class="small-btn" data-action="save" data-item-id="${item.id}">บันทึก</button>
           <button type="button" class="small-btn gray" data-action="toggle" data-item-id="${item.id}">
@@ -141,24 +244,28 @@ class VehiclesPage {
           <button type="button" class="small-btn danger" data-action="delete" data-item-id="${item.id}">ลบ</button>
         </div>
       </article>
-    `).join('') || '<p class="empty">ยังไม่มีอุปกรณ์ในรถคันนี้</p>';
-    
+    `;
+    }).join('') || '<p class="empty">ยังไม่มีอุปกรณ์ในรถคันนี้</p>';
+
     // Bind events
-    container.querySelectorAll('input[data-field], select[data-field]').forEach(input => {
-      input.addEventListener('change', () => this.updateItem(input.dataset.itemId, input.dataset.field, input.value));
-    });
-    
     container.querySelectorAll('[data-action="save"]').forEach(btn => {
       btn.addEventListener('click', () => this.saveItem(btn.dataset.itemId));
     });
-    
+
     container.querySelectorAll('[data-action="toggle"]').forEach(btn => {
       btn.addEventListener('click', () => this.toggleItemActive(btn.dataset.itemId));
     });
-    
+
     container.querySelectorAll('[data-action="delete"]').forEach(btn => {
       btn.addEventListener('click', () => this.deleteItem(btn.dataset.itemId));
     });
+  }
+
+  fmtStamp(raw) {
+    // stock_updated_at เก็บเป็น ISO (มี .u และ Z) — แสดงเฉพาะ วัน/เดือน/ชั่วโมง:นาที
+    const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/.exec(String(raw || ''));
+    if (!m) return String(raw || '');
+    return `${Number(m[3])}/${Number(m[2])}/${Number(m[1]) + 543} ${m[4]}:${m[5]}`;
   }
 
   showAddItemForm() {
@@ -174,6 +281,8 @@ class VehiclesPage {
     document.getElementById('stockStandard').value = '';
     document.getElementById('stockExpiry').value = '';
     document.getElementById('stockBattery').value = 'false';
+    const onboardEl = document.getElementById('stockOnboard');
+    if (onboardEl) onboardEl.value = '';
     const currentEl = document.getElementById('stockCurrent');
     if (currentEl) currentEl.value = '';
     const minEl = document.getElementById('stockMin');
@@ -182,37 +291,38 @@ class VehiclesPage {
 
   async handleAddItem(event) {
     event.preventDefault();
-    
+
     const name = document.getElementById('stockName')?.value?.trim();
     const standard = document.getElementById('stockStandard')?.value?.trim();
     const expiry = document.getElementById('stockExpiry')?.value || '';
     const isBattery = document.getElementById('stockBattery')?.value === 'true';
+    const onboard = document.getElementById('stockOnboard')?.value?.trim() ?? '';
     const currentStock = document.getElementById('stockCurrent')?.value?.trim() ?? '';
     const minStock = document.getElementById('stockMin')?.value?.trim() ?? '';
     const vehicleId = this.currentVehicleId;
-    
+
     if (!name || !standard) {
       window.toast.error('กรอกชื่อและจำนวน');
       return;
     }
-    
+
     if (!vehicleId) {
       window.toast.error('เลือกรถก่อน');
       return;
     }
 
-    const payload = { name, standard, is_battery: isBattery };
+    // เดิมอ่าน stockExpiry แต่ไม่ส่งเข้า payload → วันหมดอายุที่กรอกหาย (แก้แล้ว)
+    const payload = { name, standard, is_battery: isBattery, expiry_text: expiry };
+    if (onboard !== '') payload.onboard_qty = Number(onboard);
     if (currentStock !== '') payload.current_stock = Number(currentStock);
     if (minStock !== '') payload.min_stock = Number(minStock);
-    
+
     try {
       const res = await window.vehicleApi.addItem(vehicleId, payload);
       this.hideAddItemForm();
-      const stock = res?.data?.stock;
-      if (stock && !stock.error) {
+      const stock = res?.data?.warehouse;
+      if (stock && stock.current_qty !== undefined) {
         window.toast.success(`เพิ่มอุปกรณ์เรียบร้อย • คลัง “${stock.name}” = ${stock.current_qty}` + (Number(stock.min_qty) > 0 ? ` (ขั้นต่ำ ${stock.min_qty})` : ''));
-      } else if (stock && stock.error) {
-        window.toast.warning(`เพิ่มอุปกรณ์แล้ว แต่ตั้งสต็อกไม่สำเร็จ: ${stock.error}`);
       } else {
         window.toast.success('เพิ่มอุปกรณ์เรียบร้อย');
       }
@@ -222,40 +332,86 @@ class VehiclesPage {
     }
   }
 
-  async updateItem(itemId, field, value) {
-    // For immediate UI feedback, we update locally
-    // The actual save happens on "บันทึก" button click
+  /**
+   * รวมค่าจากการ์ด 1 ใบเป็น payload (ส่งเฉพาะฟิลด์ที่ผู้ใช้แก้จริง)
+   * เพื่อบันทึกหลายช่องใน request เดียว — ลดโอกาสข้อมูลคนละ version กันบนหน้าจอ
+   */
+  collectItemPatch(itemId) {
+    const item = this.items.find(i => i.id === itemId) || {};
+    const field = (key) => document.querySelector(`[data-item-id="${itemId}"][data-field="${key}"]`);
+    const data = {};
+
+    const nameEl = field('name');
+    if (nameEl) {
+      const v = nameEl.value.trim();
+      if (v === '') {
+        window.toast.error('ชื่ออุปกรณ์ห้ามว่าง');
+        return null;
+      }
+      if (v !== String(item.name || '')) data.name = v;
+    }
+
+    const standardEl = field('standard');
+    if (standardEl) {
+      const v = standardEl.value.trim();
+      if (v === '') {
+        window.toast.error('จำนวนมาตรฐานห้ามว่าง');
+        return null;
+      }
+      if (v !== String(item.standard || '')) data.standard = v;
+    }
+
+    const expiryEl = field('expiry_text');
+    // renderItems() เลือกชนิด input ตามค่าจริง (date เฉพาะค่ารูปแบบ yyyy-mm-dd)
+    // จึงไม่มีกรณี "input ว่างเพราะเบราว์เซอร์รับค่าข้อความอิสระไม่ได้" ที่ทำให้ค่าเดิมถูกล้าง
+    if (expiryEl && expiryEl.value !== String(item.expiry_text || '')) data.expiry_text = expiryEl.value;
+
+    const batteryEl = field('is_battery');
+    if (batteryEl && (batteryEl.value === 'true') !== !!item.is_battery) data.is_battery = batteryEl.value === 'true';
+
+    const onboardEl = field('onboard_qty');
+    if (onboardEl && onboardEl.value.trim() !== '') {
+      const n = Number(onboardEl.value);
+      if (!Number.isFinite(n) || n < 0) {
+        window.toast.error('ยอดคงเหลือบนรถต้องเป็นตัวเลขไม่ติดลบ');
+        return null;
+      }
+      data.onboard_qty = Math.round(n * 100) / 100;
+    }
+
+    return data;
   }
 
   async saveItem(itemId) {
-    const item = this.items.find(i => i.id === itemId);
-    if (!item) return;
-    
-    const standardEl = document.querySelector(`input[data-item-id="${itemId}"][data-field="standard"]`);
-    const expiryEl = document.querySelector(`input[data-item-id="${itemId}"][data-field="expiry_text"]`);
-    const batteryEl = document.querySelector(`select[data-item-id="${itemId}"][data-field="is_battery"]`);
-    
-    const data = {};
-    if (standardEl) data.standard = standardEl.value;
-    if (expiryEl) data.expiry_text = expiryEl.value;
-    if (batteryEl) data.is_battery = batteryEl.value === 'true';
-    
-    if (Object.keys(data).length === 0) return;
-    
+    const data = this.collectItemPatch(itemId);
+    if (data === null) return;
+    if (Object.keys(data).length === 0) {
+      window.toast.info('ไม่มีรายการแก้ไข');
+      return;
+    }
+
+    const btn = document.querySelector(`[data-action="save"][data-item-id="${itemId}"]`);
+    if (btn) UI.setLoading(btn, true);
     try {
-      await window.vehicleApi.updateItem(itemId, data);
-      window.toast.success('อัปเดตเรียบร้อย');
+      const res = await window.vehicleApi.updateItem(itemId, data);
+      const warehouse = res?.data?.warehouse;
+      let message = 'อัปเดตเรียบร้อย';
+      if (data.standard) message += ' • คำนวณจำนวนเป้าหมายใหม่จากมาตรฐานแล้ว';
+      if (warehouse && warehouse.current_qty !== undefined) message += ` • คลัง “${warehouse.name}” = ${warehouse.current_qty}`;
+      window.toast.success(message);
       await this.loadItems(this.currentVehicleId);
     } catch (error) {
       window.toast.error('อัปเดตไม่สำเร็จ: ' + error.message);
       await this.loadItems(this.currentVehicleId);
+    } finally {
+      if (btn) UI.setLoading(btn, false);
     }
   }
 
   async toggleItemActive(itemId) {
     const item = this.items.find(i => i.id === itemId);
     if (!item) return;
-    
+
     try {
       await window.vehicleApi.updateItem(itemId, { active: !item.active });
       window.toast.success(item.active ? 'พักใช้งานแล้ว' : 'เปิดใช้งานแล้ว');
@@ -267,11 +423,23 @@ class VehiclesPage {
   }
 
   async deleteItem(itemId) {
-    if (!confirm('ยืนยันลบอุปกรณ์นี้? (จะเป็นการพักใช้งาน)')) return;
-    
+    const item = this.items.find(i => i.id === itemId);
+    if (!item) return;
+
+    const ok = await window.confirmDialog(
+      `ต้องการลบ “${item.name}” ออกจากรถคันนี้? ถ้าอุปกรณ์นี้เคยถูกใช้ตรวจหรือมีงานเติมค้างอยู่ ระบบจะพักใช้งานแทน เพื่อไม่ให้ประวัติย้อนหลังขาด`,
+      { title: 'ลบอุปกรณ์', confirmText: 'ลบ' }
+    );
+    if (!ok) return;
+
     try {
-      await window.vehicleApi.updateItem(itemId, { active: false });
-      window.toast.success('ลบเรียบร้อย');
+      const res = await window.vehicleApi.deleteItem(itemId, { mode: 'auto' });
+      const mode = res?.data?.mode;
+      if (mode === 'deleted') {
+        window.toast.success('ลบอุปกรณ์แล้ว');
+      } else {
+        window.toast.warning('อุปกรณ์นี้มีประวัติ/งานค้างผูกอยู่ — พักใช้งานแทน (ข้อมูลตรวจย้อนหลังยังครบ)');
+      }
       await this.loadItems(this.currentVehicleId);
     } catch (error) {
       window.toast.error('ลบไม่สำเร็จ: ' + error.message);
@@ -279,10 +447,6 @@ class VehiclesPage {
   }
 
   // ---------- Copy items from another vehicle ----------
-
-  vehicleLabel(vehicle) {
-    return (vehicle && vehicle.name) || this.getPlate(vehicle?.id || '');
-  }
 
   async handleCopyStart() {
     const sourceId = document.getElementById('copySourceCar')?.value || '';
@@ -294,12 +458,14 @@ class VehiclesPage {
 
     const source = this.vehicles.find(v => String(v.id) === String(sourceId));
     const target = this.vehicles.find(v => String(v.id) === String(this.currentVehicleId));
-    const sourceLabel = this.vehicleLabel(source);
-    const targetLabel = this.vehicleLabel(target);
+    const sourceLabel = vehiclePlate(source);
+    const targetLabel = vehiclePlate(target);
 
     let sourceItems;
     try {
-      const res = await window.vehicleApi.get(sourceId);
+      // แอดมินดึงผ่านทะเบียนรถ (ได้แถวที่ "พักใช้งาน" ด้วย) เพื่อคัดลอกสถานะ active มาครบ
+      const isAdmin = window.auth && typeof window.auth.isAdmin === 'function' && window.auth.isAdmin();
+      const res = isAdmin ? await window.adminApi.getVehicle(sourceId) : await window.vehicleApi.get(sourceId);
       sourceItems = res.data?.items || [];
     } catch (error) {
       window.toast.error('ดึงข้อมูลรถต้นทางไม่สำเร็จ: ' + error.message);
@@ -311,28 +477,45 @@ class VehiclesPage {
       return;
     }
 
-    const confirmed = await this.confirmCopyDialog(sourceLabel, targetLabel, sourceItems.length, this.copyStaging.length > 0);
+    const stockCount = sourceItems.filter(item => String(item.stock_updated_at || '').trim() !== '').length;
+
+    const confirmed = await this.confirmCopyDialog(
+      sourceLabel, targetLabel, sourceItems.length, this.copyStaging.length > 0, stockCount
+    );
     if (!confirmed) return;
 
-    this.copyStaging = sourceItems.map(item => ({
-      name: item.name || '',
-      standard: item.standard || '',
-      expiry_text: item.expiry_text || '',
-      is_battery: !!item.is_battery,
-    }));
+    this.copyStaging = sourceItems.map(item => {
+      const counted = String(item.stock_updated_at || '').trim() !== '';
+      return {
+        name: item.name || '',
+        standard: item.standard || '',
+        expiry_text: item.expiry_text || '',
+        is_battery: !!item.is_battery,
+        active: item.active !== false && item.active !== 0,
+        // ยอดคงเหลือติดมาเฉพาะแถวที่ต้นทาง "เคยตรวจนับจริง" — แถวที่ไม่เคยนับต้องว่างไว้
+        // เพราะ 0 กับ "ยังไม่เคยตรวจนับ" ความหมายคนละอย่างบนหน้ารอเติม
+        current_qty: counted ? String(item.current_qty ?? '') : '',
+        counted,
+        stock_stamp: counted ? this.fmtStamp(item.stock_updated_at) : '',
+      };
+    });
     this.copySourceLabel = sourceLabel;
     this.renderCopyPreview();
-    window.toast.info(`ดึงรายการจาก ${sourceLabel} จำนวน ${sourceItems.length} รายการ — ตรวจสอบก่อนกดยืนยัน`);
+    window.toast.info(
+      `ดึงรายการจาก ${sourceLabel} จำนวน ${sourceItems.length} รายการ `
+      + `— คัดลอกยอดคงเหลือบนรถมา ${stockCount} รายการ (ตรวจสอบก่อนกดยืนยัน)`
+    );
   }
 
-  confirmCopyDialog(sourceLabel, targetLabel, count, replacing = false) {
+  confirmCopyDialog(sourceLabel, targetLabel, count, replacing = false, stockCount = 0) {
     return new Promise((resolve) => {
       const modal = new Modal({
         title: 'ยืนยันการคัดลอกอุปกรณ์',
         size: 'sm',
         content: `
           <p class="mb-2">คุณต้องการคัดลอกรายการอุปกรณ์จากรถคัน <strong>${UI.escape(sourceLabel)}</strong> ใช่หรือไม่?</p>
-          <p class="mb-2 text-sm">ระบบจะนำอุปกรณ์ทั้งหมด <strong>${count} รายการ</strong> มาแสดงในรถคัน <strong>${UI.escape(targetLabel)}</strong> เพื่อให้ตรวจสอบ/แก้ไขก่อนบันทึก — ยังไม่มีการบันทึกจนกว่าจะกด “ยืนยันคัดลอก”</p>
+          <p class="mb-2">ระบบจะนำอุปกรณ์ทั้งหมด <strong>${count} รายการ</strong> มาแสดงในรถคัน <strong>${UI.escape(targetLabel)}</strong> เพื่อให้ตรวจสอบ/แก้ไขก่อนบันทึก — ยังไม่มีการบันทึกจนกว่าจะกด “ยืนยันคัดลอก”</p>
+          <p class="mb-2 text-sm">สิ่งที่คัดลอกมาด้วย: จำนวนมาตรฐาน, วันหมดอายุ, สถานะใช้งาน/พัก, แบตเตอรี่ และ <strong>ยอดคงเหลือบนรถ ${stockCount} รายการ</strong> (รายการที่ต้นทางยังไม่เคยตรวจนับจะปล่อยว่าง ไม่ใส่เป็น 0)</p>
           ${replacing ? '<p class="mb-2 text-sm" style="color: var(--warn);">⚠️ มีรายการรอคัดลอกอยู่ก่อนแล้ว — รายการชุดใหม่นี้จะแทนที่ชุดเดิม</p>' : ''}
         `,
         onClose: () => resolve(false),
@@ -389,7 +572,26 @@ class VehiclesPage {
             </div>
             <div>
               <label>วันหมดอายุ</label>
-              <input type="date" data-copy-field="expiry_text" value="${UI.escape(row.expiry_text)}">
+              ${/^\d{4}-\d{2}-\d{2}$/.test(String(row.expiry_text || ''))
+                ? `<input type="date" data-copy-field="expiry_text" value="${UI.escape(row.expiry_text)}">`
+                : `<input type="text" data-copy-field="expiry_text" value="${UI.escape(row.expiry_text)}" placeholder="ข้อความวันหมดอายุ เช่น 10 / 15/12/2569">`}
+            </div>
+            <div>
+              <label>ยอดคงเหลือบนรถ</label>
+              <input type="number" min="0" step="any" inputmode="decimal" data-copy-field="current_qty"
+                value="${UI.escape(String(row.current_qty ?? ''))}"
+                placeholder="${row.counted ? 'เว้นว่าง = ไม่คัดลอกยอด' : 'ยังไม่เคยตรวจนับ'}"
+                aria-label="ยอดคงเหลือบนรถของรายการที่ ${idx + 1}">
+              <p class="copy-row-hint">${row.counted
+                ? `คัดลอกจากต้นทาง • ยอดล่าสุด ${UI.escape(row.stock_stamp || '')}`
+                : 'ต้นทางยังไม่เคยตรวจนับ — กรอกตัวเลขถ้าได้ตรวจนับของจริงบนคันนี้แล้ว'}</p>
+            </div>
+            <div>
+              <label>สถานะ</label>
+              <select data-copy-field="active">
+                <option value="true" ${row.active !== false ? 'selected' : ''}>ใช้งาน</option>
+                <option value="false" ${row.active === false ? 'selected' : ''}>พักใช้งาน</option>
+              </select>
             </div>
             <div>
               <label>เป็นแบตเตอรี่</label>
@@ -406,6 +608,7 @@ class VehiclesPage {
     if (fromEl) fromEl.textContent = `จากรถคัน ${this.copySourceLabel}`;
     if (countChip) countChip.textContent = `รอคัดลอก ${this.copyStaging.length} รายการ`;
     if (confirmBtn) confirmBtn.textContent = `ยืนยันคัดลอก ${this.copyStaging.length} รายการ`;
+    this.renderCopyStockSummary();
 
     list.querySelectorAll('[data-copy-field]').forEach(input => {
       input.addEventListener('input', () => this.onCopyFieldChange(input));
@@ -417,13 +620,33 @@ class VehiclesPage {
     });
   }
 
+  renderCopyStockSummary() {
+    const el = document.getElementById('copyPreviewStock');
+    if (!el) return;
+    const withStock = this.copyStaging.filter(row => String(row.current_qty ?? '').trim() !== '').length;
+    const resting = this.copyStaging.filter(row => row.active === false).length;
+    el.textContent = `มียอดคงเหลือบนรถติดมา ${withStock}/${this.copyStaging.length} รายการ`
+      + (resting > 0 ? ` • พักใช้งาน ${resting} รายการ` : '');
+    el.classList.toggle('hidden', this.copyStaging.length === 0);
+  }
+
   onCopyFieldChange(input) {
     const rowEl = input.closest('.copy-row');
     const idx = Number(rowEl?.dataset.idx);
     const field = input.dataset.copyField;
     if (!rowEl || Number.isNaN(idx) || !this.copyStaging[idx]) return;
 
-    this.copyStaging[idx][field] = field === 'is_battery' ? input.value === 'true' : input.value;
+    if (field === 'is_battery' || field === 'active') {
+      this.copyStaging[idx][field] = input.value === 'true';
+    } else if (field === 'current_qty') {
+      // พิมพ์ตัวเลขเอง = ถือเป็นยอดที่นับจริงบนคันนี้ แม้ต้นทางจะยังไม่เคยตรวจนับ
+      this.copyStaging[idx].current_qty = input.value.trim();
+      if (this.copyStaging[idx].current_qty !== '') this.copyStaging[idx].counted = true;
+    } else {
+      this.copyStaging[idx][field] = input.value;
+    }
+
+    if (field === 'current_qty') this.renderCopyStockSummary();
 
     if (field === 'name') {
       const dupEl = rowEl.querySelector('[data-copy-dup]');
@@ -450,6 +673,11 @@ class VehiclesPage {
         window.toast.error(`รายการที่ ${i + 1}: กรอกชื่ออุปกรณ์และจำนวนมาตรฐานให้ครบก่อนยืนยัน`);
         return;
       }
+      const qtyText = String(row.current_qty ?? '').trim();
+      if (qtyText !== '' && (!Number.isFinite(Number(qtyText)) || Number(qtyText) < 0)) {
+        window.toast.error(`รายการที่ ${i + 1}: ยอดคงเหลือบนรถต้องเป็นตัวเลข 0 ขึ้นไป`);
+        return;
+      }
     }
 
     const btn = document.getElementById('btnCopyConfirm');
@@ -461,11 +689,19 @@ class VehiclesPage {
           standard: String(row.standard).trim(),
           expiry_text: String(row.expiry_text || '').trim(),
           is_battery: !!row.is_battery,
+          active: row.active !== false,
+          // null = ไม่มีข้อมูลตรวจนับ → ฝั่งเซิร์ฟเวอร์จะปล่อย "ยังไม่เคยตรวจนับ" ไว้
+          current_qty: String(row.current_qty ?? '').trim() === '' ? null : String(row.current_qty).trim(),
         })),
       });
       const created = res.data?.created ?? this.copyStaging.length;
+      const stockCopied = Number(res.data?.stock_copied ?? 0);
+      const inactiveCopied = Number(res.data?.inactive_copied ?? 0);
       this.clearCopyStaging();
-      window.toast.success(`คัดลอกอุปกรณ์แล้ว ${created} รายการ`);
+      window.toast.success(
+        `คัดลอกอุปกรณ์แล้ว ${created} รายการ • พร้อมยอดคงเหลือบนรถ ${stockCopied} รายการ`
+        + (inactiveCopied > 0 ? ` • พักใช้งาน ${inactiveCopied} รายการ` : '')
+      );
       await this.loadItems(this.currentVehicleId);
     } catch (error) {
       window.toast.error('คัดลอกไม่สำเร็จ: ' + (error.message || 'ไม่ทราบสาเหตุ'));
@@ -491,87 +727,175 @@ class VehiclesPage {
     this.renderCopyPreview();
   }
 
-  // ---------- Add new vehicle ----------
+  // ==================== Vehicle CRUD (add / edit / delete) ====================
 
-  showAddVehicleForm() {
+  // ฟอร์มเดียวใช้สองโหมด: 'create' กับ 'edit'
+  // โหมด edit อ่านค่าเริ่มต้นจาก this.currentVehicle (รถที่เลือกอยู่)
+  vehicleFormFields(mode) {
+    const v = mode === 'edit' ? (this.currentVehicle || {}) : {};
+    const isEdit = mode === 'edit';
+
+    const statusOptions = Object.keys(VEHICLE_STATUS_LABEL).map(value =>
+      `<option value="${value}" ${v.status === value ? 'selected' : ''}>${VEHICLE_STATUS_LABEL[value]}</option>`
+    ).join('');
+
+    const seedSelect = `
+      <div class="md:col-span-2">
+        <label for="vehItemSource">รายการอุปกรณ์เริ่มต้นของรถคันใหม่</label>
+        <select id="vehItemSource">
+          <option value="default" selected>ชุดอุปกรณ์มาตรฐาน (แนะนำ)</option>
+          <option value="copy">คัดลอกจาก รถคันอื่นที่มีอยู่แล้ว</option>
+          <option value="none">ไม่สร้างรายการเริ่มต้น</option>
+        </select>
+        <div id="vehCopyWrap" class="hidden">
+          <label for="vehCopySource" class="!mt-2">เลือกรถต้นทาง</label>
+          <select id="vehCopySource">
+            <option value="">— เลือก —</option>
+            ${this.vehicles.map(item => `<option value="${UI.escape(item.id)}">${UI.escape(vehiclePlate(item))}</option>`).join('')}
+          </select>
+        </div>
+        <p id="vehSeedNote" class="mt-1 text-xs leading-relaxed text-slate-500">กำลังเตรียมข้อมูล…</p>
+      </div>
+    `;
+
+    return `
+      <div class="grid gap-4 md:grid-cols-2">
+        <div class="md:col-span-2">
+          <label for="vehPlate" class="!mt-0">ทะเบียนรถ <span class="text-red-500" aria-hidden="true">*</span></label>
+          <input id="vehPlate" type="text" value="${UI.escape(v.plate || '')}" placeholder="เช่น กข-1234 กรุงเทพฯ" autocomplete="off">
+          <p class="mt-1 hidden text-xs font-semibold text-red-600" id="vehPlateError" role="alert"></p>
+        </div>
+        <div>
+          <label for="vehBrand">ยี่ห้อ / รุ่น</label>
+          <input id="vehBrand" type="text" value="${UI.escape(v.brand_model || '')}" placeholder="เช่น Toyota Commuter">
+        </div>
+        <div>
+          <label for="vehType">ชื่อเรียกประจำรถ</label>
+          <input id="vehType" type="text" value="${UI.escape(v.name || '')}" placeholder="เช่น รถ Refer คันที่ 4">
+        </div>
+        <div>
+          <label for="vehStatus">สถานะรถ</label>
+          <select id="vehStatus">${statusOptions}</select>
+        </div>
+        <div>
+          <label for="vehOdometer">เลขไมล์เริ่มต้น (กม.)</label>
+          <input id="vehOdometer" type="number" min="0" step="1" inputmode="numeric"
+            value="${v.odometer_initial === null || v.odometer_initial === undefined ? '' : UI.escape(String(v.odometer_initial))}"
+            placeholder="เช่น 45000">
+          <p class="mt-1 hidden text-xs font-semibold text-red-600" id="vehOdometerError" role="alert"></p>
+        </div>
+        <div class="md:col-span-2">
+          <label for="vehNotes">หมายเหตุเพิ่มเติม</label>
+          <textarea id="vehNotes" rows="2" placeholder="รายละเอียดเพิ่มเติม เช่น ประจำจุดใด ใช้งานช่วงไหน">${UI.escape(v.notes || '')}</textarea>
+        </div>
+        ${isEdit ? '' : seedSelect}
+      </div>
+    `;
+  }
+
+  openVehicleForm(mode) {
+    if (mode === 'edit' && !this.currentVehicleId) {
+      window.toast.warning('กรุณาเลือกรถก่อน');
+      return;
+    }
+
     if (this._vehicleModal) {
-      try { this._vehicleModal.destroy(); } catch (e) { /* stale node */ }
+      try { this._vehicleModal.destroy(); } catch (e) { /* node ถูกลบไปแล้ว */ }
       this._vehicleModal = null;
     }
 
-    const sourceOptions = this.vehicles.map(v =>
-      `<option value="${UI.escape(v.id)}">${UI.escape(this.vehicleLabel(v))}</option>`
-    ).join('');
+    const isEdit = mode === 'edit';
+    const heading = isEdit
+      ? `แก้ไขข้อมูลรถ — ${vehiclePlate(this.currentVehicle || {})}`
+      : 'เพิ่มรถใหม่';
 
     const modal = new Modal({
-      title: 'เพิ่มรถใหม่',
+      title: heading,
       size: 'lg',
       content: `
         <form id="vehicleForm" novalidate>
-          <div class="grid gap-4 md:grid-cols-2">
-            <div class="md:col-span-2">
-              <label for="vehPlate" class="!mt-0">ทะเบียนรถ <span class="text-red-500" aria-hidden="true">*</span></label>
-              <input id="vehPlate" type="text" placeholder="เช่น กข-1234 กรุงเทพฯ" autocomplete="off">
-              <p class="mt-1 hidden text-xs font-semibold text-red-600" id="vehPlateError" role="alert"></p>
-            </div>
-            <div>
-              <label for="vehBrand">ยี่ห้อ / รุ่น</label>
-              <input id="vehBrand" type="text" placeholder="เช่น Toyota Commuter">
-            </div>
-            <div>
-              <label for="vehType">ประเภทรถ / ชื่อเรียกประจำรถ</label>
-              <input id="vehType" type="text" placeholder="เช่น รถ Refer คันที่ 4">
-            </div>
-            <div>
-              <label for="vehStatus">สถานะรถ</label>
-              <select id="vehStatus">
-                <option value="available" selected>พร้อมใช้งาน</option>
-                <option value="maintenance">กำลังซ่อมบำรุง</option>
-                <option value="disabled">งดใช้งาน</option>
-              </select>
-            </div>
-            <div>
-              <label for="vehOdometer">เลขไมล์เริ่มต้น (กม.)</label>
-              <input id="vehOdometer" type="number" min="0" step="1" inputmode="numeric" placeholder="เช่น 45000">
-              <p class="mt-1 hidden text-xs font-semibold text-red-600" id="vehOdometerError" role="alert"></p>
-            </div>
-            <div class="md:col-span-2">
-              <label for="vehNotes">หมายเหตุเพิ่มเติม</label>
-              <textarea id="vehNotes" rows="2" placeholder="รายละเอียดเพิ่มเติม เช่น ประจำจุดใด ใช้งานช่วงไหน"></textarea>
-            </div>
-            <div class="md:col-span-2">
-              <label for="vehCopySource">คัดลอกรายการอุปกรณ์จากรถที่มีอยู่แล้ว</label>
-              <select id="vehCopySource">
-                <option value="">— ไม่คัดลอก —</option>
-                ${sourceOptions}
-              </select>
-              <p class="mt-1 text-xs leading-relaxed text-slate-500">เลือกได้เพื่อให้รถคันใหม่มีรายการอุปกรณ์พร้อมใช้ทันทีหลังบันทึก (คัดลอกเฉพาะรายการที่ใช้งานอยู่)</p>
-            </div>
-          </div>
+          ${this.vehicleFormFields(mode)}
         </form>
       `,
       onClose: () => { this._vehicleModal = null; },
     }).render();
 
     this._vehicleModal = modal;
+    modal._vehicleMode = mode;
 
     const actions = modal.element.querySelector('.sheet-actions');
     actions.innerHTML = `
       <button type="button" class="small-btn gray flex-1" data-action="cancel">ยกเลิก / ล้างข้อมูล</button>
-      <button type="button" class="flex-1" data-action="save">บันทึกข้อมูลรถใหม่</button>
+      <button type="button" class="flex-1" data-action="save">${isEdit ? 'บันทึกการแก้ไข' : 'บันทึกข้อมูลรถใหม่'}</button>
     `;
-    actions.querySelector('[data-action="cancel"]').onclick = () => this.cancelAddVehicle();
-    actions.querySelector('[data-action="save"]').onclick = () => this.handleAddVehicle();
+    actions.querySelector('[data-action="cancel"]').onclick = () => this.cancelVehicleForm();
+    actions.querySelector('[data-action="save"]').onclick = () => this.handleSaveVehicle(mode);
 
     const form = modal.element.querySelector('#vehicleForm');
     form.addEventListener('submit', (event) => {
       event.preventDefault();
-      this.handleAddVehicle();
+      this.handleSaveVehicle(mode);
     });
-    modal.element.querySelector('#vehPlate')?.addEventListener('input', () => this.setVehicleFieldError('vehPlate', ''));
-    modal.element.querySelector('#vehOdometer')?.addEventListener('input', () => this.setVehicleFieldError('vehOdometer', ''));
+    form.querySelector('#vehPlate')?.addEventListener('input', () => this.setVehicleFieldError('vehPlate', ''));
+    form.querySelector('#vehOdometer')?.addEventListener('input', () => this.setVehicleFieldError('vehOdometer', ''));
+
+    if (!isEdit) {
+      const source = form.querySelector('#vehItemSource');
+      const wrap = form.querySelector('#vehCopyWrap');
+      const copySel = form.querySelector('#vehCopySource');
+      const note = form.querySelector('#vehSeedNote');
+
+      const updateSeedNote = async () => {
+        if (!note) return;
+        const mode2 = source ? source.value : 'default';
+        if (mode2 === 'none') {
+          note.textContent = 'สร้างรถโดยไม่มีรายการอุปกรณ์ — ต้องเพิ่มเองทีหลัง';
+          return;
+        }
+        if (mode2 !== 'copy') {
+          note.textContent = 'ใช้ชุดอุปกรณ์มาตรฐานกลาง จึงยังไม่มี "ยอดคงเหลือบนรถ" ของคันใด — ต้องตรวจนับจริงบนคันใหม่'
+            + ' (เลือก "คัดลอกจาก รถคันอื่นที่มีอยู่แล้ว" ถ้าต้องการยกยอดมาด้วย)';
+          return;
+        }
+        const id = copySel ? copySel.value : '';
+        if (!id) {
+          note.textContent = 'เลือกรถต้นทางเพื่อพรีวิวจำนวนรายการและยอดคงเหลือที่จะคัดลอก';
+          return;
+        }
+        note.textContent = 'กำลังโหลดข้อมูลรถต้นทาง…';
+        try {
+          const isAdmin = window.auth && typeof window.auth.isAdmin === 'function' && window.auth.isAdmin();
+          const res = isAdmin ? await window.adminApi.getVehicle(id) : await window.vehicleApi.get(id);
+          const items = res.data?.items || [];
+          const withStock = items.filter(i => String(i.stock_updated_at || '').trim() !== '').length;
+          const resting = items.filter(i => i.active === false || i.active === 0).length;
+          note.textContent = `จะคัดลอก ${items.length} รายการ`
+            + ` • มียอดคงเหลือบนรถติดมา ${withStock} รายการ`
+            + (resting > 0 ? ` • สถานะ พักใช้งาน ${resting} รายการ` : '')
+            + ' — ตัวเลขที่ยกมาเป็นการคัดลอก ไม่ใช่การนับของจริงบนคันใหม่ ควรตรวจนับอีกครั้ง';
+        } catch (error) {
+          note.textContent = 'โหลดข้อมูลรถต้นทางไม่สำเร็จ — ระบบจะคัดลอกตามข้อมูลจริงเมื่อเซิร์ฟเวอร์ทำรายการสำเร็จ';
+        }
+      };
+
+      source?.addEventListener('change', () => {
+        wrap?.classList.toggle('hidden', source.value !== 'copy');
+        updateSeedNote();
+      });
+      copySel?.addEventListener('change', updateSeedNote);
+      updateSeedNote();
+    }
 
     modal.open();
+    form.querySelector('#vehPlate')?.focus();
+  }
+
+  showAddVehicleForm() {
+    this.openVehicleForm('create');
+  }
+
+  showEditVehicleForm() {
+    this.openVehicleForm('edit');
   }
 
   getVehicleFormEl() {
@@ -592,7 +916,7 @@ class VehiclesPage {
     }
   }
 
-  validateVehicleForm() {
+  validateVehicleForm(mode) {
     const form = this.getVehicleFormEl();
     if (!form) return null;
     const value = (id) => (form.querySelector('#' + id)?.value || '').trim();
@@ -620,38 +944,87 @@ class VehiclesPage {
       this.setVehicleFieldError('vehOdometer', '');
     }
 
+    const itemSource = mode === 'edit' ? '' : (form.querySelector('#vehItemSource')?.value || 'default');
+    const copySource = mode === 'edit' ? '' : (form.querySelector('#vehCopySource')?.value || '');
+    if (itemSource === 'copy' && copySource === '') {
+      window.toast.error('กรุณาเลือกรถต้นทางที่จะคัดลอกรายการอุปกรณ์');
+      form.querySelector('#vehCopySource')?.focus();
+      return null;
+    }
+
     if (firstInvalid) {
       form.querySelector('#' + firstInvalid)?.focus();
       window.toast.error('กรุณาตรวจสอบข้อมูลในฟอร์มอีกครั้ง');
       return null;
     }
 
-    return {
+    const payload = {
       plate,
       name: value('vehType'),
       brand_model: value('vehBrand'),
       status: form.querySelector('#vehStatus')?.value || 'available',
-      odometer_initial: odometerRaw === '' ? '' : Number(odometerRaw),
       notes: value('vehNotes'),
-      copy_source_vehicle_id: form.querySelector('#vehCopySource')?.value || '',
     };
+
+    // โหมด edit: ส่งเฉพาะฟิลด์ที่เปลี่ยนจริง (เซิร์ฟเวอร์ตรวจว่า "ไม่มีข้อมูลที่ต้องแก้ไข")
+    if (mode === 'edit') {
+      const v = this.currentVehicle || {};
+      const patch = {};
+      if (plate !== (v.plate || '')) patch.plate = plate;
+      if (payload.name !== (v.name || '')) patch.name = payload.name;
+      if (payload.brand_model !== (v.brand_model || '')) patch.brand_model = payload.brand_model;
+      if (payload.status !== (v.status || '')) patch.status = payload.status;
+      if (payload.notes !== (v.notes || '')) patch.notes = payload.notes;
+      if (odometerRaw !== '' && Number(odometerRaw) !== Number(v.odometer_initial ?? -1)) {
+        patch.odometer_initial = Number(odometerRaw);
+      }
+      if (Object.keys(patch).length === 0) {
+        window.toast.warning('ยังไม่มีข้อมูลที่ต้องแก้ไข');
+        return null;
+      }
+      return patch;
+    }
+
+    payload.item_source = itemSource;
+    if (itemSource === 'copy') payload.copy_source_vehicle_id = copySource;
+    if (odometerRaw !== '') payload.odometer_initial = Number(odometerRaw);
+    return payload;
   }
 
-  async handleAddVehicle() {
-    const payload = this.validateVehicleForm();
+  async handleSaveVehicle(mode) {
+    const payload = this.validateVehicleForm(mode);
     if (!payload) return;
 
     const saveBtn = this._vehicleModal?.element.querySelector('[data-action="save"]');
     if (saveBtn) UI.setLoading(saveBtn, true);
+
     try {
-      const res = await window.adminApi.createVehicle(payload);
+      if (mode === 'edit') {
+        const id = this.currentVehicleId;
+        await window.vehicleApi.update(id, payload);
+        this._vehicleModal?.destroy();
+        // renderVehicleSelect() เรียก onVehicleChange ให้เอง และรักษา คันเดิมที่เลือกไว้
+        await this.loadVehicles();
+        this.currentVehicleId = id;
+        this.renderVehicleSelect();
+        window.toast.success('บันทึกการแก้ไขรถแล้ว');
+        return;
+      }
+
+      const res = await window.vehicleApi.create(payload);
       const created = res.data || {};
-      const copied = created.copied_items || 0;
+      const items = Number(created.items_created || 0);
+      const stockCopied = Number(created.stock_copied || 0);
+      const inactive = Number(created.items_inactive || 0);
+      const sourceLabel = created.item_source_label || '';
       window.toast.success(
-        `เพิ่มรถใหม่แล้ว: ${created.name || payload.plate}` + (copied > 0 ? ` — คัดลอกอุปกรณ์ ${copied} รายการ` : '')
+        `เพิ่มรถใหม่แล้ว: ${created.name || created.plate || payload.plate}`
+        + (items > 0
+          ? ` — สร้างรายการอุปกรณ์ ${items} รายการ (${sourceLabel})`
+            + ` • คัดลอกยอดคงเหลือบนรถ ${stockCopied} รายการ`
+            + (inactive > 0 ? ` • พักใช้งาน ${inactive}` : '')
+          : ' — ยังไม่มีรายการอุปกรณ์เริ่มต้น')
       );
-      // destroy (not close) so the form node leaves the DOM — a hidden leftover
-      // would duplicate field IDs and shadow the next form's reads
       this._vehicleModal?.destroy();
       await this.loadVehicles();
       this.renderVehicleSelect();
@@ -668,13 +1041,14 @@ class VehiclesPage {
       if (errs.plate) this.setVehicleFieldError('vehPlate', first('plate'));
       if (errs.odometer_initial) this.setVehicleFieldError('vehOdometer', first('odometer_initial'));
       if (error.status === 409) this.setVehicleFieldError('vehPlate', error.message);
-      window.toast.error('เพิ่มรถไม่สำเร็จ: ' + (error.message || 'ไม่ทราบสาเหตุ'));
+      window.toast.error((mode === 'edit' ? 'แก้ไขรถไม่สำเร็จ: ' : 'เพิ่มรถไม่สำเร็จ: ')
+        + (error.message || 'ไม่ทราบสาเหตุ'));
     } finally {
       if (saveBtn) UI.setLoading(saveBtn, false);
     }
   }
 
-  async cancelAddVehicle() {
+  async cancelVehicleForm() {
     const form = this.getVehicleFormEl();
     const hasInput = ['vehPlate', 'vehBrand', 'vehType', 'vehOdometer', 'vehNotes']
       .some(id => (form?.querySelector('#' + id)?.value || '').trim() !== '');
@@ -686,6 +1060,107 @@ class VehiclesPage {
       if (!ok) return;
     }
     this._vehicleModal?.destroy();
+  }
+
+  // ---------- Delete vehicle (safety check: ประวัติตรวจ / งานเติมค้าง) ----------
+
+  async handleDeleteVehicle() {
+    const vehicle = this.currentVehicle || this.vehicles.find(v => v.id === this.currentVehicleId);
+    if (!vehicle) {
+      window.toast.warning('กรุณาเลือกรถก่อน');
+      return;
+    }
+
+    const label = vehiclePlate(vehicle);
+    const checks = Number(vehicle.check_count || 0);
+    const drafts = Number(vehicle.draft_count || 0);
+    const openRestock = Number(vehicle.open_restock_count || 0);
+    const restockTotal = Number(vehicle.restock_count || 0);
+    const items = Number(vehicle.active_item_count ?? vehicle.item_count ?? 0);
+    const hasHistory = (checks + drafts + restockTotal) > 0 || openRestock > 0;
+
+    // เซิร์ฟเวอร์เป็นผู้ตัดสินจริง (FK RESTRICT) — ด้านหน้าแค่เตือนไว้ก่อน
+    if (hasHistory) {
+      const details = [
+        checks > 0 ? `ประวัติการตรวจ ${checks} ครั้ง` : '',
+        drafts > 0 ? `ร่างงานตรวจ ${drafts} รายการ` : '',
+        openRestock > 0 ? `งานเติมที่ค้างอยู่ ${openRestock} งาน` : '',
+        restockTotal > openRestock ? `งานเติมทั้งหมด ${restockTotal} งาน` : '',
+        items > 0 ? `อุปกรณ์ประจำรถ ${items} รายการ` : '',
+      ].filter(Boolean).join(' • ');
+
+      const disableFirst = await window.confirmDialog(
+        `รถ “${label}” มีข้อมูลผูกอยู่ (${details})\n\n`
+        + 'การลบถาวรจะกระทบประวัติย้อนหลังของระบบ ระบบจึงแนะนำให้ "งดใช้งาน" แทน '
+        + '(รถจะหายจากเมนูเลือกสำหรับหน้าตรวจ แต่ข้อมูลเดิมยังอยู่ครบ)\n\n'
+        + 'กด "งดใช้งานแทน" เพื่อตั้งสถานะเป็น งดใช้งาน',
+        { title: 'รถมีประวัติผูกอยู่', confirmText: 'งดใช้งานแทน' }
+      );
+      if (disableFirst) {
+        await this.removeVehicle(label, 'disable');
+        return;
+      }
+      const force = await window.confirmDialog(
+        `ยังยืนยันจะลบ “${label}” ถาวรหรือไม่? ระบบจะปฏิเสธถ้ามีประวัติผูกอยู่จริง (409)`,
+        { title: 'ลบรถถาวร', confirmText: 'ลองลบถาวร' }
+      );
+      if (!force) return;
+      await this.removeVehicle(label, 'auto');
+      return;
+    }
+
+    const ok = await window.confirmDialog(
+      `ต้องการลบรถ “${label}” ถาวรหรือไม่? อุปกรณ์ประจำรถ ${items} รายการจะถูกลบไปด้วย และย้อนกลับไม่ได้`,
+      { title: 'ลบรถ', confirmText: 'ลบถาวร' }
+    );
+    if (!ok) return;
+    await this.removeVehicle(label, 'auto');
+  }
+
+  async removeVehicle(label, mode) {
+    const id = this.currentVehicleId;
+    if (!id) {
+      window.toast.warning('กรุณาเลือกรถก่อน');
+      return;
+    }
+
+    try {
+      const res = await window.vehicleApi.remove(id, { mode });
+      const result = res.data || {};
+      if (result.mode === 'deleted') {
+        window.toast.success(`ลบรถ “${result.name || label}” แล้ว`);
+      } else {
+        window.toast.success(`ตั้งสถานะ “${result.name || label}” เป็น งดใช้งานแล้ว (ประวัติเดิมยังอยู่ครบ)`);
+      }
+      // ล้างการเลือกคันที่ถูกลบออกก่อน แล้วให้ renderVehicleSelect() โหลดข้อมูลใหม่
+      this.currentVehicle = null;
+      this.currentVehicleId = null;
+      await this.loadVehicles();
+      this.renderVehicleSelect();
+      if (!this.vehicles.length) {
+        this.items = [];
+        this.renderItems();
+        this.renderVehicleMeta();
+      }
+    } catch (error) {
+      // 409 = เซิร์ฟเวอร์ตรวจพบข้อมูลผูก → เสนอ "งดใช้งาน" เป็นทางเลือกปลอดภัย
+      if (error.status === 409 && mode !== 'disable') {
+        const b = error.data?.blockers || {};
+        const summary = [
+          b.checks > 0 ? `ประวัติตรวจ ${b.checks}` : '',
+          b.drafts > 0 ? `ร่างงาน ${b.drafts}` : '',
+          b.restock_open > 0 ? `งานเติมค้าง ${b.restock_open}` : '',
+          b.restock_total > 0 ? `งานเติมทั้งหมด ${b.restock_total}` : '',
+        ].filter(Boolean).join(' • ');
+        const fallback = await window.confirmDialog(
+          `${error.message}\n\n(${summary || 'มีข้อมูลผูกอยู่'})\n\nเปลี่ยนเป็น "งดใช้งาน" แทนหรือไม่?`,
+          { title: 'ลบไม่ได้เพราะมีประวัติ', confirmText: 'งดใช้งานแทน' }
+        );
+        if (fallback) await this.removeVehicle(label, 'disable');
+        return;
+      }
+      window.toast.error('ลบรถไม่สำเร็จ: ' + (error.message || 'ไม่ทราบสาเหตุ'));
+    }
   }
 }
 

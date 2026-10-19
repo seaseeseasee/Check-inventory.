@@ -30,7 +30,11 @@ class NotificationCenter {
   async refresh() {
     if (!window.auth?.isAuthenticated) return;
     try {
-      const res = await window.restockApi.getAll();
+      // เดิมเรียก /api/restock ซึ่งสำหรับผู้ดูแลระบบเท่านั้น → บัญชี staff ได้ 400/403 แล้ว badges ไม่เคยขึ้น
+      // ใช้เส้นทางตามสิทธิ์เดียวกันกับหน้าเติมของ (staff → /api/staff/restock)
+      const res = (window.auth.isAdmin && window.auth.isAdmin())
+        ? await window.restockApi.getAll()
+        : await window.staffApi.getRestockRequests();
       const open = (res.data || []).filter(r => this.openStatuses.includes(r.status));
       this.setCount(open.length);
     } catch (error) {

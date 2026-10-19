@@ -22,16 +22,20 @@ const NURSE_IMPORT_INACTIVE_WORDS = ['พักใช้งาน', 'พัก',
 class NursesPage {
   constructor() {
     this.nurses = [];
+    this.departments = [];
     this.editingId = null;
     this.editingOriginal = null;
     this.editingLoginUsername = null;
+    this.pendingDeptId = null;
     this._importModal = null;
     this._importing = false;
+    this._wardModal = null;
+    this._wardFormModal = null;
     this.init();
   }
 
   async init() {
-    await this.loadNurses();
+    await Promise.all([this.loadNurses(), this.loadDepartments()]);
     this.bindEvents();
     this.render();
     if (!this.editingId) this.suggestCode();
@@ -45,6 +49,26 @@ class NursesPage {
       console.error('Failed to load nurses:', error);
       window.toast.error('โหลดรายชื่อพยาบาลไม่สำเร็จ');
     }
+  }
+
+  // ทะเบียนวอร์ดอ่านได้ทุก role ที่ login (หน้า dropdown ใช้ร่วมกัน) แต่เขียนได้เฉพาะ admin
+  async loadDepartments() {
+    try {
+      const res = await window.departmentApi.getAll();
+      this.departments = res.data || [];
+    } catch (error) {
+      console.error('โหลดทะเบียนวอร์ดไม่สำเร็จ:', error);
+      this.departments = [];
+      window.toast.error('โหลดทะเบียนวอร์ดไม่สำเร็จ');
+    }
+  }
+
+  isWardOn(ward) {
+    return ward?.active === true || ward?.active === 1 || ward?.active === '1';
+  }
+
+  wardNameSet() {
+    return new Set(this.departments.map((d) => String(d.name || '').trim().toLowerCase()));
   }
 
   // ---------- Formatting helpers ----------
@@ -94,6 +118,10 @@ class NursesPage {
       search.addEventListener('input', UI.debounce(() => this.filterTable(), 300));
     }
 
+    document.getElementById('nurseDeptFilter')?.addEventListener('change', () => this.filterTable());
+    document.getElementById('wardManagerBtn')?.addEventListener('click', () => this.openWardManager());
+    document.getElementById('deptQuickAddBtn')?.addEventListener('click', () => this.openQuickAddWard());
+
     // Code: generate button + live duplicate check
     document.getElementById('nurseCodeGenBtn')?.addEventListener('click', () => {
       this.suggestCode();
@@ -103,7 +131,7 @@ class NursesPage {
     const checkId = UI.debounce(() => this.validateField('nId'), 250);
     document.getElementById('nId')?.addEventListener('input', checkId);
     document.getElementById('nName')?.addEventListener('input', () => this.validateField('nName'));
-    document.getElementById('nDept')?.addEventListener('input', () => this.validateField('nDept'));
+    document.getElementById('nDept')?.addEventListener('change', () => this.validateField('nDept'));
     document.getElementById('nUsername')?.addEventListener('input', () => this.validateField('nUsername'));
     document.getElementById('nPassword')?.addEventListener('input', () => this.validateField('nPassword'));
 
@@ -215,7 +243,7 @@ class NursesPage {
     const requiredMsg = {
       nId: 'กรุณากรอกรหัสพยาบาล',
       nName: 'กรุณากรอกชื่อ–นามสกุล',
-      nDept: 'กรุณากรอกหน่วยงาน',
+      nDept: 'กรุณาเลือกหน่วยงาน / วอร์ด',
     }[name];
     if (requiredMsg && !value) {
       this.setFieldError(name, requiredMsg);
@@ -281,15 +309,66 @@ class NursesPage {
 
   render() {
     this.renderTable();
-    this.renderDeptList();
+    this.renderDeptSelect();
+    this.renderDeptFilter();
+    this.renderWardBadge();
     this.updateFormTitle();
   }
 
-  renderDeptList() {
-    const list = document.getElementById('nurseDeptList');
-    if (!list) return;
-    const depts = [...new Set(this.nurses.map((n) => (n.department || '').trim()).filter(Boolean))].sort();
-    list.innerHTML = depts.map((d) => `<option value="${UI.escape(d)}"></option>`).join('');
+  renderWardBadge() {
+    const badge = document.getElementById('wardManagerCount');
+    if (badge) badge.textContent = String(this.departments.length);
+  }
+
+  // ตัวเลือกวอร์ดของฟอร์มพยาบาล — ค่ามาจากทะเบียน master เท่านั้น
+  // choice = { id, legacy } (ไม่ต้องส่ง = เก็บค่าที่เลือกอยู่เดิม)
+  renderDeptSelect(choice = null) {
+    const select = document.getElementById('nDept');
+    if (!select) return;
+
+    if (!choice) {
+      const raw = select.value || '';
+      choice = raw.startsWith('legacy:')
+        ? { id: '', legacy: raw.slice(7) }
+        : { id: raw, legacy: '' };
+    }
+    if (this.pendingDeptId) {
+      choice = { id: this.pendingDeptId, legacy: '' };
+      this.pendingDeptId = null;
+    }
+
+    const on = [];
+    const off = [];
+    this.departments.forEach((d) => (this.isWardOn(d) ? on : off).push(d));
+    // วอร์ดที่ปิดใช้งาน: แสดงเฉพาะรายการที่พยาบาลรายนี้สังกัดอยู่เดิม เพื่อไม่ให้เผลอย้ายคนเข้าวอร์ดพัก
+    if (choice.id) {
+      const keep = off.findIndex((d) => String(d.id) === String(choice.id));
+      if (keep >= 0) on.push(off.splice(keep, 1)[0]);
+    }
+
+    const option = (d, suffix) => `<option value="${UI.escape(d.id)}">${UI.escape(d.name)} · ${Number(d.nurse_count) || 0} คน${suffix}</option>`;
+    const html = ['<option value="">— เลือกหน่วยงาน / วอร์ด —</option>'];
+    on.forEach((d) => html.push(option(d, this.isWardOn(d) ? '' : ' (พักใช้งาน)')));
+    if (choice.legacy) {
+      html.push(`<optgroup label="ค่าเดิมในทะเบียน (ยังไม่มีในรายการวอร์ด)">`
+        + `<option value="legacy:${UI.escape(choice.legacy)}">${UI.escape(choice.legacy)}</option></optgroup>`);
+    }
+
+    select.innerHTML = html.join('');
+    select.value = choice.legacy ? 'legacy:' + choice.legacy : (choice.id || '');
+  }
+
+  renderDeptFilter() {
+    const select = document.getElementById('nurseDeptFilter');
+    if (!select) return;
+    const current = select.value;
+    const names = [...new Set([
+      ...this.departments.map((d) => String(d.name || '').trim()).filter(Boolean),
+      ...this.nurses.map((n) => String(n.department || '').trim()).filter(Boolean),
+    ])].sort((a, b) => a.localeCompare(b, 'th'));
+    select.innerHTML = '<option value="">ทุกวอร์ด</option>'
+      + names.map((name) => `<option value="${UI.escape(name)}">${UI.escape(name)}</option>`).join('');
+    if (names.includes(current)) select.value = current;
   }
 
   renderTable() {
@@ -297,15 +376,18 @@ class NursesPage {
     if (!container) return;
 
     container.innerHTML = this.nurses.map((nurse, index) => `
-      <article class="nurse-card" data-id="${nurse.id}">
+      <article class="nurse-card" data-id="${nurse.id}" data-dept="${UI.escape((nurse.department || '').trim())}">
         <div class="nurse-top">
           <div style="flex:1;min-width:0">
             <div class="nurse-name">${UI.escape(nurse.name)}</div>
-            <div class="nurse-sub">รหัส ${UI.escape(nurse.id)} • ${UI.escape(nurse.department)}</div>
+            <div class="nurse-sub">รหัส ${UI.escape(nurse.id)}</div>
           </div>
-          <span class="chip ${nurse.active ? 'chip-ok' : 'chip-off'}">
-            ${nurse.active ? 'ปฏิบัติงาน' : 'พักใช้งาน'}
-          </span>
+          <div class="nurse-badges">
+            <span class="chip chip-info ward-chip">${UI.escape((nurse.department || '').trim() || 'ไม่ระบุวอร์ด')}</span>
+            <span class="chip ${nurse.active ? 'chip-ok' : 'chip-off'}">
+              ${nurse.active ? 'ปฏิบัติงาน' : 'พักใช้งาน'}
+            </span>
+          </div>
         </div>
         <div class="nurse-meta">
           ${nurse.phone ? `<span>📞 ${UI.escape(nurse.phone)}</span>` : ''}
@@ -324,11 +406,25 @@ class NursesPage {
   }
 
   filterTable() {
-    const query = document.getElementById('nurseSearch')?.value?.toLowerCase() || '';
+    const query = document.getElementById('nurseSearch')?.value?.toLowerCase().trim() || '';
+    const dept = document.getElementById('nurseDeptFilter')?.value || '';
+    let shown = 0;
+
     document.querySelectorAll('#nurseDirectoryTable .nurse-card').forEach((card) => {
-      const text = card.textContent.toLowerCase();
-      card.classList.toggle('hidden', !text.includes(query));
+      const matchDept = !dept || card.dataset.dept === dept;
+      const matchText = !query || card.textContent.toLowerCase().includes(query);
+      const hide = !(matchDept && matchText);
+      card.classList.toggle('hidden', hide);
+      if (!hide) shown++;
     });
+
+    const note = document.getElementById('nurseFilterNote');
+    if (note) {
+      const filtering = Boolean(query || dept);
+      const text = filtering ? `แสดง ${shown} รายชื่อ${dept ? ` จากวอร์ด ${dept}` : ''}` : '';
+      note.textContent = text;
+      note.classList.toggle('hidden', !text);
+    }
   }
 
   // ---------- Form state ----------
@@ -344,7 +440,6 @@ class NursesPage {
     if (genBtn) genBtn.disabled = true;
 
     document.getElementById('nName').value = nurse.name || '';
-    document.getElementById('nDept').value = nurse.department || '';
     document.getElementById('nPhone').value = nurse.phone || '';
     document.getElementById('nActive').value = nurse.active ? 'true' : 'false';
     document.getElementById('nNote').value = nurse.note || '';
@@ -353,6 +448,12 @@ class NursesPage {
     document.getElementById('nPassword').value = '';
     this.editingLoginUsername = nurse.login_username || null;
     this.renderLoginStatus();
+
+    // ผูกกับวอร์ดจาก FK เดิม ถ้าแถวนี้ยังไม่มี FK (ข้อมูลเก่า) ให้เลือกด้วยชื่อเดิมและแจ้งเป็น legacy option
+    this.renderDeptSelect({
+      id: String(nurse.department_id || ''),
+      legacy: nurse.department_id ? '' : String(nurse.department || '').trim(),
+    });
 
     const startEl = document.getElementById('nStart');
     startEl.value = NursesPage.isIsoDate(nurse.start_text) ? nurse.start_text : '';
@@ -382,7 +483,6 @@ class NursesPage {
     if (genBtn) genBtn.disabled = false;
 
     document.getElementById('nName').value = '';
-    document.getElementById('nDept').value = '';
     document.getElementById('nPhone').value = '';
     document.getElementById('nActive').value = 'true';
     document.getElementById('nStart').value = '';
@@ -393,6 +493,7 @@ class NursesPage {
     this.editingLoginUsername = null;
     this.renderLoginStatus();
     document.getElementById('nStartLegacy')?.classList.add('hidden');
+    this.renderDeptSelect({ id: '', legacy: '' });
 
     this.clearAllErrors();
     this.updateFormTitle();
@@ -424,7 +525,7 @@ class NursesPage {
   }
 
   applyServerFieldErrors(errors) {
-    const map = { username: 'nUsername', password: 'nPassword' };
+    const map = { username: 'nUsername', password: 'nPassword', department_id: 'nDept', department: 'nDept' };
     let applied = false;
     Object.entries(map).forEach(([serverField, fieldId]) => {
       const message = errors[serverField];
@@ -453,10 +554,15 @@ class NursesPage {
 
     const startIso = document.getElementById('nStart').value || '';
     const original = this.editingOriginal;
+    const pickedDept = document.getElementById('nDept').value;
+    // ค่า "legacy:" = ข้อมูลเก่าที่ยังไม่ผูก FK — ส่งชื่อเดิมไปให้เซิร์ฟเวอร์จับคู่กับทะเบียนวอร์ด
+    const legacyDept = pickedDept.startsWith('legacy:') ? pickedDept.slice(7) : '';
+
     const data = {
       id: document.getElementById('nId').value.trim(),
       name: document.getElementById('nName').value.trim(),
-      department: document.getElementById('nDept').value.trim(),
+      department_id: legacyDept ? '' : pickedDept,
+      department: legacyDept,
       phone: document.getElementById('nPhone').value.trim(),
       start_text: startIso || (original ? (original.start_text || '') : ''),
       end_text: startIso
@@ -500,8 +606,246 @@ class NursesPage {
 
     // resetForm ต้องทำงานหลัง setLoading(false) ไม่งั้นข้อความปุ่มจะถูกทับกลับเป็นค่าเดิม
     this.resetForm();
-    await this.loadNurses();
+    await Promise.all([this.loadNurses(), this.loadDepartments()]);
     this.render();
+  }
+
+  // ---------- ทะเบียนวอร์ด (Ward / Department management) ----------
+
+  // โหลดทั้งทะเบียนวอร์ดและรายชื่อพยาบาลใหม่ แล้วเรนเดอร์ modal จัดการวอร์ดให้ตรงข้อมูลจริง
+  // (จำนวนสังกัดและชื่อที่ cascade เปลี่ยนมีผลกับทั้งสองฝั่ง จึงต้องอ่านพร้อมกัน)
+  async refreshWards() {
+    await Promise.all([this.loadDepartments(), this.loadNurses()]);
+    this.render();
+    if (this._wardModal) this.renderWardList();
+  }
+
+  openWardManager() {
+    this._wardModal?.destroy();
+    const modal = new Modal({
+      title: 'จัดการวอร์ด / หน่วยงาน',
+      content: '<div id="wardManagerBody" class="ward-manager"></div>',
+      size: 'lg',
+      onClose: () => { this._wardModal = null; },
+    });
+    modal.render();
+    this._wardModal = modal;
+
+    const actions = modal.element.querySelector('.sheet-actions');
+    actions.innerHTML = '';
+    const closeBtn = UI.create('button', { type: 'button', class: 'small-btn gray flex-1' }, 'ปิด');
+    closeBtn.addEventListener('click', () => modal.destroy());
+    const addBtn = UI.create('button', { type: 'button', class: 'flex-1' }, '+ เพิ่มวอร์ดใหม่');
+    addBtn.addEventListener('click', () => this.openWardForm('create', null));
+    actions.append(closeBtn, addBtn);
+
+    modal.open();
+    this.renderWardList();
+    this.refreshWards();
+  }
+
+  renderWardList() {
+    const body = this._wardModal?.element?.querySelector('#wardManagerBody');
+    if (!body) return;
+
+    if (!this.departments.length) {
+      body.innerHTML = '<p class="empty">ยังไม่มีวอร์ดในทะเบียน — กด "+ เพิ่มวอร์ดใหม่" เพื่อเริ่มใช้งาน</p>';
+      return;
+    }
+
+    body.innerHTML = `
+      <p class="mb-3 text-xs leading-relaxed text-slate-500">
+        แก้ชื่อแล้วระบบจะเปลี่ยนชื่อในรายชื่อพยาบาลที่สังกัดให้ทั้งหมด (อยู่ใน transaction เดียวกัน) •
+        วอร์ดที่มีพยาบาลสังกัดอยู่จะถูกให้ลบไม่ได้ เพื่อไม่ให้สังกัดหลุดลอย — ใช้ "พักใช้งาน" แทน
+        วอร์ดที่พักใช้งานจะหายจากตัวเลือกรายชื่อใหม่ แต่สังกัดเดิมของพยาบาลยังแสดงอยู่
+      </p>
+      <div class="ward-list">
+        ${this.departments.map((ward, index) => `
+          <div class="ward-row${this.isWardOn(ward) ? '' : ' is-off'}">
+            <div class="min-w-0 flex-1">
+              <div class="ward-name">
+                ${UI.escape(ward.name)}
+                ${this.isWardOn(ward) ? '' : '<span class="chip chip-off">พักใช้งาน</span>'}
+              </div>
+              <div class="ward-sub">
+                พยาบาลสังกัด ${Number(ward.nurse_count) || 0} คน${ward.notes ? ' • ' + UI.escape(ward.notes) : ''}
+              </div>
+            </div>
+            <div class="ward-actions">
+              <button type="button" class="small-btn" data-ward-action="edit" data-index="${index}">แก้ไข</button>
+              <button type="button" class="small-btn gray" data-ward-action="toggle" data-index="${index}">
+                ${this.isWardOn(ward) ? 'พักใช้งาน' : 'เปิดใช้งาน'}
+              </button>
+              <button type="button" class="small-btn red" data-ward-action="delete" data-index="${index}">ลบ</button>
+            </div>
+          </div>`).join('')}
+      </div>`;
+
+    body.querySelectorAll('[data-ward-action]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const ward = this.departments[Number(btn.dataset.index)];
+        if (!ward) return;
+        if (btn.dataset.wardAction === 'edit') this.openWardForm('edit', ward);
+        else if (btn.dataset.wardAction === 'toggle') this.toggleWard(ward);
+        else this.deleteWard(ward);
+      });
+    });
+  }
+
+  // ปุ่ม "+" ข้าง dropdown — เพิ่มวอร์ดแล้วเลือกให้เลยในฟอร์มพยาบาล
+  openQuickAddWard() {
+    this.pendingDeptId = null;
+    this.openWardForm('create', null, (ward) => { this.pendingDeptId = ward.id; });
+  }
+
+  openWardForm(mode, ward, onSaved = null) {
+    const editing = mode === 'edit';
+    this._wardFormModal?.destroy();
+
+    const modal = new Modal({
+      title: editing ? `แก้ไขวอร์ด “${ward.name}”` : 'เพิ่มวอร์ดใหม่',
+      content: `
+        <form id="wardForm" class="grid gap-3" novalidate>
+          <div>
+            <label class="!mt-0" for="wName">ชื่อวอร์ด / หน่วยงาน <span class="text-red-500" aria-hidden="true">*</span></label>
+            <input id="wName" type="text" maxlength="100" placeholder="เช่น ER, ICU, OPD, IPD" autocomplete="off"
+                   value="${editing ? UI.escape(ward.name) : ''}">
+            <p class="mt-1 text-xs leading-relaxed text-slate-500">ห้ามซ้ำกับวอร์ดอื่น (ระบบเทียบแบบไม่สนตัวพิมพ์เล็ก-ใหญ่และช่องว่างหัว-ท้าย)</p>
+            ${editing ? `<p class="mt-1 text-xs leading-relaxed text-amber-700">เปลี่ยนชื่อ → ระบบจะแก้ชื่อในรายชื่อพยาบาลที่สังกัดวอร์ดนี้ ${Number(ward.nurse_count) || 0} คนให้อัตโนมัติ</p>` : ''}
+            <p class="mt-1 hidden text-xs font-semibold text-red-600" id="wNameError" role="alert"></p>
+          </div>
+          <div>
+            <label class="!mt-0" for="wNotes">รายละเอียดเพิ่มเติม</label>
+            <textarea id="wNotes" rows="2" maxlength="500" placeholder="เช่น รับผิดชอบรถ Refer คันที่ 1-2">${editing ? UI.escape(ward.notes || '') : ''}</textarea>
+          </div>
+          <label class="ward-active-toggle">
+            <input id="wActive" type="checkbox">
+            <span>เปิดใช้งาน — ถ้าปิด วอร์ดจะไม่อยู่ในตัวเลือกรายชื่อใหม่ แต่สังกัดเดิมของพยาบาลยังอยู่ครบ</span>
+          </label>
+        </form>`,
+      size: 'md',
+      onClose: () => { this._wardFormModal = null; },
+    });
+    modal.render();
+    this._wardFormModal = modal;
+
+    modal.element.querySelector('#wActive').checked = !editing || this.isWardOn(ward);
+
+    const actions = modal.element.querySelector('.sheet-actions');
+    actions.innerHTML = '';
+    const cancelBtn = UI.create('button', { type: 'button', class: 'small-btn gray flex-1' }, 'ยกเลิก');
+    cancelBtn.addEventListener('click', () => modal.destroy());
+    const saveBtn = UI.create('button', { type: 'button', class: 'flex-1' }, editing ? 'บันทึกการแก้ไข' : 'เพิ่มวอร์ด');
+    saveBtn.addEventListener('click', () => this.submitWardForm(modal, saveBtn, mode, ward, onSaved));
+    actions.append(cancelBtn, saveBtn);
+
+    modal.open();
+  }
+
+  setWardNameError(message) {
+    const err = document.getElementById('wNameError');
+    const input = document.getElementById('wName');
+    if (!err || !input) return;
+    err.textContent = message || '';
+    err.classList.toggle('hidden', !message);
+    input.setAttribute('aria-invalid', message ? 'true' : 'false');
+  }
+
+  async submitWardForm(modal, saveBtn, mode, ward, onSaved) {
+    const name = (document.getElementById('wName')?.value || '').trim();
+    if (!name) { this.setWardNameError('กรุณากรอกชื่อวอร์ด'); return; }
+    if (name.length > 100) { this.setWardNameError('ชื่อวอร์ดยาวเกิน 100 ตัวอักษร'); return; }
+
+    const payload = {
+      name,
+      notes: (document.getElementById('wNotes')?.value || '').trim(),
+      active: Boolean(document.getElementById('wActive')?.checked),
+    };
+
+    UI.setLoading(saveBtn, true);
+    let saved;
+    try {
+      const res = mode === 'edit'
+        ? await window.departmentApi.update(ward.id, payload)
+        : await window.departmentApi.create(payload);
+      saved = res.data || { name };
+    } catch (error) {
+      UI.setLoading(saveBtn, false);
+      if (error.status === 409 && error.data?.reason === 'name_exists') {
+        this.setWardNameError('มีวอร์ดชื่อนี้อยู่แล้ว: ' + (error.data?.existing?.name || name));
+      } else if (error.status === 422 && error.data?.errors) {
+        const messages = Object.values(error.data.errors).flat().filter(Boolean);
+        this.setWardNameError(messages[0] || error.message);
+      } else {
+        window.toast.error('บันทึกวอร์ดไม่สำเร็จ: ' + error.message);
+      }
+      return;
+    }
+
+    modal.destroy();
+    this._wardFormModal = null;
+
+    if (onSaved) onSaved(saved);
+
+    const renamed = mode === 'edit' && String(saved.name) !== String(ward.name);
+    window.toast.success(
+      mode === 'edit'
+        ? `บันทึกวอร์ด “${saved.name}” แล้ว` + (renamed ? ` · อัปเดตชื่อในรายชื่อพยาบาล ${Number(saved.nurses_updated) || 0} คน` : '')
+        : `เพิ่มวอร์ด “${saved.name}” แล้ว`
+    );
+    await this.refreshWards();
+  }
+
+  async toggleWard(ward) {
+    const on = this.isWardOn(ward);
+    try {
+      const res = await window.departmentApi.update(ward.id, { active: !on });
+      const name = res.data?.name || ward.name;
+      window.toast.success(on
+        ? `พักใช้งานวอร์ด “${name}” แล้ว — สังกัดเดิมของพยาบาลยังอยู่ครบ`
+        : `เปิดใช้งานวอร์ด “${name}” แล้ว`);
+      await this.refreshWards();
+    } catch (error) {
+      window.toast.error('เปลี่ยนสถานะวอร์ดไม่สำเร็จ: ' + error.message);
+    }
+  }
+
+  // เซิร์ฟเวอร์เป็นผู้ตัดสินจริง (FK RESTRICT + นับจำนวนสังกัด) — ด้านหน้าแค่เตือนไว้ก่อน
+  async deleteWard(ward) {
+    const count = Number(ward.nurse_count) || 0;
+    if (count > 0) {
+      const disable = await window.confirmDialog(
+        `วอร์ด “${ward.name}” มีพยาบาลสังกัดอยู่ ${count} คน จึงลบไม่ได้เพื่อไม่ให้สังกัดหลุดลอย\n\n`
+        + 'กด "พักใช้งานแทน" เพื่อให้วอร์ดหายจากตัวเลือกรายชื่อใหม่ โดยข้อมูลเดิมยังอยู่ครบ',
+        { title: 'ลบวอร์ดไม่ได้', confirmText: 'พักใช้งานแทน' }
+      );
+      if (disable) await this.toggleWard(ward);
+      return;
+    }
+
+    const ok = await window.confirmDialog(
+      `ลบวอร์ด “${ward.name}” ถาวรหรือไม่? วอร์ดนี้ไม่มีพยาบาลสังกัด จึงไม่มีข้อมูลอื่นถูกกระทบ และย้อนกลับไม่ได้`,
+      { title: 'ลบวอร์ด', confirmText: 'ลบถาวร' }
+    );
+    if (!ok) return;
+
+    try {
+      await window.departmentApi.remove(ward.id, { mode: 'auto' });
+      window.toast.success(`ลบวอร์ด “${ward.name}” แล้ว`);
+    } catch (error) {
+      // 409 = มีพยาบาลสังกัดเข้ามาพอดีระหว่างที่กรอก → เสนอทางปลอดภัย
+      if (error.status === 409 && error.data?.reason === 'department_in_use') {
+        const fallback = error.data?.suggestion === 'disable' && await window.confirmDialog(
+          `${error.message}\n\nเปลี่ยนเป็น "พักใช้งาน" แทนหรือไม่?`,
+          { title: 'ลบไม่ได้เพราะมีพยาบาลสังกัด', confirmText: 'พักใช้งานแทน' }
+        );
+        if (fallback) await this.toggleWard({ ...ward, active: true });
+        return;
+      }
+      window.toast.error('ลบวอร์ดไม่สำเร็จ: ' + error.message);
+      return;
+    }
+    await this.refreshWards();
   }
 
   // ---------- Import ----------
@@ -685,8 +1029,10 @@ class NursesPage {
       ready: 0,
       dupes: 0,
       invalid: 0,
+      newWards: new Set(),
     };
 
+    const knownWards = this.wardNameSet();
     const seenIds = new Map();
     for (const { rowNo, raw } of dataRows) {
       const cell = (key) => (columnMap[key] ? raw[columnMap[key].col] : '');
@@ -707,6 +1053,10 @@ class NursesPage {
       else if (name.length > 255) entry.errors.push('ชื่อยาวเกิน 255 ตัวอักษร');
       if (!department) entry.errors.push('ไม่มีหน่วยงาน');
       else if (department.length > 255) entry.errors.push('หน่วยงานยาวเกิน 255 ตัวอักษร');
+      else if (!knownWards.has(department.toLowerCase())) {
+        entry.warnings.push('ยังไม่มีในทะเบียนวอร์ด — ระบบจะเพิ่มเป็นวอร์ดใหม่ให้อัตโนมัติ');
+        preview.newWards.add(department);
+      }
 
       // เบอร์โทรที่เป็นตัวเลขล้วน 8-9 หลัก (เซลล์ Excel หรือ CSV) มักเสีย 0 ตัวหน้า — เติมคืน
       let phone = NursesPage.cellText(cell('phone'));
@@ -834,6 +1184,10 @@ class NursesPage {
     if (preview.unknownHeaders.length) {
       topNotes.push(`คอลัมน์ที่ไม่รู้จัก (จะถูกข้าม): ${preview.unknownHeaders.map(esc).join(', ')}`);
     }
+    if (preview.newWards.size) {
+      topNotes.push(`หน่วยงานใหม่ที่จะถูกบันทึกลงทะเบียนวอร์ด ${preview.newWards.size} รายการ: `
+        + [...preview.newWards].map(esc).join(', '));
+    }
 
     const content = `
       <div class="text-sm text-slate-700">
@@ -942,7 +1296,7 @@ class NursesPage {
       window.toast.error(failureNotes.length ? 'นำเข้าไม่สำเร็จ — ' + failureNotes[0] : 'ไม่มีแถวที่นำเข้าสำเร็จ');
     }
 
-    await this.loadNurses();
+    await Promise.all([this.loadNurses(), this.loadDepartments()]);
     this.render();
   }
 

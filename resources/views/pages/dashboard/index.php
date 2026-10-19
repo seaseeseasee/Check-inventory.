@@ -57,7 +57,10 @@
 
     <div id="inspectionItemTable" class="list"></div>
 
-    <div class="save-bar"><button type="button" class="secondary" onclick="submitInspection()">💾 บันทึกผลตรวจ</button></div>
+    <div class="save-bar">
+      <p id="inspectionSaveHint" class="save-hint"></p>
+      <button id="inspectionSubmitBtn" type="button" class="secondary" onclick="submitInspection()">💾 บันทึกผลตรวจ</button>
+    </div>
   </div>
 </div>
 
@@ -104,10 +107,19 @@
 <div id="tabContentStock" class="hidden">
   <div class="card">
     <h2>ทะเบียนรถและอุปกรณ์ประจำรถ</h2>
-    <label for="stockCar">เลือกรถ</label>
-    <select id="stockCar"></select>
-    <p>จำนวนและวันหมดอายุแยกตามรถแต่ละคัน</p>
-    
+
+    <div class="vehicle-pick">
+      <div class="vehicle-pick-main">
+        <label for="stockCar">เลือกรถ</label>
+        <select id="stockCar"></select>
+      </div>
+      <div class="vehicle-pick-actions">
+        <button type="button" id="btnEditVehicle" class="small-btn secondary">✏️ แก้ไขข้อมูลรถ</button>
+        <button type="button" id="btnDeleteVehicle" class="small-btn danger">🗑 ลบรถ</button>
+      </div>
+    </div>
+    <p id="stockCarMeta" class="vehicle-meta">จำนวนและวันหมดอายุแยกตามรถแต่ละคัน</p>
+
     <div id="addItemForm" class="hidden">
       <h3>เพิ่มอุปกรณ์ใหม่</h3>
       <form id="stockAddForm">
@@ -116,6 +128,10 @@
           <div><label for="stockStandard">จำนวนมาตรฐาน</label><input id="stockStandard" placeholder="จำนวนมาตรฐาน เช่น 10 หรือ 1 ชุด" required></div>
           <div><label for="stockExpiry">วันหมดอายุ</label><input id="stockExpiry" type="date"></div>
           <div><label for="stockBattery">เป็นแบตเตอรี่</label><select id="stockBattery"><option value="false">ไม่ใช่</option><option value="true">ใช่</option></select></div>
+          <div>
+            <label for="stockOnboard">ยอดคงเหลือบนรถ (ชิ้น)</label>
+            <input id="stockOnboard" type="number" min="0" step="any" inputmode="decimal" placeholder="เว้นว่าง = ยังไม่ตรวจนับ">
+          </div>
           <div>
             <label for="stockCurrent">สต็อกปัจจุบันในคลัง</label>
             <input id="stockCurrent" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 20 (เว้นว่าง = ไม่แตะคลัง)">
@@ -151,6 +167,7 @@
         <span id="copyPreviewCount" class="chip chip-warn"></span>
       </div>
       <p class="copy-preview-note">ยังไม่ถูกบันทึก — ตรวจสอบ/แก้ไขรายการ แล้วกด “ยืนยันคัดลอก”</p>
+      <p id="copyPreviewStock" class="copy-preview-stock hidden"></p>
       <div id="copyPreviewList"></div>
       <div class="copy-preview-actions">
         <button type="button" id="btnCopyCancel" class="small-btn gray">ยกเลิกรายการคัดลอก</button>
@@ -214,8 +231,15 @@
 <!-- Nurses Tab -->
 <div id="tabContentNurses" class="hidden">
   <div class="card">
-    <h2>จัดการพยาบาลเวร Refer</h2>
-    <p>ทะเบียนนี้จัดเก็บในฐานข้อมูลของระบบ เพิ่มหรือแก้ไขได้โดยไม่ต้องแก้โค้ด</p>
+    <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
+      <div>
+        <h2>จัดการพยาบาลเวร Refer</h2>
+        <p>ทะเบียนนี้จัดเก็บในฐานข้อมูลของระบบ เพิ่มหรือแก้ไขได้โดยไม่ต้องแก้โค้ด</p>
+      </div>
+      <button type="button" id="wardManagerBtn" class="m-0 inline-flex w-auto min-h-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-200 hover:bg-slate-100 focus:outline-none focus:ring-4 focus:ring-slate-200">
+        🏥 จัดการวอร์ด <span id="wardManagerCount" class="rounded-full bg-slate-100 px-1.5 text-[11px] font-bold text-slate-600"></span>
+      </button>
+    </div>
 
     <form id="nurseForm" novalidate>
       <h3 id="nurseFormTitle">เพิ่มพยาบาลใหม่</h3>
@@ -253,10 +277,12 @@
           </div>
 
           <div>
-            <label class="!mt-0" for="nDept">หน่วยงาน <span class="text-red-500" aria-hidden="true">*</span></label>
-            <input id="nDept" type="text" list="nurseDeptList" placeholder="เช่น ER, IPD, OPD" required>
-            <datalist id="nurseDeptList"></datalist>
-            <p class="mt-1 text-xs leading-relaxed text-slate-500">เลือกจากหน่วยงานเดิมหรือพิมพ์ใหม่ได้</p>
+            <label class="!mt-0" for="nDept">หน่วยงาน / วอร์ด <span class="text-red-500" aria-hidden="true">*</span></label>
+            <div class="flex gap-2">
+              <select id="nDept" class="min-w-0 flex-1" required></select>
+              <button type="button" id="deptQuickAddBtn" title="เพิ่มวอร์ดใหม่เข้าไปในทะเบียนทันที" class="m-0 w-auto min-h-0 shrink-0 whitespace-nowrap rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition-colors duration-200 hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-teal-200">+ วอร์ด</button>
+            </div>
+            <p class="mt-1 text-xs leading-relaxed text-slate-500">เลือกจากทะเบียนวอร์ด — กด "+ วอร์ด" เพื่อเพิ่มหน่วยงานใหม่ หรือ "จัดการวอร์ด" เพื่อแก้ชื่อ/ปิดใช้งาน</p>
             <p class="mt-1 hidden text-xs font-semibold text-red-600" id="nDeptError" role="alert"></p>
           </div>
 
@@ -340,9 +366,11 @@
       </div>
     </div>
     
-    <div class="search-box">
-      <input type="text" id="nurseSearch" placeholder="🔍 ค้นหาด้วย ชื่อ, สกุล หรือหน่วยงาน...">
+    <div class="search-box flex flex-wrap items-center gap-2">
+      <input type="text" id="nurseSearch" placeholder="🔍 ค้นหาด้วย ชื่อ, สกุล หรือหน่วยงาน..." class="min-w-0 flex-1">
+      <select id="nurseDeptFilter" aria-label="กรองรายชื่อตามวอร์ด" class="w-auto min-w-0 shrink-0 whitespace-nowrap"></select>
     </div>
+    <p id="nurseFilterNote" class="hidden mb-2 text-xs font-semibold text-teal-700"></p>
     
     <div id="nurseDirectoryTable" class="list"></div>
   </div>

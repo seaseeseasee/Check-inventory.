@@ -112,6 +112,13 @@ $route = match (true) {
     preg_match('/^\/api\/stock\/([^\/]+)\/receive$/', $path, $matches) && $method === 'POST' => ['StockController', 'receive', $matches[1]],
     preg_match('/^\/api\/stock\/([^\/]+)\/adjust$/', $path, $matches) && $method === 'POST' => ['StockController', 'adjust', $matches[1]],
 
+    // Wards/departments (ทะเบียนวอร์ด/หน่วยงานของตารางพยาบาล)
+    // อ่าน: ทุก role ที่ login แล้ว — เขียน: ตรวจ role admin ที่ DepartmentController อีกชั้น
+    $path === '/api/departments' && $method === 'GET' => ['DepartmentController', 'index'],
+    $path === '/api/departments' && $method === 'POST' => ['DepartmentController', 'store'],
+    preg_match('/^\/api\/departments\/([^\/]+)$/', $path, $matches) && $method === 'PUT' => ['DepartmentController', 'update', $matches[1]],
+    preg_match('/^\/api\/departments\/([^\/]+)$/', $path, $matches) && $method === 'DELETE' => ['DepartmentController', 'destroy', $matches[1]],
+
     // Legacy routes (for backward compatibility)
     $path === '/api/dashboard' && $method === 'GET' => ['DashboardController', 'index'],
     $path === '/api/dashboard/stats' && $method === 'GET' => ['DashboardController', 'stats'],
@@ -122,11 +129,15 @@ $route = match (true) {
     preg_match('/^\/api\/nurses\/([^\/]+)$/', $path, $matches) && $method === 'DELETE' => ['NurseController', 'destroy', $matches[1]],
 
     $path === '/api/vehicles' && $method === 'GET' => ['VehicleController', 'index'],
+    $path === '/api/vehicles' && $method === 'POST' => ['VehicleController', 'store'],
     preg_match('/^\/api\/vehicles\/([^\/]+)$/', $path, $matches) && $method === 'GET' => ['VehicleController', 'show', $matches[1]],
+    preg_match('/^\/api\/vehicles\/([^\/]+)$/', $path, $matches) && $method === 'PUT' => ['VehicleController', 'update', $matches[1]],
+    preg_match('/^\/api\/vehicles\/([^\/]+)$/', $path, $matches) && $method === 'DELETE' => ['VehicleController', 'destroy', $matches[1]],
     preg_match('/^\/api\/vehicles\/([^\/]+)\/items$/', $path, $matches) && $method === 'GET' => ['VehicleController', 'show', $matches[1]],
     preg_match('/^\/api\/vehicles\/([^\/]+)\/items$/', $path, $matches) && $method === 'POST' => ['VehicleController', 'addItem', $matches[1]],
     preg_match('/^\/api\/vehicles\/([^\/]+)\/items\/copy$/', $path, $matches) && $method === 'POST' => ['VehicleController', 'copyItems', $matches[1]],
     preg_match('/^\/api\/items\/([^\/]+)$/', $path, $matches) && $method === 'PUT' => ['VehicleController', 'updateItem', $matches[1]],
+    preg_match('/^\/api\/items\/([^\/]+)$/', $path, $matches) && $method === 'DELETE' => ['VehicleController', 'deleteItem', $matches[1]],
 
     $path === '/api/inspections' && $method === 'GET' => ['InspectionController', 'index'],
     preg_match('/^\/api\/inspections\/([^\/]+)$/', $path, $matches) && $method === 'GET' => ['InspectionController', 'show', $matches[1]],
@@ -136,12 +147,8 @@ $route = match (true) {
 
     $path === '/api/restock' && $method === 'GET' => ['RestockController', 'index'],
     preg_match('/^\/api\/restock\/([^\/]+)$/', $path, $matches) && $method === 'GET' => ['RestockController', 'show', $matches[1]],
-    $path === '/api/restock/draft' && $method === 'POST' => ['RestockController', 'createDraft'],
-    preg_match('/^\/api\/restock\/([^\/]+)\/draft$/', $path, $matches) && $method === 'PUT' => ['RestockController', 'updateDraft', $matches[1]],
-    preg_match('/^\/api\/restock\/([^\/]+)\/submit$/', $path, $matches) && $method === 'POST' => ['RestockController', 'submit', $matches[1]],
-    preg_match('/^\/api\/restock\/([^\/]+)\/issue$/', $path, $matches) && $method === 'POST' => ['RestockController', 'issue', $matches[1]],
-    preg_match('/^\/api\/restock\/([^\/]+)\/fill$/', $path, $matches) && $method === 'POST' => ['RestockController', 'fill', $matches[1]],
-    preg_match('/^\/api\/restock\/([^\/]+)\/fulfil$/', $path, $matches) && $method === 'POST' => ['RestockController', 'fulfil', $matches[1]],
+    // เส้นทาง /restock/draft|submit|issue|fill|fulfil ถูกถอดออก: method ใน RestockController
+    // ไม่มีอยู่แล้ว (ยิงแล้วได้ 500) และไม่มี client เรียก — ใช้เส้นทาง /api/staff/restock/* แทน
     preg_match('/^\/api\/restock\/([^\/]+)\/cancel$/', $path, $matches) && $method === 'POST' => ['RestockController', 'cancel', $matches[1]],
     preg_match('/^\/api\/vehicles\/([^\/]+)\/restock$/', $path, $matches) && $method === 'GET' => ['RestockController', 'getForVehicle', $matches[1]],
     preg_match('/^\/api\/checks\/([^\/]+)\/restock$/', $path, $matches) && $method === 'GET' => ['RestockController', 'getActiveByCheck', $matches[1]],
@@ -207,6 +214,10 @@ if (!str_contains($controllerClass, '\\')) {
 $controller = new $controllerClass();
 try {
     call_user_func_array([$controller, $action], $params);
+} catch (\App\Exceptions\ApiException $e) {
+    // ข้อผิดพลาดที่ต้องระบุ HTTP status + ข้อมูลประกอบ (เช่น 409 พร้อมจำนวนประวัติที่ผูกอยู่)
+    error_log('API ApiException(' . $e->getStatus() . '): ' . $e->getMessage());
+    Response::error($e->getMessage(), $e->getStatus(), $e->getExtra());
 } catch (\RuntimeException $e) {
     // Business-rule violations (invalid status transitions, etc.) must return JSON, not a PHP fatal
     error_log('API RuntimeException: ' . $e->getMessage());

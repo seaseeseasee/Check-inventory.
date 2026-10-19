@@ -61,6 +61,15 @@
   margin-top: 10px;
 }
 
+/* รถงดใช้งาน: ไม่มีปุ่ม "ตรวจคันนี้" จึงแสดงเหตุผลแทน */
+.dash-disabled-note {
+  align-self: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .dash-car .rs-actions .act-btn {
   flex: 1 1 130px;
   margin: 0;
