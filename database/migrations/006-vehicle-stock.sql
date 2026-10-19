@@ -60,6 +60,16 @@ ALTER TABLE refer_items
     ADD COLUMN IF NOT EXISTS unit VARCHAR(50) NOT NULL DEFAULT ''
         COMMENT 'หน่วยนับ เช่น ชิ้น กล่อง ขวด ชุด' AFTER target_qty;
 
+-- Reconciliation guard (เพิ่ม 2026-10-19): เครื่อง dev ที่สำรวจไว้ตอนเขียน migration นี้
+-- มีคอลัมน์ current_qty / last_restocked_at อยู่แล้วนอกบันทึก migration ใด ๆ — บนฐานข้อมูล
+-- ใหม่ที่ไล่รัน 001-005 ตามลำดับ (ไม่มี patch นอกบันทึกนี้) คอลัมน์ทั้งสองจะไม่มีอยู่เลย
+-- ทำให้ CHANGE COLUMN ด้านล่างพังทันที (เปลี่ยนชื่อคอลัมน์ที่ไม่มีอยู่ไม่ได้) จึงต้องสร้างให้
+-- แน่ใจก่อนว่ามีอยู่ (ค่าเริ่มต้นเท่ากับที่ Model/StockService อ่าน/เขียนจริง)
+ALTER TABLE refer_items
+    ADD COLUMN IF NOT EXISTS current_qty DECIMAL(10,2) NOT NULL DEFAULT 0.00
+        COMMENT 'ยอดคงเหลือบนรถ (เขียนโดย Item::updateStock); NULL ไม่ได้ ใช้ stock_updated_at แยกแยะ "ยังไม่ตรวจนับ"' AFTER is_battery,
+    ADD COLUMN IF NOT EXISTS last_restocked_at VARCHAR(40) NULL AFTER current_qty;
+
 -- เปลี่ยนชื่อคอลัมน์ placeholder ที่ว่างและไม่มีโค้ดอ้าง ให้ตรงกับหน้าที่จริง
 -- (เดิม last_restocked_at = "เติมล่าสุด" ซึ่งไม่เคยถูกเขียน; ใช้เป็น "แก้ยอดล่าสุด")
 ALTER TABLE refer_items
@@ -96,6 +106,14 @@ ALTER TABLE refer_items
 -- 2) refer_check_items — รอยเท้าตัวเลขของแต่ละบรรทัดที่ตรวจ
 --    ใช้ actual_qty (คงเหลือจริง) และ used_qty (ใช้ไป) ที่มีอยู่แล้ว + เพิ่ม 3 คอลัมน์
 -- ---------------------------------------------------------------------------
+-- Reconciliation guard (เพิ่ม 2026-10-19): เหตุผลเดียวกับ refer_items ด้านบน —
+-- actual_qty/used_qty ถูกสมมติว่ามีอยู่แล้ว (จริงบนเครื่อง dev ที่สำรวจ) แต่ไม่มี migration
+-- ใดสร้างไว้ ฐานข้อมูลใหม่จึงต้องสร้างก่อน ไม่อย่างนั้น ADD COLUMN...AFTER used_qty และ
+-- MODIFY COLUMN ด้านล่างจะพังเพราะคอลัมน์ used_qty ยังไม่มีอยู่จริง
+ALTER TABLE refer_check_items
+    ADD COLUMN IF NOT EXISTS actual_qty DECIMAL(10,2) NULL AFTER status,
+    ADD COLUMN IF NOT EXISTS used_qty DECIMAL(10,2) NULL AFTER actual_qty;
+
 ALTER TABLE refer_check_items
     ADD COLUMN IF NOT EXISTS qty_before DECIMAL(10,2) NULL
         COMMENT 'ยอดบนรถก่อนตรวจ (NULL = ยังไม่เคยตรวจนับก่อนหน้า)' AFTER status,
@@ -124,6 +142,12 @@ ALTER TABLE refer_check_items
 --    (ก่อนเติม + ที่เติมจริง = หลังเติม; เป็นรอยเท้าตามข้อ 4 และข้อ 6)
 --    ไม่เพิ่มคอลัมน์ใหม่ — แก้ COMMENT ให้ตรงความหมายเท่านั้น
 -- ---------------------------------------------------------------------------
+-- Reconciliation guard (เพิ่ม 2026-10-19): เหตุผลเดียวกัน — คอลัมน์นี้ไม่มี migration ใด
+-- สร้างไว้จริง ต้องมีก่อนจึง MODIFY ได้
+ALTER TABLE refer_restock_items
+    ADD COLUMN IF NOT EXISTS vehicle_stock_before DECIMAL(10,2) NULL AFTER qty_filled,
+    ADD COLUMN IF NOT EXISTS vehicle_stock_after DECIMAL(10,2) NULL AFTER vehicle_stock_before;
+
 ALTER TABLE refer_restock_items
     MODIFY COLUMN vehicle_stock_before DECIMAL(10,2) NULL
         COMMENT 'ยอดบนรถก่อนเติม (NULL = ยังไม่เคยตรวจนับ)',

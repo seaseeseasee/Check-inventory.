@@ -49,36 +49,48 @@ refer-system/
 - PHP 8.1+ with PDO MySQL
 - MySQL 8.0+ หรือ MariaDB 10.5+
 - Apache 2.4+ หรือ Nginx
-- Composer (สำหรับ production)
+- ไม่ต้องใช้ Composer — ระบบใช้ autoloader เขียนเองที่ `vendor/autoload.php` (ดูคอมเมนต์ในไฟล์)
 
 ### 2. Clone และตั้งค่า
 ```bash
 git clone <repository>
-cd refer-system
+cd emer
 cp .env.example .env
-# แก้ไข .env ให้ตรงกับสภาพแวดล้อม
+# แก้ไข .env ให้ตรงกับสภาพแวดล้อม (ดูคีย์ทั้งหมดใน .env.example)
 ```
 
-### 3. ติดตั้ง Dependencies
+### 3. สร้างฐานข้อมูล
+
+**ฐานข้อมูลใหม่ (ยังไม่มีข้อมูลเลย):** รันไฟล์เดียว
 ```bash
-composer install --no-dev --optimize-autoloader
+mysql -u root -p < database/schema.sql
+mysql -u root -p refer_system < database/seed.sql   # ข้อมูลตัวอย่าง ไม่บังคับ
 ```
 
-### 4. สร้างฐานข้อมูล
+**หรือไล่รัน migrations ทีละไฟล์ตามลำดับ** (ใช้วิธีนี้ถ้าฐานข้อมูลมีข้อมูลอยู่แล้วและต้อง
+อัปเกรดจากเวอร์ชันเก่า — ทุกไฟล์เขียนแบบ idempotent รันซ้ำได้ไม่พัง):
 ```bash
-mysql -u root -p < database/migrations/001-initial.sql
-mysql -u root -p < database/migrations/002-restock.sql
+for f in database/migrations/*.sql; do mysql -u root -p refer_system < "$f"; done
+# หรือรันเรียงเลขเอง: 001-initial, 002-restock, 003-users-and-roles, 004-vehicle-details,
+# 005-stock, 006-vehicle-stock, 007-default-items, 008-departments, 009-restock-action-reconciliation
 ```
 
-### 5. ตั้งค่า Web Server
+### 4. ตั้งค่า Web Server
 - Document Root: `public/`
 - เปิดใช้งาน mod_rewrite (Apache) หรือ config rewrite rules (Nginx)
 
-### 6. สร้างรหัสผ่านระบบ
+### 5. สร้างผู้ใช้แอดมินคนแรก
+ระบบยืนยันตัวตนด้วยตาราง `refer_users` (ไม่ใช่ตัวแปร `PASSWORD_HASH` ใน .env ที่เป็นของ
+เวอร์ชันเก่าและไม่มีโค้ดอ่านแล้ว) ฐานข้อมูลใหม่ยังไม่มีผู้ใช้เลย ต้อง insert แถวแรกด้วยมือ
+ก่อนจึงจะ login เข้าไปสร้างผู้ใช้อื่นต่อจากหน้าแอดมินได้:
 ```bash
 php -r "echo password_hash(readline('Password: '), PASSWORD_DEFAULT), PHP_EOL;"
 ```
-นำค่าที่ได้ไปใส่ใน `.env` ที่ `PASSWORD_HASH`
+```sql
+INSERT INTO refer_users (id, username, password_hash, full_name, role, active, created_at, updated_at)
+VALUES ('usr-admin-001', 'admin', '<ค่า hash จากคำสั่งข้างบน>', 'System Administrator', 'admin', 1,
+        NOW(), NOW());
+```
 
 ## การพัฒนา
 
@@ -86,7 +98,7 @@ php -r "echo password_hash(readline('Password: '), PASSWORD_DEFAULT), PHP_EOL;"
 - **Controllers**: รับ Request, เรียก Service, ส่ง Response
 - **Services**: Business Logic, Transaction Management
 - **Models**: Database Operations (Active Record pattern)
-- **Middleware**: Auth, CSRF, Rate Limiting
+- **Middleware**: Auth, CSRF, Role-based access
 
 ### โครงสร้าง Frontend
 - **Core**: API Client, Auth, UI Utilities
@@ -129,16 +141,27 @@ php -r "echo password_hash(readline('Password: '), PASSWORD_DEFAULT), PHP_EOL;"
 - `PUT /api/inspections/draft` - บันทึกร่าง
 - `POST /api/inspections/submit` - ส่งผลตรวจ
 
-### Restock
-- `GET /api/restock` - รายการคำขอทั้งหมด
-- `GET /api/restock/{id}` - รายละเอียดคำขอ
-- `POST /api/restock/draft` - สร้างร่างคำขอ
-- `PUT /api/restock/{id}/draft` - แก้ไขร่าง
-- `POST /api/restock/{id}/submit` - ส่งคำขอ
-- `POST /api/restock/{id}/issue` - จ่ายของ
-- `POST /api/restock/{id}/fill` - เติมลงรถ
-- `POST /api/restock/{id}/fulfil` - ยืนยันเติมครบ
-- `POST /api/restock/{id}/cancel` - ยกเลิกคำขอ
+### Restock (เส้นทางปัจจุบันที่ใช้งานจริง — ดู routes/web.php)
+- `GET /api/staff/restock` / `GET /api/staff/restock/my` - รายการคำขอ (ของเจ้าหน้าที่/ที่รับผิดชอบ)
+- `GET /api/staff/restock/{id}` - รายละเอียดคำขอ
+- `POST /api/staff/restock/{id}/start` - เริ่มดำเนินการ (PENDING → IN_PROGRESS)
+- `POST /api/staff/restock/{id}/restock` - บันทึกจ่าย/เติม (ตัดคลังกลางจริง)
+- `POST /api/staff/restock/{id}/complete` - ปิดงาน (→ COMPLETED)
+- `POST /api/staff/restock/{id}/cancel` - ยกเลิกคำขอ
+- `GET /api/admin/restock` / `GET /api/admin/restock/stats` - มุมมองแอดมิน
+- `POST /api/admin/restock/{id}/assign` / `.../unassign` - มอบหมาย/ถอนมอบหมายเจ้าหน้าที่
+- `GET /api/restock`, `GET /api/restock/{id}`, `POST /api/restock/{id}/cancel` - เส้นทางเก่า (ยังใช้ได้)
+- **หมายเหตุ:** `POST /api/restock/draft|submit|issue|fill|fulfil` ที่เคยมีในเอกสารรุ่นก่อนถูกถอดออกจากโค้ดจริงแล้ว (ยิงแล้วได้ 500) — ไม่มี client เรียกใช้อีกต่อไป
+
+### Stock (คลังสต็อกกลาง)
+- `GET /api/stock` - ภาพรวมคลัง
+- `GET /api/stock/transactions` - ประวัติความเคลื่อนไหว
+- `POST /api/stock/{id}/receive` - รับของเข้าคลัง
+- `POST /api/stock/{id}/adjust` - ปรับยอด/ขั้นต่ำ
+
+### Departments (ทะเบียนวอร์ด)
+- `GET /api/departments` - รายการวอร์ด (ทุก role ที่ login แล้ว)
+- `POST /api/departments` / `PUT /api/departments/{id}` / `DELETE /api/departments/{id}` - จัดการวอร์ด (admin เท่านั้น)
 
 ### History
 - `GET /api/history/inspections` - ประวัติการตรวจ (มี filter)
@@ -146,15 +169,13 @@ php -r "echo password_hash(readline('Password: '), PASSWORD_DEFAULT), PHP_EOL;"
 
 ## การทดสอบ
 
-```bash
-# PHP Unit Tests
-php tests/test-php.php
-php tests/test-restock.php
-
-# Mock Server สำหรับ Frontend
-node tests/mock-server.mjs
-# แล้วเปิด http://localhost:8899
-```
+> หมายเหตุ (2026-10-19): `tests/test-php.php`, `tests/test-restock.php`,
+> `tests/mock-server.mjs` และไฟล์สนับสนุนของมัน (`check-build.mjs`, `inject-assets.mjs`,
+> `index.template.html`) ถูกลบไปแล้ว — ไฟล์เหล่านี้ทดสอบ/จำลอง `public/api.php`
+> (ระบบ flat-file state รุ่นเก่าที่ถูกแทนที่ด้วย `app/Controllers` + `app/Services` +
+> `app/Models` ทั้งหมดแล้ว และตัว `public/api.php` ก็ถูกลบไปด้วย) ยังไม่มีชุดทดสอบอัตโนมัติ
+> สำหรับโค้ดสถาปัตยกรรมปัจจุบัน — เป็นงานค้างที่ควรทำก่อนแก้ business logic ส่วน
+> stock/restock ต่อไป (ดู Roadmap P2 ในรายงานตรวจสอบ)
 
 ## การ Deploy
 
