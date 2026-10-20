@@ -1,0 +1,29 @@
+# Never bake secrets or local-only files into the image
+.env
+.env.*
+!.env.*.example
+storage/backups/*
+storage/logs/*
+!storage/backups/.gitkeep
+!storage/logs/.gitkeep
+
+# VCS / editor
+.git
+.gitignore
+.github
+
+# Docker's own files (no need to copy into the image build context twice)
+Dockerfile
+docker-compose.yml
+compose.yaml
+.dockerignore
+
+# Dev-only tooling and docs not needed to run the app
+tests
+docs
+MAPPING.md
+*.md
+
+# OS noise
+.DS_Store
+Thumbs.db

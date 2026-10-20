@@ -1,0 +1,70 @@
+name: emer
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      # Bound to 127.0.0.1 only for this local-test phase (not exposed to the
+      # network/internet). Widen to "0.0.0.0:${APP_PORT}:80" only in a later,
+      # explicitly-approved step when actually sharing a link with testers.
+      - "127.0.0.1:${APP_PORT:-8080}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Persist what the app may write at runtime without baking it into the image.
+      - storage_data:/var/www/html/storage
+    healthcheck:
+      # CLI script outside public/ — checks Apache answers and the DB login works
+      # (see docker/healthcheck.php for why /api/health is not used here).
+      test: ["CMD", "php", "/var/www/html/docker/healthcheck.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  db:
+    image: mariadb:10.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+      # Runs once, only when the data volume is empty (fresh DB) — alphabetical
+      # order matters here, which is exactly why schema.sql + seed.sql are used
+      # instead of the raw migrations/ folder (see report: 001-add-restock.sql
+      # sorts before 001-initial.sql alphabetically and would fail on a fresh DB).
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    # No "ports:" here on purpose — the database is reachable only from other
+    # containers on this compose network (service name "db"), never from the host.
+    restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin:5.2
+    environment:
+      PMA_HOST: db
+      PMA_ABSOLUTE_URI: http://localhost:${PHPMYADMIN_PORT:-8081}/
+    ports:
+      - "127.0.0.1:${PHPMYADMIN_PORT:-8081}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  storage_data:

@@ -92,6 +92,43 @@ VALUES ('usr-admin-001', 'admin', '<ค่า hash จากคำสั่ง�
         NOW(), NOW());
 ```
 
+## รันด้วย Docker
+
+แยกจาก XAMPP โดยสมบูรณ์ (ฐานข้อมูลอยู่ใน volume ของ Docker เอง) มี 3 services:
+`app` (PHP 8.2 + Apache, Document Root = `public/`), `db` (MariaDB 10.4) และ `phpmyadmin`
+
+### 1. ตั้งค่า
+```bash
+cp .env.docker.example .env
+```
+แก้ใน `.env` อย่างน้อย:
+- `DB_PASSWORD` กับ `MYSQL_PASSWORD` — ต้องเป็นค่าเดียวกัน
+- `MYSQL_ROOT_PASSWORD`
+- `APP_PORT` / `PHPMYADMIN_PORT` ถ้า 8080/8081 ถูกใช้อยู่ (และแก้ `APP_URL`, `APP_ORIGIN` ให้ตรง port)
+- `DB_HOST` ต้องเป็น `db` (ชื่อ service) ไม่ใช่ `localhost`
+
+### 2. เริ่มระบบ
+```bash
+docker compose up -d --build
+docker compose ps        # app และ db ต้องขึ้น (healthy)
+```
+- เว็บ: http://localhost:8080
+- phpMyAdmin: http://localhost:8081 (login ด้วย `MYSQL_USER` / `MYSQL_PASSWORD`)
+- port ผูกกับ `127.0.0.1` เท่านั้น — เข้าได้จากเครื่องนี้เครื่องเดียว; `db` ไม่เปิด port ออกนอก Docker
+
+ครั้งแรกที่ volume ว่าง MariaDB จะรัน `database/schema.sql` แล้วตามด้วย `database/seed.sql`
+ให้อัตโนมัติ จากนั้นสร้างผู้ใช้แอดมินคนแรกตามข้อ 5 ด้านบน (ใช้ phpMyAdmin หรือ
+`docker compose exec db mariadb -u root -p refer_system`)
+
+### 3. ข้อควรรู้
+- **โค้ดถูก copy เข้า image ไม่ได้ mount** — แก้โค้ดแล้วต้อง `docker compose up -d --build` ทุกครั้ง
+- **schema/seed รันแค่ตอน volume ว่าง** — แก้ `schema.sql`/`seed.sql` ทีหลังจะไม่มีผลกับฐานข้อมูลเดิม
+  ต้องรัน migration เองผ่าน phpMyAdmin หรือ reset ทั้งหมดด้วย `docker compose down -v`
+  (**ลบข้อมูลทั้งหมด**)
+- healthcheck ของ `app` ใช้ `docker/healthcheck.php` (รันผ่าน CLI เช็คว่าเว็บตอบ และ login DB ได้)
+- ดู log: `docker compose logs -f app`
+- หยุดระบบ: `docker compose down` (ข้อมูลยังอยู่ใน volume `db_data`)
+
 ## การพัฒนา
 
 ### โครงสร้าง Backend
