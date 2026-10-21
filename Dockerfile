@@ -20,7 +20,10 @@ RUN apt-get update \
 # mod_headers : security headers (CSP, X-Frame-Options, ...)
 # mod_expires : static asset cache headers
 # mod_deflate : gzip compression
-RUN a2enmod rewrite headers expires deflate
+# mod_remoteip: real client IP behind the frontend nginx (docker/apache/remoteip.conf)
+RUN a2enmod rewrite headers expires deflate remoteip
+
+COPY docker/apache/remoteip.conf /etc/apache2/conf-enabled/remoteip.conf
 
 # Document Root -> public/ only, so config/, app/, database/, storage/ are
 # never inside the web-servable tree at all (stronger than relying on the

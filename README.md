@@ -94,8 +94,24 @@ VALUES ('usr-admin-001', 'admin', '<ค่า hash จากคำสั่ง�
 
 ## รันด้วย Docker
 
-แยกจาก XAMPP โดยสมบูรณ์ (ฐานข้อมูลอยู่ใน volume ของ Docker เอง) มี 3 services:
-`app` (PHP 8.2 + Apache, Document Root = `public/`), `db` (MariaDB 10.4) และ `phpmyadmin`
+แยกจาก XAMPP โดยสมบูรณ์ (ฐานข้อมูลอยู่ใน volume ของ Docker เอง) มี 3 containers ที่ทำงานประจำ:
+
+```
+Browser ─127.0.0.1:8080─▶ frontend (nginx) ── /assets/* เสิร์ฟเอง
+                              │ / และ /api/*  (network "edge")
+                              ▼
+                          backend (PHP 8.2 + Apache, Document Root = public/)
+                              │ (network "data" — internal)
+                              ▼
+                          db (MariaDB 10.4)
+```
+
+- `frontend` — container เดียวที่เปิด port; เสิร์ฟ CSS/JS/รูปจาก `resources/assets` และ proxy
+  หน้าเว็บ + API ไป backend (ต้องอยู่ origin เดียวกัน เพราะหน้าเว็บฝัง CSRF token จาก session
+  และ cookie เป็น `SameSite=Strict`) — ไฟล์อยู่ที่ `docker/frontend/`
+- `backend` — ไม่เปิด port ออก host; รับ IP จริงของผู้ใช้จาก nginx ผ่าน `mod_remoteip`
+- `db` — เข้าถึงได้จาก backend (และ phpMyAdmin) เท่านั้น
+- `phpmyadmin` — เครื่องมือ ไม่ใช่ส่วนของแอป อยู่ใน profile `tools` เปิดเฉพาะตอนใช้
 
 ### 1. ตั้งค่า
 ```bash
@@ -110,10 +126,11 @@ cp .env.docker.example .env
 ### 2. เริ่มระบบ
 ```bash
 docker compose up -d --build
-docker compose ps        # app และ db ต้องขึ้น (healthy)
+docker compose ps        # frontend, backend, db ต้องขึ้น (healthy)
 ```
 - เว็บ: http://localhost:8080
-- phpMyAdmin: http://localhost:8081 (login ด้วย `MYSQL_USER` / `MYSQL_PASSWORD`)
+- phpMyAdmin (เปิดเมื่อต้องการ): `docker compose --profile tools up -d phpmyadmin` แล้วเข้า
+  http://localhost:8081 (login ด้วย `MYSQL_USER` / `MYSQL_PASSWORD`); ปิดด้วย `docker compose stop phpmyadmin`
 - port ผูกกับ `127.0.0.1` เท่านั้น — เข้าได้จากเครื่องนี้เครื่องเดียว; `db` ไม่เปิด port ออกนอก Docker
 
 ครั้งแรกที่ volume ว่าง MariaDB จะรัน `database/schema.sql` แล้วตามด้วย `database/seed.sql`
@@ -122,11 +139,13 @@ docker compose ps        # app และ db ต้องขึ้น (healthy)
 
 ### 3. ข้อควรรู้
 - **โค้ดถูก copy เข้า image ไม่ได้ mount** — แก้โค้ดแล้วต้อง `docker compose up -d --build` ทุกครั้ง
+  (build ทั้ง frontend และ backend พร้อมกัน — `?v=` ของ asset คำนวณจากไฟล์ใน backend)
 - **schema/seed รันแค่ตอน volume ว่าง** — แก้ `schema.sql`/`seed.sql` ทีหลังจะไม่มีผลกับฐานข้อมูลเดิม
   ต้องรัน migration เองผ่าน phpMyAdmin หรือ reset ทั้งหมดด้วย `docker compose down -v`
   (**ลบข้อมูลทั้งหมด**)
-- healthcheck ของ `app` ใช้ `docker/healthcheck.php` (รันผ่าน CLI เช็คว่าเว็บตอบ และ login DB ได้)
-- ดู log: `docker compose logs -f app`
+- healthcheck ของ `backend` ใช้ `docker/healthcheck.php` (รันผ่าน CLI เช็คว่าเว็บตอบ และ login DB ได้);
+  `frontend` เช็คที่ `/healthz` ของ nginx
+- ดู log: `docker compose logs -f frontend backend`
 - หยุดระบบ: `docker compose down` (ข้อมูลยังอยู่ใน volume `db_data`)
 
 ## การพัฒนา
