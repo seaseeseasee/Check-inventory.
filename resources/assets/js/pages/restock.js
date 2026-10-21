@@ -1,748 +1,421 @@
 // ========================================
-// PAGE: RESTOCK
+// PAGE: REFILL (เติมอุปกรณ์เข้ารถโดยตรง — ไม่มีคลังสต็อกกลาง)
 // ========================================
+// 1 ครั้งที่กดบันทึก = 1 client_token (server: refer_refill_batches.client_token UNIQUE)
+// ส่งซ้ำ/กดซ้ำ/เน็ตหลุดแล้วลองใหม่ด้วย token เดิม → ได้ผลเดิม ไม่เติมซ้ำ
 
-// สถานะที่แก้ไขจำนวนเติมได้ (PENDING = กดบันทึกแล้วระบบจะเริ่มดำเนินการให้อัตโนมัติ)
-const RS_EDITABLE_STATUSES = ['PENDING', 'IN_PROGRESS', 'PARTIAL'];
+const REFILL_TYPE_LABEL = { box: '📦 กล่อง', piece: '🧩 ชิ้น', electric: '🔌 ไฟฟ้า' };
+const REQUEST_STATUS_LABEL = {
+  PENDING: 'รอเติม', IN_PROGRESS: 'รอเติม (ระบบเดิม)', PARTIAL: 'เติมบางส่วน', COMPLETED: 'เติมครบ', CANCELLED: 'ยกเลิก',
+};
 
-class RestockPage {
+class RefillPage {
   constructor() {
-    this.requests = [];
     this.vehicles = [];
-    this.nurses = [];
-    this.currentFilter = 'all';
-    this.requestIdFromUrl = null;
-    // เก็บค่าที่ผู้ใช้พิมพ์ในช่อง "เติมแล้ว" แต่ยังไม่กดบันทึก — key = `${requestId}:${itemId}`
-    // เพื่อไม่ให้ค่าที่พิมพ์หายเมื่อตาราง re-render (เปลี่ยนฟิลเตอร์ / บันทึกแถวอื่น)
-    this.fillDrafts = new Map();
-    this.init();
-  }
-
-  async init() {
-    await this.loadReferenceData();
-    this.bindEvents();
-    this.checkUrlParams();
-    this.render();
+    this.requests = [];
+    this.carId = '';
+    this.sheet = null;
+    this.drafts = {};            // item_id => {lots: [{qty, expiry_date}], units: [...], retire: Set}
+    this.filter = 'need';
+    this.requestFilter = 'open';
+    this.clientToken = null;
+    this.submitting = false;
+    this.bind();
+    this.load();
   }
 
   isAdmin() {
-    return window.auth?.getUser()?.role === 'admin';
+    const user = window.auth?.getUser?.();
+    return user && user.role === 'admin';
   }
 
-  fetchRequests() {
-    // Admin เห็นทุกรายการ (รวมยกเลิก) — Staff เห็นเฉพาะที่ได้รับมอบหมาย/ยังไม่มอบหมาย
-    return this.isAdmin()
-      ? window.restockApi.getAll()
-      : window.staffApi.getRestockRequests();
-  }
-
-  async loadReferenceData() {
-    try {
-      const [vehiclesRes, nursesRes, restockRes] = await Promise.all([
-        window.vehicleApi.getAll(),
-        window.nurseApi.getAll(),
-        this.fetchRequests(),
-      ]);
-      this.vehicles = vehiclesRes.data || [];
-      this.nurses = nursesRes.data || [];
-      this.requests = restockRes.data || [];
-      window.vehicleRef.remember(this.vehicles);
-    } catch (error) {
-      console.error('Failed to load restock data:', error);
-      window.toast.error('โหลดข้อมูลไม่สำเร็จ');
-    }
-  }
-
-  bindEvents() {
-    // Filter chips
-    document.getElementById('restockFilterAll')?.addEventListener('click', () => this.setFilter('all'));
-    document.getElementById('restockFilterPending')?.addEventListener('click', () => this.setFilter('PENDING'));
-    document.getElementById('restockFilterProgress')?.addEventListener('click', () => this.setFilter('IN_PROGRESS'));
-    document.getElementById('restockFilterPartial')?.addEventListener('click', () => this.setFilter('PARTIAL'));
-    document.getElementById('restockFilterCompleted')?.addEventListener('click', () => this.setFilter('COMPLETED'));
-
-    const list = document.getElementById('restockList');
+  bind() {
+    const list = document.getElementById('refillItems');
     if (list) {
-      // Delegated listeners: ทำงานกับการ์ดที่ render ใหม่ทุกครั้งโดยไม่ต้อง bind ซ้ำ
-      list.addEventListener('click', (e) => {
-        const btn = e.target.closest('button[data-act]');
-        if (btn) this.handleAction(btn.dataset.act, btn);
-      });
-      list.addEventListener('input', (e) => {
-        const input = e.target.closest('.rs-fill-input');
-        if (input) this.onFillInput(input);
-      });
-      list.addEventListener('change', (e) => {
-        const input = e.target.closest('.rs-fill-input');
-        if (input) this.onFillInput(input);
-      });
+      list.addEventListener('input', (e) => this.onInput(e));
+      list.addEventListener('click', (e) => this.onClick(e));
+      list.addEventListener('change', (e) => this.onInput(e));
+    }
+    document.getElementById('restockList')?.addEventListener('click', (e) => this.onRequestClick(e));
+  }
+
+  async load() {
+    try {
+      const [vehiclesRes, requestsRes] = await Promise.all([
+        window.vehicleApi.getAll(),
+        this.isAdmin() ? window.restockApi.getAll() : window.staffApi.getRestockRequests(),
+      ]);
+      this.vehicles = (vehiclesRes.data || []).filter(v => v.status !== 'disabled');
+      window.vehicleRef.remember(vehiclesRes.data || []);
+      this.requests = requestsRes.data || [];
+      this.renderCars();
+      this.renderRequests();
+      const linked = this.linkedCarFromHash();
+      if (linked && linked !== this.carId) await this.selectCar(linked);
+      else if (this.carId) await this.selectCar(this.carId, true);
+    } catch (error) {
+      window.toast.error('โหลดข้อมูลไม่สำเร็จ: ' + error.message);
     }
   }
 
-  checkUrlParams() {
-    // Dashboard deep-links use "#restock?..." — the query rides in the hash
+  // ลิงก์จากหน้าแรก: #restock?car=<id> หรือ #restock?request=<id> (ใช้ครั้งเดียวแล้วล้าง)
+  linkedCarFromHash() {
     const hash = window.location.hash || '';
-    const hashQuery = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : '';
-    const params = new URLSearchParams(hashQuery || window.location.search);
-    this.requestIdFromUrl = params.get('request');
-    const carId = params.get('car');
+    if (!hash.startsWith('#restock?')) return '';
+    const params = new URLSearchParams(hash.slice(hash.indexOf('?') + 1));
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+    if (params.get('car')) return params.get('car');
+    const req = this.requests.find(r => r.id === params.get('request'));
+    return req ? req.car_id : '';
+  }
 
-    if (carId) {
-      // Filter by vehicle
+  openCountFor(carId) {
+    return this.requests.filter(r => r.car_id === carId && ['PENDING', 'IN_PROGRESS', 'PARTIAL'].includes(r.status)).length;
+  }
+
+  renderCars() {
+    const grid = document.getElementById('refillCarGrid');
+    if (!grid) return;
+    grid.innerHTML = this.vehicles.map(v => {
+      const color = window.vehicleColor(v);
+      const open = this.openCountFor(v.id);
+      return `<button type="button" class="car-symbol" data-car-id="${UI.escape(v.id)}" aria-pressed="${v.id === this.carId}"
+        style="border-color:${color};box-shadow: inset 0 6px 0 ${color}" onclick="refillPage.selectCar('${UI.escape(v.id)}')">
+        ${window.vehicleChip(v)}
+        <span class="car-stat">${open ? `รอเติม ${open} รายการ` : 'ไม่มีรายการรอเติม'}</span>
+      </button>`;
+    }).join('') || '<p class="empty">ยังไม่มีรถในระบบ</p>';
+  }
+
+  async selectCar(carId, keepDrafts = false) {
+    if (!keepDrafts && this.carId && this.carId !== carId && this.hasDraftLines()) {
+      const ok = await window.confirmDialog('มีรายการเติมที่ยังไม่บันทึกของรถคันเดิม — เปลี่ยนรถและทิ้งรายการนั้น?', { confirmText: 'เปลี่ยนรถ' });
+      if (!ok) return;
+    }
+    if (!keepDrafts) this.drafts = {};
+    this.carId = carId;
+    this.clientToken = null;
+    document.querySelectorAll('#refillCarGrid .car-symbol').forEach(b => b.setAttribute('aria-pressed', b.dataset.carId === carId));
+    try {
+      const res = await window.staffApi.getRefillSheet(carId);
+      this.sheet = res.data;
+      document.getElementById('refillSheet')?.classList.remove('hidden');
+      this.renderSheet();
+    } catch (error) {
+      window.toast.error(error.message);
+    }
+  }
+
+  draftFor(id) {
+    if (!this.drafts[id]) this.drafts[id] = { lots: [], units: [], retire: new Set() };
+    return this.drafts[id];
+  }
+
+  hasDraftLines() {
+    return Object.values(this.drafts).some(d => d.lots.length || d.units.length || d.retire.size);
+  }
+
+  fmt(v) {
+    if (v === null || v === undefined || v === '') return '-';
+    return String(Math.round(Number(v) * 100) / 100);
+  }
+
+  itemMatches(item) {
+    if (this.filter === 'all') return true;
+    if (this.filter === 'expiry') return item.expiry && (item.expiry.state === 'expired' || item.expiry.state === 'soon');
+    // ต้องเติม: ต่ำกว่าเป้าหมาย / มียอดค้างในรายการรอเติม / ยังไม่เคยนับ / มีรายการที่กำลังกรอก
+    const d = this.drafts[item.id];
+    return item.shortfall > 0 || item.requested > 0 || !item.counted || (d && (d.lots.length || d.units.length || d.retire.size));
+  }
+
+  renderSheet() {
+    if (!this.sheet) return;
+    const v = this.sheet.vehicle;
+    const head = document.getElementById('refillHead');
+    if (head) {
+      head.innerHTML = `${window.vehicleChip(v)} <span>รายการรอเติมที่เปิดอยู่ ${this.sheet.open_requests.length} ใบ</span>`;
+    }
+    const items = this.sheet.items;
+    const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
+    set('refillCntAll', items.length);
+    set('refillCntNeed', items.filter(i => i.shortfall > 0 || i.requested > 0 || !i.counted).length);
+    set('refillCntExp', items.filter(i => i.expiry && (i.expiry.state === 'expired' || i.expiry.state === 'soon')).length);
+
+    const shown = items.filter(item => this.itemMatches(item));
+    const list = document.getElementById('refillItems');
+    if (list) {
+      list.innerHTML = shown.length
+        ? shown.map(item => `<div class="refill-card" data-id="${UI.escape(item.id)}">${this.renderItem(item)}</div>`).join('')
+        : '<p class="empty">ไม่มีรายการในตัวกรองนี้ 🎉</p>';
+    }
+    this.renderSummary();
+  }
+
+  renderItem(item) {
+    const unit = item.unit ? ' ' + UI.escape(item.unit) : '';
+    const d = this.draftFor(item.id);
+    const added = item.item_type === 'electric'
+      ? d.units.length - d.retire.size
+      : d.lots.reduce((s, l) => s + (Number(l.qty) > 0 ? Number(l.qty) : 0), 0);
+    const current = item.current_qty === null ? null : Number(item.current_qty);
+    const after = (current || 0) + added;
+
+    const head = `
+      <div class="check-card-head">
+        <div>
+          <strong>${UI.escape(item.name)}</strong>
+          <span class="type-badge type-${UI.escape(item.item_type)}">${REFILL_TYPE_LABEL[item.item_type] || ''}</span>
+          <div class="check-sub">
+            คงเหลือ <b>${item.counted ? this.fmt(current) + unit : 'ยังไม่เคยตรวจนับ'}</b>
+            • เป้าหมาย ${item.target_qty === null ? UI.escape(item.standard || '-') : this.fmt(item.target_qty) + unit}
+            ${item.requested > 0 ? ` • <span class="req-badge">รอเติม ${this.fmt(item.requested)} (${UI.escape(item.request_no || '')})</span>` : ''}
+          </div>
+        </div>
+        ${added ? `<span class="result-chip result-complete">หลังเติม ${this.fmt(after)}${unit}</span>` : ''}
+      </div>`;
+
+    if (item.item_type === 'electric') {
+      const units = (item.units || []).map(u => `
+        <label class="unit-existing ${d.retire.has(u.id) ? 'retired' : ''}">
+          <input type="checkbox" data-action="retire" data-unit="${UI.escape(u.id)}" ${d.retire.has(u.id) ? 'checked' : ''}>
+          ${UI.escape(u.label || 'เครื่อง')} — ${u.status === 'ready' ? '✅ พร้อมใช้' : '⛔ ไม่พร้อมใช้'}
+          ${u.battery_level ? ` • แบต ${u.battery_level}/4` : ''} ${u.note ? ' • ' + UI.escape(u.note) : ''}
+          <span class="text-xs">(ติ๊กเพื่อปลดออก/เปลี่ยนเครื่อง)</span>
+        </label>`).join('') || '<p class="text-sm text-slate-500">ยังไม่มีเครื่องลงทะเบียน</p>';
+      const newUnits = d.units.map((u, i) => `
+        <div class="lot-input unit-input" data-row="${i}">
+          <input type="text" maxlength="100" data-field="label" value="${UI.escape(u.label)}" placeholder="รหัส/เลขเครื่อง">
+          <select data-field="status">
+            <option value="ready" ${u.status === 'ready' ? 'selected' : ''}>พร้อมใช้งาน</option>
+            <option value="not_ready" ${u.status === 'not_ready' ? 'selected' : ''}>ไม่พร้อมใช้งาน</option>
+          </select>
+          <select data-field="battery_level" aria-label="ระดับแบต">
+            ${[4, 3, 2, 1].map(l => `<option value="${l}" ${Number(u.battery_level) === l ? 'selected' : ''}>แบต ${l} ขีด</option>`).join('')}
+          </select>
+          <input type="text" maxlength="200" data-field="note" value="${UI.escape(u.note)}" placeholder="หมายเหตุ/สาเหตุ (จำเป็นถ้าไม่พร้อมใช้)">
+          <button type="button" class="small-btn gray" data-action="remove-row" aria-label="ลบแถว">✕</button>
+        </div>`).join('');
+      return head + `<div class="unit-list">${units}</div>${newUnits}
+        <button type="button" class="small-btn" data-action="add-unit">+ เพิ่มเครื่อง (ตรวจรับ)</button>`;
+    }
+
+    const lots = (item.lots || []).map(lot => `
+      <span class="lot lot-${UI.escape(lot.state)}">${lot.expiry_date ? 'หมดอายุ ' + UI.escape(UI.formatDateThai(lot.expiry_date)) : 'ไม่ทราบวันหมดอายุ'} · ${this.fmt(lot.qty)}${unit}</span>`).join('');
+    const today = this.sheet.today;
+    const rows = d.lots.map((lot, i) => {
+      const warn = lot.expiry_date && lot.expiry_date < today ? '<span class="lot-warn">⛔ หมดอายุแล้ว — บันทึกไม่ได้</span>' : '';
+      return `
+      <div class="lot-input" data-row="${i}">
+        <input type="number" min="0" step="any" inputmode="decimal" data-field="qty" value="${UI.escape(lot.qty)}" placeholder="จำนวน${item.item_type === 'box' ? ' (กล่อง/หน่วย)' : ''}" aria-label="จำนวนที่เติม">
+        <input type="date" min="${UI.escape(today)}" data-field="expiry_date" value="${UI.escape(lot.expiry_date)}" aria-label="วันหมดอายุ">
+        <button type="button" class="small-btn gray" data-action="remove-row" aria-label="ลบแถว">✕</button>
+        ${warn}
+      </div>`;
+    }).join('');
+    const suggest = Math.max(item.shortfall || 0, item.requested || 0);
+    return head + `<div class="lot-list">${lots || '<span class="lot lot-unknown">ยังไม่มีของบนรถ</span>'}</div>${rows}
+      <button type="button" class="small-btn" data-action="add-lot">+ เพิ่มจำนวน/วันหมดอายุ${suggest > 0 && !d.lots.length ? ` (แนะนำ ${this.fmt(suggest)})` : ''}</button>`;
+  }
+
+  rerenderItem(id) {
+    const card = document.querySelector(`#refillItems .refill-card[data-id="${CSS.escape(id)}"]`);
+    const item = this.sheet.items.find(i => i.id === id);
+    if (card && item) card.innerHTML = this.renderItem(item);
+    this.renderSummary();
+  }
+
+  onInput(event) {
+    const el = event.target;
+    const card = el.closest('.refill-card');
+    if (!card) return;
+    const id = card.dataset.id;
+    const d = this.draftFor(id);
+    if (el.dataset.action === 'retire') {
+      if (el.checked) d.retire.add(el.dataset.unit); else d.retire.delete(el.dataset.unit);
+      this.rerenderItem(id);
+      return;
+    }
+    const row = el.closest('[data-row]');
+    if (!row || !el.dataset.field) return;
+    const item = this.sheet.items.find(i => i.id === id);
+    const target = item.item_type === 'electric' ? d.units[Number(row.dataset.row)] : d.lots[Number(row.dataset.row)];
+    target[el.dataset.field] = el.value;
+    this.clientToken = null;   // ข้อมูลเปลี่ยน = การบันทึกครั้งใหม่
+    if (event.type === 'change') this.rerenderItem(id); else this.renderSummary();
+  }
+
+  onClick(event) {
+    const btn = event.target.closest('[data-action]');
+    const card = event.target.closest('.refill-card');
+    if (!btn || !card || btn.dataset.action === 'retire') return;
+    const id = card.dataset.id;
+    const d = this.draftFor(id);
+    const item = this.sheet.items.find(i => i.id === id);
+    if (btn.dataset.action === 'add-lot') {
+      const suggest = Math.max(item.shortfall || 0, item.requested || 0);
+      d.lots.push({ qty: !d.lots.length && suggest > 0 ? String(suggest) : '', expiry_date: '' });
+    } else if (btn.dataset.action === 'add-unit') {
+      d.units.push({ label: '', status: 'ready', battery_level: 4, note: '' });
+    } else if (btn.dataset.action === 'remove-row') {
+      const i = Number(btn.closest('[data-row]').dataset.row);
+      (item.item_type === 'electric' ? d.units : d.lots).splice(i, 1);
+    }
+    this.clientToken = null;
+    this.rerenderItem(id);
+    card.querySelector('.lot-input:last-of-type input')?.focus();
+  }
+
+  collectLines() {
+    const lines = [];
+    const errors = [];
+    const today = this.sheet.today;
+    for (const item of this.sheet.items) {
+      const d = this.drafts[item.id];
+      if (!d) continue;
+      if (item.item_type === 'electric') {
+        if (!d.units.length && !d.retire.size) continue;
+        d.units.forEach(u => {
+          if (u.status === 'not_ready' && !String(u.note || '').trim()) errors.push(`${item.name}: เครื่องไม่พร้อมใช้งานต้องระบุสาเหตุ`);
+        });
+        lines.push({ item_id: item.id, units: d.units.map(u => ({ ...u, battery_level: Number(u.battery_level) })), retire_unit_ids: [...d.retire] });
+        continue;
+      }
+      if (!d.lots.length) continue;
+      d.lots.forEach((lot, i) => {
+        const label = `${item.name} (แถว ${i + 1})`;
+        if (!(Number(lot.qty) > 0)) errors.push(`${label}: จำนวนต้องมากกว่า 0`);
+        if (!lot.expiry_date) errors.push(`${label}: ต้องระบุวันหมดอายุ`);
+        else if (lot.expiry_date < today) errors.push(`${label}: ของหมดอายุแล้ว ไม่อนุญาตให้เติม`);
+      });
+      lines.push({ item_id: item.id, lots: d.lots.map(l => ({ qty: Number(l.qty), expiry_date: l.expiry_date })) });
+    }
+    return { lines, errors };
+  }
+
+  renderSummary() {
+    const el = document.getElementById('refillSummary');
+    if (!el || !this.sheet) return;
+    const { lines, errors } = this.collectLines();
+    el.textContent = lines.length
+      ? `พร้อมบันทึก ${lines.length} รายการ${errors.length ? ` • ต้องแก้ ${errors.length} จุด` : ''}`
+      : 'ยังไม่มีรายการที่จะเติม — กด “+ เพิ่มจำนวน/วันหมดอายุ” ที่รายการที่ต้องการ';
+  }
+
+  async submit() {
+    if (this.submitting || !this.sheet) return;   // กันกดซ้ำระหว่างส่ง
+    const { lines, errors } = this.collectLines();
+    if (!lines.length) {
+      window.toast.warning('ยังไม่มีรายการที่จะเติม');
+      return;
+    }
+    if (errors.length) {
+      window.toast.error(errors.slice(0, 4).join('\n'), 8000);
+      return;
+    }
+    const ok = await window.confirmDialog(`บันทึกการเติมของเข้ารถ ${vehiclePlate(this.sheet.vehicle)} จำนวน ${lines.length} รายการ?`, { confirmText: 'บันทึกการเติม' });
+    if (!ok) return;
+
+    if (!this.clientToken) {
+      this.clientToken = (window.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '') : UI.uid() + UI.uid();
+    }
+    this.submitting = true;
+    const btn = document.getElementById('refillSubmitBtn');
+    UI.setLoading(btn, true);
+    try {
+      const res = await window.staffApi.refill(this.carId, {
+        client_token: this.clientToken,
+        note: document.getElementById('refillNote')?.value || '',
+        lines,
+      });
+      const data = res.data || {};
+      const parts = (data.applied || []).slice(0, 4).map(a => `${a.name}: ${this.fmt(a.before)} → ${this.fmt(a.after)}`);
+      window.toast.success((data.duplicate ? 'รายการนี้ถูกบันทึกไปแล้ว (ไม่เติมซ้ำ)' : 'บันทึกการเติมเรียบร้อย') + (parts.length ? '\n' + parts.join('\n') : ''), 8000);
+      (data.warnings || []).forEach(w => window.toast.warning(w, 9000));
+      this.drafts = {};
+      this.clientToken = null;
+      const noteEl = document.getElementById('refillNote');
+      if (noteEl) noteEl.value = '';
+      await this.load();
+    } catch (error) {
+      // token เดิมยังใช้ต่อได้: ถ้าครั้งก่อนบันทึกสำเร็จแต่คำตอบหาย การกดใหม่จะได้ผลเดิม ไม่เติมซ้ำ
+      window.toast.error(error.message, 9000);
+    } finally {
+      this.submitting = false;
+      UI.setLoading(btn, false);
     }
   }
 
   setFilter(filter) {
-    this.currentFilter = filter;
-    // Update active chip
-    const chips = {
-      'all': 'restockFilterAll',
-      'PENDING': 'restockFilterPending',
-      'IN_PROGRESS': 'restockFilterProgress',
-      'PARTIAL': 'restockFilterPartial',
-      'COMPLETED': 'restockFilterCompleted',
-    };
-
-    Object.entries(chips).forEach(([value, id]) => {
-      const el = document.getElementById(id);
-      if (el) el.classList.toggle('on', value === filter);
-    });
-
-    this.render();
+    this.filter = filter;
+    ['Need', 'All', 'Exp'].forEach(n => document.getElementById('refillFilter' + n)?.classList.toggle('on',
+      { Need: 'need', All: 'all', Exp: 'expiry' }[n] === filter));
+    this.renderSheet();
   }
 
-  render() {
-    this.renderRestockList();
+  // ---------------- รายการรอเติม ----------------
+
+  setRequestFilter(filter) {
+    this.requestFilter = filter;
+    ['Open', 'Completed', 'Cancelled', 'All'].forEach(n => document.getElementById('restockFilter' + n)?.classList.toggle('on',
+      { Open: 'open', Completed: 'COMPLETED', Cancelled: 'CANCELLED', All: 'all' }[n] === filter));
+    this.renderRequests();
   }
 
-  renderRestockList() {
-    const container = document.getElementById('restockList');
-    if (!container) return;
-
-    let filtered = this.requests;
-    if (this.currentFilter !== 'all') {
-      filtered = this.requests.filter(r => r.status === this.currentFilter);
-    }
-
-    // Sort by priority: PENDING first, then IN_PROGRESS, PARTIAL, COMPLETED
-    const statusOrder = { 'PENDING': 1, 'IN_PROGRESS': 2, 'PARTIAL': 3, 'COMPLETED': 4, 'CANCELLED': 5 };
-    filtered.sort((a, b) => (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99));
-
-    if (this.requestIdFromUrl) {
-      // Highlight specific request
-      const targetIndex = filtered.findIndex(r => r.id === this.requestIdFromUrl);
-      if (targetIndex !== -1) {
-        const target = filtered.splice(targetIndex, 1)[0];
-        filtered.unshift(target);
-      }
-    }
-
-    container.innerHTML = filtered.map(r => this.renderRestockCard(r)).join('') ||
-      '<p class="empty">ไม่มีรายการเติมอุปกรณ์</p>';
-  }
-
-  /**
-   * แถวที่ต้องแสดง = เฉพาะอุปกรณ์ที่ "ต้องเติม > 0" และ "เหลือ > 0" (ยังขาดอยู่)
-   * อุปกรณ์ที่ครบหรือไม่ต้องเติมจะถูกซ่อน และถ้าไม่เหลือแถวใดเลยจะแสดงข้อความแทนตาราง
-   */
-  getVisibleItems(request) {
-    return (request.items || []).filter(item => {
-      const requested = parseFloat(item.qty_requested || 0);
-      const filled = parseFloat(item.qty_filled || 0);
-      return requested > 0 && (requested - filled) > 0;
-    });
-  }
-
-  renderRestockCard(request) {
-    const statusLabels = {
-      'PENDING': 'รอเติม',
-      'IN_PROGRESS': 'กำลังเติม',
-      'PARTIAL': 'เติมไม่ครบ',
-      'COMPLETED': 'เติมครบ',
-      'CANCELLED': 'ยกเลิก',
-    };
-
-    const actionLabels = {
-      'create': 'สร้างรายการ',
-      'start': 'เริ่มเติม',
-      'restock': 'บันทึกการเติม',
-      'complete': 'ยืนยันครบ',
-      'cancel': 'ยกเลิก',
-    };
-
-    const canEdit = RS_EDITABLE_STATUSES.includes(request.status);
-    const allItems = request.items || [];
-    const visibleItems = this.getVisibleItems(request);
-    const hiddenCount = allItems.length - visibleItems.length;
-
-    let itemsHtml;
-    if (visibleItems.length > 0) {
-      itemsHtml = `
-        <div class="rs-table-wrap">
-          <table class="rs-items">
-            <thead>
-              <tr>
-                <th>อุปกรณ์</th>
-                <th>มาตรฐาน</th>
-                <th>มีจริง</th>
-                <th>ต้องเติม</th>
-                <th>บนรถ (ก่อน→หลัง)</th>
-                <th>เติมแล้ว</th>
-                <th>เหลือ</th>
-                <th>ความคืบหน้า</th>
-                <th>บันทึก</th>
-              </tr>
-            </thead>
-            <tbody>${visibleItems.map(item => this.renderItemRow(request, item, canEdit)).join('')}</tbody>
-          </table>
+  renderRequests() {
+    const list = document.getElementById('restockList');
+    if (!list) return;
+    const f = this.requestFilter;
+    const rows = this.requests.filter(r => f === 'all'
+      || (f === 'open' && ['PENDING', 'IN_PROGRESS', 'PARTIAL'].includes(r.status))
+      || r.status === f);
+    list.innerHTML = rows.length ? rows.map(r => {
+      const lines = (r.items || []).map(i => `<li>${UI.escape(i.name)} — ขอ ${UI.escape(i.qty_requested || '0')} • เติมแล้ว ${UI.escape(i.qty_filled || '0')}</li>`).join('');
+      const open = ['PENDING', 'IN_PROGRESS', 'PARTIAL'].includes(r.status);
+      return `<div class="request-card" data-id="${UI.escape(r.id)}">
+        <div class="check-card-head">
+          <div>${window.vehicleChip({ id: r.car_id, name: r.car_name })} <b>${UI.escape(r.no)}</b>
+            <div class="check-sub">${UI.escape(UI.formatDateTimeThai(r.created_at))} • ผู้แจ้ง ${UI.escape(r.created_name || '-')}</div></div>
+          <span class="result-chip status-${UI.escape(r.status)}">${REQUEST_STATUS_LABEL[r.status] || UI.escape(r.status)}</span>
         </div>
-      `;
-    } else {
-      itemsHtml = `
-        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-800" role="status">
-          <span aria-hidden="true">✅</span>
-          <span>อุปกรณ์ครบตามมาตรฐานแล้ว</span>
-          ${hiddenCount > 0 ? `<span class="text-xs font-normal text-teal-600">(แสดงเฉพาะรายการที่ยังขาด — ซ่อน ${hiddenCount} รายการที่ครบ/ไม่ต้องเติม)</span>` : ''}
-        </div>
-      `;
-    }
-
-    const timelineHtml = (request.actions || []).map(action => `
-      <li>
-        <b>${actionLabels[action.type] || action.type}</b> — ${UI.formatDateTimeThai(action.at)} • ${UI.escape(action.by_name)}
-        ${action.note ? ` • ${UI.escape(action.note)}` : ''}
-        ${(action.action_lines || []).length ? ' • ' + action.action_lines.map(l => {
-          const it = request.items.find(i => i.item_id === l.itemId);
-          return `${UI.escape(it?.name || l.itemId)} ${UI.escape(l.qty)}`;
-        }).join(', ') : ''}
-      </li>
-    `).join('');
-
-    // Determine available actions based on status and user role
-    const isAdmin = this.isAdmin();
-    let buttonsHtml = '';
-
-    if (request.status === 'PENDING') {
-      buttonsHtml = `
-        <div class="rs-actions">
-          <button type="button" class="act-btn ok" data-act="start" data-id="${request.id}">เริ่มเติม</button>
-          ${isAdmin ? `<button type="button" class="act-btn gray" data-act="assign" data-id="${request.id}">มอบหมาย</button>` : ''}
-        </div>
-      `;
-    } else if (request.status === 'IN_PROGRESS' || request.status === 'PARTIAL') {
-      buttonsHtml = `
-        <div class="rs-actions">
-          <button type="button" class="act-btn secondary" data-act="restock" data-id="${request.id}">บันทึกการเติม</button>
-          <button type="button" class="act-btn warning" data-act="complete" data-id="${request.id}">ยืนยันครบ</button>
-          <button type="button" class="act-btn danger" data-act="cancel" data-id="${request.id}">ยกเลิก</button>
-        </div>
-      `;
-    } else if (request.status === 'COMPLETED') {
-      buttonsHtml = `
-        <div class="rs-actions">
-          <button type="button" class="act-btn gray" data-act="view" data-id="${request.id}">ดูรายละเอียด</button>
-        </div>
-      `;
-    } else if (request.status === 'CANCELLED') {
-      buttonsHtml = `
-        <div class="rs-actions">
-          <button type="button" class="act-btn gray" data-act="view" data-id="${request.id}">ดูรายละเอียด</button>
-        </div>
-      `;
-    }
-
-    const highlightClass = this.requestIdFromUrl === request.id ? ' style="border: 2px solid var(--teal-600);"' : '';
-
-    return `
-      <article class="rs-card" data-id="${request.id}" data-car-id="${request.car_id}" data-status="${request.status}" data-at="${request.created_at.slice(0,10)}"${highlightClass}>
-        <div class="rs-head">
-          <span class="rs-no">${UI.escape(request.no)}</span>
-          <span class="chip chip-${request.status}">${statusLabels[request.status] || request.status}</span>
-        </div>
-        <div class="rs-meta">
-          <span class="plate-chip">${UI.escape(vehiclePlate({ id: request.car_id, name: request.car_name }))}</span>
-          <span>รถ: ${UI.escape(request.car_name)}</span>
-          <span>${UI.formatDateTimeThai(request.created_at)}</span>
-          ${request.assigned_to_user_id ? `<span>ผู้ดูแล: ${UI.escape(request.assigned_name || 'กำลังมอบหมาย')}</span>` : ''}
-          ${request.reason ? `<span>เหตุผล: ${UI.escape(request.reason)}</span>` : ''}
-        </div>
-        ${itemsHtml}
-        <details class="report-details">
-          <summary>ประวัติการดำเนินการ (${request.actions?.length || 0})</summary>
-          <ul class="timeline">${timelineHtml}</ul>
-        </details>
-        ${buttonsHtml}
-      </article>
-    `;
+        <ul class="request-lines">${lines}</ul>
+        ${open ? `<div class="btn-row">
+          <button type="button" class="small-btn" data-action="fill" data-car="${UI.escape(r.car_id)}">🧰 เติมรถคันนี้</button>
+          <button type="button" class="small-btn gray" data-action="cancel">ยกเลิกรายการ</button></div>` : ''}
+      </div>`;
+    }).join('') : '<p class="empty">ไม่มีรายการ</p>';
   }
 
-  /**
-   * แถวอุปกรณ์: ช่อง "เติมแล้ว" เป็น <input type="number"> (min=0, max=จำนวนที่ต้องเติม)
-   * พร้อมปุ่มบันทึกต่อแถว — การคำนวณ "เหลือ" และ % ความคืบหน้าอัปเดตแบบ real-time ที่ onFillInput()
-   */
-  renderItemRow(request, item, canEdit) {
-    const requested = parseFloat(item.qty_requested || 0);
-    const filledSaved = parseFloat(item.qty_filled || 0);
-    const key = `${request.id}:${item.item_id}`;
-
-    const draft = this.fillDrafts.get(key);
-    const shownValue = draft !== undefined ? draft : String(filledSaved);
-    let shownNum = parseFloat(shownValue);
-    if (isNaN(shownNum)) shownNum = 0;
-    shownNum = Math.min(Math.max(shownNum, 0), requested);
-
-    const remaining = Math.max(0, requested - shownNum);
-    const progress = requested > 0 ? Math.min(100, Math.round((shownNum / requested) * 100)) : 100;
-    const delta = shownNum - filledSaved;
-    const saveDisabled = !canEdit || delta < 1;
-    // ช่องนี้คือ "ยอดรวมที่เติมแล้วทั้งหมด" (ไม่ใช่ยอดที่เติมครั้งนี้) — ค่าที่ต่ำกว่ายอดที่บันทึกไว้จริง
-    // บันทึกไม่ได้ จึงต้องบอกผู้ใช้ตรง ๆ ว่าทำไมปุ่มถึงมืด (ข้อ 4.2 ห้ามตีความตัวเลขสองแบบปนกัน)
-    const belowSaved = delta < 0;
-    const saveTitle = canEdit
-      ? (belowSaved ? `กรอกได้เฉพาะยอดรวมที่มากกว่าที่บันทึกแล้ว (${this.fmtNum(filledSaved)})`
-                   : (delta < 1 ? 'ระบุจำนวนที่เติมเพิ่มก่อนบันทึก' : ''))
-      : '';
-
-    // ข้อ 4.3: ยอดบนรถ "ก่อนเติม → หลังเติม" อ่านจากแถวที่บันทึกไว้จริง ไม่เดายอดถ้ายังไม่เคยตรวจนับ
-    const stockBefore = this.numOrNull(item.vehicle_stock_before);
-    const stockAfter = this.numOrNull(item.vehicle_stock_after);
-    const stockTitle = stockBefore === null
-      ? 'รถคันนี้ยังไม่เคยถูกตรวจนับยอดคงเหลือ จึงยังไม่แสดงตัวเลข (ระบบจะตั้งยอดใหม่ตอนตรวจรถครั้งถัดไป)'
-      : 'ยอดบนรถหลังเติม = ยอดก่อนเติม + จำนวนที่เติมจริง'
-        + (delta > 0 ? ' (ตัวจางคือค่าที่จะเกิดหลังบันทึกครั้งนี้)' : '');
-    const stockHtml = stockBefore === null
-      ? '<span class="rs-stock unknown">ยังไม่เคยตรวจนับ</span>'
-      : `<span class="rs-stock">${this.fmtNum(stockBefore)} → <b>${this.fmtNum(stockAfter ?? stockBefore)}</b></span>`;
-
-    const inputHtml = `
-      <input type="number" min="0" max="${requested}" step="1"
-        class="rs-fill-input m-0 w-24 min-h-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-right text-sm font-semibold tabular-nums text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-200 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500"
-        value="${UI.escape(shownValue)}"
-        data-item-id="${UI.escape(item.item_id)}"
-        aria-label="จำนวนที่เติมแล้วของ ${UI.escape(item.name)}"
-        ${canEdit ? '' : 'disabled'}
-      >
-    `;
-
-    const saveBtnHtml = canEdit ? `
-      <button type="button"
-        class="rs-row-save m-0 w-auto min-h-0 shrink-0 whitespace-nowrap rounded-lg border-0 bg-teal-600 px-3 py-2 text-xs font-bold text-white transition-colors duration-200 hover:bg-teal-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
-        data-act="row-save" data-id="${request.id}" data-item-id="${UI.escape(item.item_id)}"
-        ${saveDisabled ? 'disabled' : ''}
-        title="${UI.escape(saveTitle)}"
-      >${request.status === 'PENDING' ? 'เริ่มเติม' : '＋ บันทึก'}</button>
-    ` : '<span class="text-xs text-slate-400">—</span>';
-
-    return `
-      <tr data-key="${UI.escape(key)}" data-requested="${requested}" data-filled="${filledSaved}">
-        <td>${UI.escape(item.name)}</td>
-        <td class="num">${UI.escape(item.standard)}</td>
-        <td class="num">${UI.escape(item.actual_qty || '-')}</td>
-        <td class="num">${UI.escape(item.qty_requested)}</td>
-        <td class="num rs-stock-cell" data-before="${stockBefore === null ? '' : stockBefore}" data-after="${stockAfter === null ? '' : stockAfter}" title="${UI.escape(stockTitle)}">${stockHtml}</td>
-        <td class="num">${inputHtml}</td>
-        <td class="num rs-left">${belowSaved
-          ? `<span class="chip chip-miss">ต่ำกว่าที่บันทึกแล้ว ${this.fmtNum(filledSaved)}</span>`
-          : (remaining > 0 ? this.fmtNum(remaining) : '<span class="chip chip-ok">ครบ</span>')}</td>
-        <td class="num">
-          <div style="min-width: 96px;">
-            <div class="progress-track" style="height: 6px;">
-              <div class="progress-fill" style="width: ${progress}%"></div>
-            </div>
-            <small class="rs-pct">${progress}%</small>
-          </div>
-        </td>
-        <td class="num">${saveBtnHtml}</td>
-      </tr>
-    `;
-  }
-
-  /**
-   * Real-time: clamp ค่าให้อยู่ใน [0, ต้องเติม] แล้วอัปเดตช่อง "เหลือ" + progress bar + สถานะปุ่มบันทึก
-   */
-  onFillInput(input) {
-    const tr = input.closest('tr[data-key]');
-    if (!tr) return;
-
-    const requested = parseFloat(input.max) || 0;
-    let value = parseFloat(input.value);
-    if (!isNaN(value) && value > requested) {
-      value = requested;
-      input.value = String(requested);
-    } else if (!isNaN(value) && value < 0) {
-      value = 0;
-      input.value = '0';
-    }
-    const effective = isNaN(value) ? 0 : value;
-    const filledSaved = parseFloat(tr.dataset.filled || '0');
-    const belowSaved = effective < filledSaved;
-
-    const leftCell = tr.querySelector('.rs-left');
-    if (leftCell) {
-      const remaining = Math.max(0, requested - effective);
-      leftCell.innerHTML = belowSaved
-        ? `<span class="chip chip-miss">ต่ำกว่าที่บันทึกแล้ว ${this.fmtNum(filledSaved)}</span>`
-        : (remaining > 0 ? String(remaining) : '<span class="chip chip-ok">ครบ</span>');
-    }
-
-    const progress = requested > 0 ? Math.min(100, Math.round((effective / requested) * 100)) : 100;
-    const fill = tr.querySelector('.progress-fill');
-    if (fill) fill.style.width = progress + '%';
-    const pctLabel = tr.querySelector('.rs-pct');
-    if (pctLabel) pctLabel.textContent = progress + '%';
-
-    const saveBtn = tr.querySelector('.rs-row-save');
-    if (saveBtn && saveBtn.dataset.busy !== '1') {
-      const delta = effective - filledSaved;
-      saveBtn.disabled = delta < 1;
-      saveBtn.title = belowSaved
-        ? `กรอกได้เฉพาะยอดรวมที่มากกว่าที่บันทึกแล้ว (${this.fmtNum(filledSaved)})`
-        : (delta < 1 ? 'ระบุจำนวนที่เติมเพิ่มก่อนบันทึก' : '');
-    }
-
-    // พรีวิว "ยอดบนรถหลังบันทึก" จากค่าที่บันทึกจริงใน DB + ส่วนต่างที่ยังไม่บันทึก
-    const stockCell = tr.querySelector('.rs-stock-cell');
-    if (stockCell) {
-      const before = this.numOrNull(stockCell.dataset.before);
-      const after = this.numOrNull(stockCell.dataset.after);
-      if (before === null) {
-        stockCell.innerHTML = '<span class="rs-stock unknown">ยังไม่เคยตรวจนับ</span>';
-      } else {
-        const saved = after === null ? before : after;
-        const add = Math.max(0, effective - filledSaved);
-        const projected = Math.round((saved + add) * 100) / 100;
-        stockCell.innerHTML = `<span class="rs-stock">${this.fmtNum(before)} → <b>${this.fmtNum(saved)}</b>`
-          + (add > 0 ? ` <span class="rs-stock-projected">+ ${this.fmtNum(add)} = ${this.fmtNum(projected)}</span>` : '')
-          + '</span>';
-      }
-    }
-
-    this.fillDrafts.set(tr.dataset.key, input.value);
-  }
-
-  numOrNull(value) {
-    if (value === null || value === undefined || value === '') return null;
-    const n = parseFloat(value);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  fmtNum(value) {
-    const n = parseFloat(value);
-    return Number.isFinite(n) ? String(Math.round(n * 100) / 100) : '-';
-  }
-
-  replaceRequest(updated) {
-    if (!updated) return;
-    const idx = this.requests.findIndex(r => r.id === updated.id);
-    if (idx !== -1) {
-      this.requests[idx] = updated;
-    } else {
-      this.requests.push(updated);
-    }
-  }
-
-  async handleAction(action, button) {
-    const requestId = button.dataset.id;
-    switch (action) {
-      case 'start':
-        await this.startRestock(requestId);
-        break;
-      case 'restock':
-        await this.openRestockSheet(requestId);
-        break;
-      case 'complete':
-        await this.completeRestock(requestId);
-        break;
-      case 'cancel':
-        await this.cancelRestock(requestId);
-        break;
-      case 'assign':
-        await this.assignRestock(requestId);
-        break;
-      case 'view':
-        await this.viewDetail(requestId);
-        break;
-      case 'row-save':
-        await this.saveRow(button, requestId, button.dataset.itemId);
-        break;
-    }
-  }
-
-  /**
-   * บันทึกจำนวนเติมของแถวเดียว (delta = ค่าที่กรอก − ที่บันทึกไว้เดิม)
-   * ถ้ารายการยัง PENDING จะเริ่มดำเนินการ (start) ให้อัตโนมัติก่อน แล้วจึงบันทึกจำนวน
-   */
-  async saveRow(button, requestId, itemId) {
-    if (button.disabled || button.dataset.busy === '1') return;
-
-    const request = this.requests.find(r => r.id === requestId);
-    const item = (request?.items || []).find(i => i.item_id === itemId);
-    if (!request || !item) return;
-
-    const requested = parseFloat(item.qty_requested || 0);
-    const filledSaved = parseFloat(item.qty_filled || 0);
-    const input = button.closest('tr')?.querySelector('.rs-fill-input');
-    if (!input) return;
-
-    let value = parseFloat(input.value);
-    if (isNaN(value)) value = 0;
-    value = Math.min(Math.max(value, 0), requested);
-    const delta = value - filledSaved;
-
-    if (delta < 1) {
-      window.toast.warning('กรุณาระบุจำนวนที่เติมเพิ่มก่อนบันทึก');
-      return;
-    }
-
-    button.dataset.busy = '1';
-    button.disabled = true;
-    button.textContent = 'กำลังบันทึก...';
-
-    try {
-      if (request.status === 'PENDING') {
-        const started = await window.staffApi.startRestock(requestId, {});
-        this.replaceRequest(started.data);
-      }
-
-      const result = await window.staffApi.recordRestock(requestId, {
-        items: [{ item_id: itemId, qty: delta }],
-        note: '',
-      });
-      this.replaceRequest(result.data);
-      this.fillDrafts.delete(`${requestId}:${itemId}`);
-
-      const updatedItem = (result.data?.items || []).find(i => i.item_id === itemId);
-      const newFilled = parseFloat(updatedItem?.qty_filled || 0);
-      this.notifyRestockResult(result.data?.restock_result, item.name, newFilled >= requested);
-    } catch (error) {
-      window.toast.error('บันทึกไม่สำเร็จ: ' + (error?.message || 'กรุณาลองใหม่'));
-    } finally {
-      this.render();
-    }
-  }
-
-  /**
-   * แสดงผลจากการบันทึกการเติม 1 ครั้ง (ข้อ 4): เติมจริงเท่าไหร่ / ข้ามอะไร / คลังใกล้หมดหรือของไม่พอ
-   */
-  notifyRestockResult(res, nameHint, completed = false) {
-    if (!res) {
-      window.toast.success('บันทึกการเติมแล้ว');
-      return;
-    }
-
-    const applied = res.applied || [];
-    const untracked = res.untracked || [];
-    if (applied.length > 0) {
-      const detail = applied.map(a => `${a.name} +${a.qty}`).join(', ');
-      const whNote = untracked.length > 0
-        ? ' • ยอดบนรถอัปเดตแล้ว (คลังกลางยังไม่ถูกตัด เพราะยังไม่ได้ตรวจนับคลัง)'
-        : ' • ยอดบนรถกับคลังกลางอัปเดตแล้ว';
-      window.toast.success(`เติมขึ้นรถแล้ว: ${detail}${whNote}`);
-    }
-
-    (res.skipped || []).forEach(s => {
-      window.toast.warning(`ข้าม “${s.name || s.item_id || '-'}”: ${s.reason}`);
-    });
-    untracked.forEach(u => {
-      window.toast.warning(`คลังกลาง “${u.name}” ยังไม่เคยรับเข้า/ปรับยอด — เติมขึ้นรถ ${u.qty} แล้วแต่ไม่ได้ตัดคลัง กรุณาตรวจนับคลังกลางในเมนูคลังสต็อก`);
-    });
-    (res.warnings || []).forEach(w => window.toast.warning(w));
-    (res.alerts || []).forEach(a => {
-      window.toast.warning(`คลังกลาง “${a.name}” เหลือ ${a.balance} (ขั้นต่ำ ${a.min}) — ควรเบิกเข้าคลัง`);
-    });
-
-    if (res.status === 'COMPLETED' || completed) {
-      window.toast.success('รายการนี้เติมครบตามมาตรฐานแล้ว (ระบบปิดงานให้อัตโนมัติ)');
-    }
-  }
-
-  async startRestock(requestId) {
-    try {
-      const result = await window.staffApi.startRestock(requestId, {});
-      this.replaceRequest(result.data);
-      window.toast.success('เริ่มดำเนินการเติมอุปกรณ์');
-      this.render();
-    } catch (error) {
-      window.toast.error('ไม่สามารถเริ่มได้: ' + error.message);
-    }
-  }
-
-  async openRestockSheet(requestId) {
-    const request = this.requests.find(r => r.id === requestId);
-    if (!request) return;
-
-    // Build sheet content for recording restock quantities
-    let body = `
-      <label for="rsSheetNote" style="margin-top:10px;display:block">หมายเหตุ</label>
-      <input id="rsSheetNote" maxlength="500" type="text" placeholder="หมายเหตุ (ถ้ามี)">
-      <div style="margin-top: 12px; max-height: 40vh; overflow-y: auto;">
-    `;
-
-    (request.items || []).forEach(item => {
-      const requested = parseFloat(item.qty_requested || 0);
-      const filled = parseFloat(item.qty_filled || 0);
-      const remaining = Math.max(0, requested - filled);
-
-      if (remaining > 0) {
-        body += `
-          <div style="margin-bottom: 12px;">
-            <label style="display:block;margin-bottom:4px;font-weight:600">${UI.escape(item.name)} <span class="muted">(ต้องเติม ${requested} | เติมแล้ว ${filled} | เหลือ ${remaining})</span></label>
-            <input type="number" min="1" max="${remaining}" step="1" class="restock-qty-input" data-item-id="${item.item_id}" placeholder="จำนวนที่เติม (เหลือ ${remaining})" style="width:100%;padding:12px;border:1.5px solid #d1d5db;border-radius:10px;">
-          </div>
-        `;
-      } else {
-        body += `
-          <div style="margin-bottom: 12px; padding: 8px; background: var(--ok-soft); border-radius: 8px;">
-            <strong>${UI.escape(item.name)}</strong> <span class="chip chip-ok">เติมครบแล้ว</span>
-          </div>
-        `;
-      }
-    });
-
-    body += '</div>';
-
-    document.getElementById('rsSheetTitle').textContent = 'บันทึกการเติมอุปกรณ์ — ' + request.no;
-    document.getElementById('rsSheetBody').innerHTML = body;
-    document.getElementById('restockSheet').classList.remove('hidden');
-
-    // Store context for confirmation
-    this.sheetContext = { requestId, action: 'restock' };
-  }
-
-  async confirmRestockAction() {
-    if (!this.sheetContext) return;
-    const { requestId, action } = this.sheetContext;
-
-    if (action === 'restock') {
-      const items = [];
-      document.querySelectorAll('.restock-qty-input').forEach(input => {
-        const qty = parseInt(input.value) || 0;
-        if (qty > 0) {
-          items.push({
-            item_id: input.dataset.itemId,
-            qty: qty,
-          });
-        }
-      });
-
-      if (items.length === 0) {
-        window.toast.error('กรุณาระบุจำนวนที่เติมอย่างน้อย 1 รายการ');
-        return;
-      }
-
-      const note = document.getElementById('rsSheetNote')?.value || '';
-
+  async onRequestClick(event) {
+    const btn = event.target.closest('[data-action]');
+    const card = event.target.closest('.request-card');
+    if (!btn || !card) return;
+    if (btn.dataset.action === 'fill') {
+      this.filter = 'need';
+      await this.selectCar(btn.dataset.car);
+      document.getElementById('refillSheet')?.scrollIntoView({ behavior: 'smooth' });
+    } else if (btn.dataset.action === 'cancel') {
+      const reason = UI.prompt('เหตุผลการยกเลิกรายการรอเติมนี้ (จำเป็น)');
+      if (!reason || !reason.trim()) return;
       try {
-        const result = await window.staffApi.recordRestock(requestId, {
-          items,
-          note,
-        });
-
-        this.replaceRequest(result.data);
-        items.forEach(it => this.fillDrafts.delete(`${requestId}:${it.item_id}`));
-        this.notifyRestockResult(result.data?.restock_result);
-        this.closeRestockSheet();
-        this.render();
+        await window.staffApi.cancelRestock(card.dataset.id, { reason: reason.trim() });
+        window.toast.success('ยกเลิกรายการแล้ว');
+        await this.load();
       } catch (error) {
-        window.toast.error('บันทึกไม่สำเร็จ: ' + (error?.message || 'กรุณาลองใหม่'));
+        window.toast.error(error.message);
       }
-    }
-  }
-
-  async completeRestock(requestId) {
-    if (!confirm('ยืนยันว่าเติมครบทุกรายการแล้ว?')) return;
-
-    try {
-      const result = await window.staffApi.completeRestock(requestId, {
-        note: 'เติมครบตามมาตรฐาน',
-      });
-
-      this.replaceRequest(result.data);
-      window.toast.success('ยืนยันการเติมครบแล้ว');
-      this.render();
-    } catch (error) {
-      window.toast.error('ไม่สามารถยืนยันได้: ' + error.message);
-    }
-  }
-
-  async cancelRestock(requestId) {
-    const reason = prompt('กรุณาระบุเหตุผลการยกเลิก:');
-    if (!reason?.trim()) {
-      window.toast.error('ต้องระบุเหตุผลการยกเลิก');
-      return;
-    }
-
-    if (!confirm('ยืนยันยกเลิกรายการนี้?')) return;
-
-    try {
-      const result = await window.staffApi.cancelRestock(requestId, {
-        reason,
-      });
-
-      this.replaceRequest(result.data);
-      window.toast.success('ยกเลิกสำเร็จ');
-      this.render();
-    } catch (error) {
-      window.toast.error('ยกเลิกไม่สำเร็จ: ' + error.message);
-    }
-  }
-
-  async assignRestock(requestId) {
-    const userId = prompt('กรอกรหัสผู้ใช้ที่จะมอบหมาย (User ID):');
-    if (!userId?.trim()) return;
-
-    try {
-      const result = await window.adminApi.assignRestock(requestId, { assigned_user_id: userId });
-      this.replaceRequest(result.data);
-      window.toast.success('มอบหมายสำเร็จ');
-      this.render();
-    } catch (error) {
-      window.toast.error('มอบหมายไม่สำเร็จ: ' + error.message);
-    }
-  }
-
-  async viewDetail(requestId) {
-    // Could open a modal with full details
-    window.toast.info('ดูรายละเอียด - เปิดในรูปแบบเต็ม');
-  }
-
-  closeRestockSheet() {
-    document.getElementById('restockSheet').classList.add('hidden');
-    this.sheetContext = null;
-  }
-
-  async reload() {
-    try {
-      const res = await this.fetchRequests();
-      this.requests = res.data || [];
-      this.checkUrlParams();
-      this.render();
-    } catch (error) {
-      console.error('Failed to reload:', error);
     }
   }
 }
 
-// Initialize
-let restockPage;
-document.addEventListener('DOMContentLoaded', () => {
-  if (document.getElementById('tabContentRestock') && !document.getElementById('tabContentRestock').classList.contains('hidden')) {
-    restockPage = new RestockPage();
-    window.restockPage = restockPage;
-  }
-});
-
-// Global functions
-window.setRestockFilter = (filter) => restockPage?.setFilter(filter);
+let refillPage;
 window.initRestock = () => {
-  if (!restockPage) {
-    restockPage = new RestockPage();
-    window.restockPage = restockPage;
+  if (!refillPage) {
+    refillPage = new RefillPage();
+    window.refillPage = refillPage;
   } else {
-    restockPage.reload();
+    refillPage.load();
   }
 };
-
-// Sheet handlers
-document.getElementById('rsSheetOk')?.addEventListener('click', () => restockPage?.confirmRestockAction());
-document.getElementById('rsSheetCancel')?.addEventListener('click', () => restockPage?.closeRestockSheet());
+window.setRestockFilter = (filter) => refillPage?.setRequestFilter(filter);
+window.setRefillFilter = (filter) => refillPage?.setFilter(filter);
+window.submitRefill = () => refillPage?.submit();

@@ -167,6 +167,27 @@ docker compose ps        # frontend, backend, db ต้องขึ้น (healt
 3. เพิ่ม Route ใน `routes/web.php`
 4. เพิ่ม CSS/JS ตามต้องการ
 
+## ยอดอุปกรณ์บนรถ / ตรวจเช็คตามเวร / เติมของ (migration 010)
+
+ไม่มีคลังสต็อกกลางแล้ว (`/api/stock*` ถูกถอด; ตาราง `refer_stock_items`/`refer_stock_transactions` คงไว้แต่ไม่ถูกใช้)
+ทุกการเปลี่ยนยอดผ่าน `App\Services\VehicleStockService` ใน transaction เดียวกับงานนั้นเสมอ
+
+| ข้อมูล | ตาราง | หมายเหตุ |
+|---|---|---|
+| ประเภทอุปกรณ์ | `refer_items.item_type` | `box` กล่อง/Lot, `piece` รายชิ้น, `electric` เครื่องไฟฟ้า |
+| ยอดของสิ้นเปลือง | `refer_item_lots` | แหล่งข้อมูลหลัก; `refer_items.current_qty` = SUM(Lot) (sync อัตโนมัติ) |
+| เครื่องไฟฟ้า | `refer_item_units` | สถานะพร้อม/ไม่พร้อม + แบต 1-4 ขีด รายเครื่อง — ไม่ตัดสต๊อค |
+| Ledger | `refer_stock_movements` | INIT/USE/REFILL/ADJUST/REVERSAL ทุก Lot ที่ถูกแตะ |
+| รอบตรวจ | `refer_checks` | UNIQUE (รถ, `check_date`, `shift_code`) — เช้า 08-16 / บ่าย 16-24 / ดึก 00-08 |
+| ประวัติแก้รอบตรวจ | `refer_check_history` | สำเนาก่อนแก้ทุก revision |
+| การเติม 1 ครั้ง | `refer_refill_batches` | `client_token` UNIQUE กันกดซ้ำ |
+
+- ตรวจเช็ค: กรอก "ใช้ไป" → ยืนยัน "ครบถ้วน" หรือกรอก "นับได้จริง" + หมายเหตุ (= ผิดปกติ); ตัดยอดแบบ FEFO
+- แก้รอบเดิม: ย้อนผลจาก ledger แล้วคำนวณใหม่ → ไม่หักซ้ำ
+- เติมของ: ต้องระบุวันหมดอายุทุก Lot, ห้ามของหมดอายุ, ปิดยอดใน "รายการรอเติม" ของรถคันนั้นอัตโนมัติ
+- กระทบยอด: `VehicleStockService::reconcile()` (ถูกเรียกก่อน commit ทุกครั้ง — ไม่ตรงจะ rollback)
+- ย้อนกลับ migration: `database/migrations/010-rollback.sql` (สำรองฐานข้อมูลก่อนเสมอ)
+
 ## API Endpoints
 
 ### Authentication

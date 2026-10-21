@@ -7,7 +7,7 @@ class Inspection extends Model
 {
     protected string $table = 'refer_checks';
     protected string $primaryKey = 'id';
-    protected array $fillable = ['id', 'car_id', 'nurse_id', 'car_name', 'nurse_name', 'shift_name', 'started_at', 'completed_at'];
+    protected array $fillable = ['id', 'car_id', 'nurse_id', 'car_name', 'nurse_name', 'check_date', 'shift_code', 'shift_name', 'started_at', 'completed_at', 'revision', 'updated_at', 'updated_by'];
     protected array $casts = [];
 
     public function getByVehicle(string $carId): array

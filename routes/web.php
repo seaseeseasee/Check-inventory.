@@ -16,7 +16,6 @@ use App\Controllers\VehicleController;
 use App\Controllers\InspectionController;
 use App\Controllers\RestockController;
 use App\Controllers\HistoryController;
-use App\Controllers\StockController;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\CsrfMiddleware;
 use App\Helpers\Response;
@@ -82,13 +81,12 @@ $route = match (true) {
 
     $path === '/api/admin/restock' && $method === 'GET' => ['AdminController', 'getRestockRequests'],
     $path === '/api/admin/restock/stats' && $method === 'GET' => ['AdminController', 'getRestockStats'],
-    preg_match('/^\/api\/admin\/restock\/([^\/]+)\/assign$/', $path, $matches) && $method === 'POST' => ['AdminController', 'assignRestock', $matches[1]],
-    preg_match('/^\/api\/admin\/restock\/([^\/]+)\/unassign$/', $path, $matches) && $method === 'POST' => ['AdminController', 'unassignRestock', $matches[1]],
 
     // Staff routes
     $path === '/api/staff/dashboard' && $method === 'GET' => ['StaffController', 'dashboard'],
     $path === '/api/staff/vehicles' && $method === 'GET' => ['StaffController', 'getVehicles'],
     preg_match('/^\/api\/staff\/vehicles\/([^\/]+)$/', $path, $matches) && $method === 'GET' => ['StaffController', 'getVehicle', $matches[1]],
+    $path === '/api/staff/inspections/shifts' && $method === 'GET' => ['StaffController', 'getShiftStatus'],
     $path === '/api/staff/inspections/start' && $method === 'POST' => ['StaffController', 'startInspection'],
     $path === '/api/staff/inspections/draft' && $method === 'GET' => ['StaffController', 'getDraftInfo'],
     $path === '/api/staff/inspections/draft' && $method === 'PUT' => ['StaffController', 'saveDraft'],
@@ -98,19 +96,15 @@ $route = match (true) {
     $path === '/api/staff/restock' && $method === 'GET' => ['StaffController', 'getRestockRequests'],
     $path === '/api/staff/restock/my' && $method === 'GET' => ['StaffController', 'getMyRestockRequests'],
     preg_match('/^\/api\/staff\/restock\/([^\/]+)$/', $path, $matches) && $method === 'GET' => ['StaffController', 'getRestockRequest', $matches[1]],
-    preg_match('/^\/api\/staff\/restock\/([^\/]+)\/start$/', $path, $matches) && $method === 'POST' => ['StaffController', 'startRestock', $matches[1]],
-    preg_match('/^\/api\/staff\/restock\/([^\/]+)\/restock$/', $path, $matches) && $method === 'POST' => ['StaffController', 'recordRestock', $matches[1]],
-    preg_match('/^\/api\/staff\/restock\/([^\/]+)\/complete$/', $path, $matches) && $method === 'POST' => ['StaffController', 'completeRestock', $matches[1]],
     preg_match('/^\/api\/staff\/restock\/([^\/]+)\/cancel$/', $path, $matches) && $method === 'POST' => ['StaffController', 'cancelRestock', $matches[1]],
+    // เติมของเข้ารถโดยตรง (แทน start/restock/complete + คลังกลางที่ถูกยกเลิก)
+    preg_match('/^\/api\/staff\/refill\/([^\/]+)$/', $path, $matches) && $method === 'GET' => ['StaffController', 'getRefillSheet', $matches[1]],
+    preg_match('/^\/api\/staff\/refill\/([^\/]+)$/', $path, $matches) && $method === 'POST' => ['StaffController', 'refillVehicle', $matches[1]],
 
     $path === '/api/staff/history/inspections' && $method === 'GET' => ['StaffController', 'getInspections'],
     $path === '/api/staff/history/restock' && $method === 'GET' => ['StaffController', 'getRestockHistory'],
 
-    // Stock (คลังสต็อกกลาง) routes
-    $path === '/api/stock' && $method === 'GET' => ['StockController', 'index'],
-    $path === '/api/stock/transactions' && $method === 'GET' => ['StockController', 'transactions'],
-    preg_match('/^\/api\/stock\/([^\/]+)\/receive$/', $path, $matches) && $method === 'POST' => ['StockController', 'receive', $matches[1]],
-    preg_match('/^\/api\/stock\/([^\/]+)\/adjust$/', $path, $matches) && $method === 'POST' => ['StockController', 'adjust', $matches[1]],
+    // คลังสต็อกกลาง (/api/stock*) ถูกยกเลิกแล้ว — ยอดอุปกรณ์อยู่ที่รถแต่ละคัน (VehicleStockService)
 
     // Wards/departments (ทะเบียนวอร์ด/หน่วยงานของตารางพยาบาล)
     // อ่าน: ทุก role ที่ login แล้ว — เขียน: ตรวจ role admin ที่ DepartmentController อีกชั้น
@@ -141,9 +135,9 @@ $route = match (true) {
 
     $path === '/api/inspections' && $method === 'GET' => ['InspectionController', 'index'],
     preg_match('/^\/api\/inspections\/([^\/]+)$/', $path, $matches) && $method === 'GET' => ['InspectionController', 'show', $matches[1]],
-    $path === '/api/inspections/start' && $method === 'POST' => ['InspectionController', 'start'],
-    $path === '/api/inspections/draft' && $method === 'PUT' => ['InspectionController', 'saveDraft'],
-    $path === '/api/inspections/submit' && $method === 'POST' => ['InspectionController', 'submit'],
+    $path === '/api/inspections/start' && $method === 'POST' => ['StaffController', 'startInspection'],
+    $path === '/api/inspections/draft' && $method === 'PUT' => ['StaffController', 'saveDraft'],
+    $path === '/api/inspections/submit' && $method === 'POST' => ['StaffController', 'submitInspection'],
 
     $path === '/api/restock' && $method === 'GET' => ['RestockController', 'index'],
     preg_match('/^\/api\/restock\/([^\/]+)$/', $path, $matches) && $method === 'GET' => ['RestockController', 'show', $matches[1]],
@@ -218,6 +212,10 @@ try {
     // ข้อผิดพลาดที่ต้องระบุ HTTP status + ข้อมูลประกอบ (เช่น 409 พร้อมจำนวนประวัติที่ผูกอยู่)
     error_log('API ApiException(' . $e->getStatus() . '): ' . $e->getMessage());
     Response::error($e->getMessage(), $e->getStatus(), $e->getExtra());
+} catch (\PDOException $e) {
+    // PDOException สืบทอดจาก RuntimeException — ต้องจับก่อน ไม่ให้ SQLSTATE/ชื่อตาราง/คอลัมน์หลุดถึงผู้ใช้
+    error_log('API PDOException: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    Response::serverError();
 } catch (\RuntimeException $e) {
     // Business-rule violations (invalid status transitions, etc.) must return JSON, not a PHP fatal
     error_log('API RuntimeException: ' . $e->getMessage());

@@ -136,7 +136,8 @@ class VehiclesPage {
 
     const status = VEHICLE_STATUS_LABEL[v.status] || v.status || '-';
     const chip = VEHICLE_STATUS_CHIP[v.status] || 'chip-off';
-    const bits = [`<span class="chip ${chip}">${UI.escape(status)}</span>`];
+    window.vehicleRef.remember([v]);
+    const bits = [window.vehicleChip(v), `<span class="chip ${chip}">${UI.escape(status)}</span>`];
 
     if (v.active_item_count !== undefined) {
       bits.push(`<span class="chip chip-info">อุปกรณ์ใช้งาน ${UI.escape(String(v.active_item_count))} รายการ</span>`);
@@ -272,14 +273,12 @@ class VehiclesPage {
         ? `<span class="stock-stamp">ยอดล่าสุด ${UI.escape(this.fmtStamp(counted))}</span>`
         : '<span class="stock-stamp">ยังไม่เคยตรวจนับ</span>';
 
-      // refer_items.expiry_text เป็นข้อความอิสระ (ข้อมูลจริงส่วนใหญ่ไม่ใช่ yyyy-mm-dd เช่น "10")
-      // ถ้าบังคับ type="date" กับค่าแบบนั้น ช่องจะแสดงว่าง แล้วการกด "บันทึก" ครั้งถัดไป
-      // จะส่ง expiry_text = "" ไปล้างค่าเดิมทิ้ง — จึงใช้ input วันที่เฉพาะค่าที่รูปแบบวันที่จริง
+      // ยอดคงเหลือ + วันหมดอายุมาจาก Lot / รายเครื่อง (แก้ผ่านการเติมของ/การตรวจเช็คเท่านั้น)
+      const type = item.item_type || (item.is_battery ? 'electric' : 'piece');
       const expiry = String(item.expiry_text ?? '');
-      const isIsoDate = /^\d{4}-\d{2}-\d{2}$/.test(expiry);
-      const expiryInput = isIsoDate
-        ? `<input type="date" value="${UI.escape(expiry)}" data-item-id="${item.id}" data-field="expiry_text" aria-label="วันหมดอายุ">`
-        : `<input type="text" value="${UI.escape(expiry)}" data-item-id="${item.id}" data-field="expiry_text" placeholder="ข้อความวันหมดอายุ เช่น 10 / 15/12/2569">`;
+      const qtyText = counted
+        ? `${UI.escape(String(Math.round(Number(item.current_qty || 0) * 100) / 100))}${type === 'electric' ? ' เครื่อง' : ''}`
+        : 'ยังไม่เคยตรวจนับ';
 
       return `
       <article class="stock-card${item.active ? '' : ' is-off'}" data-item-id="${item.id}">
@@ -295,19 +294,20 @@ class VehiclesPage {
             <input type="text" value="${UI.escape(item.standard)}" data-item-id="${item.id}" data-field="standard" placeholder="จำนวนมาตรฐาน">
           </div>
           <div>
-            <label>วันหมดอายุ${isIsoDate ? '' : ' <span class="text-xs font-normal text-slate-500">(ข้อความเดิม)</span>'}</label>
-            ${expiryInput}
-          </div>
-          <div>
-            <label>ยอดคงเหลือบนรถ</label>
-            <input type="number" min="0" step="any" inputmode="decimal" value="${counted ? UI.escape(String(item.current_qty ?? '')) : ''}" data-item-id="${item.id}" data-field="onboard_qty" placeholder="${counted ? 'เว้นว่าง = ไม่แก้' : 'ยังไม่เคยตรวจนับ — กรอกเพื่อบันทึกยอด'}">
-          </div>
-          <div>
-            <label>เป็นแบตเตอรี่</label>
-            <select data-item-id="${item.id}" data-field="is_battery" style="min-height: 44px;">
-              <option value="false" ${!item.is_battery ? 'selected' : ''}>ไม่ใช่</option>
-              <option value="true" ${item.is_battery ? 'selected' : ''}>ใช่</option>
+            <label>ประเภท</label>
+            <select data-item-id="${item.id}" data-field="item_type" style="min-height: 44px;">
+              <option value="piece" ${type === 'piece' ? 'selected' : ''}>แบบชิ้น</option>
+              <option value="box" ${type === 'box' ? 'selected' : ''}>แบบกล่อง</option>
+              <option value="electric" ${type === 'electric' ? 'selected' : ''}>เครื่องใช้ไฟฟ้า</option>
             </select>
+          </div>
+          <div>
+            <label>คงเหลือบนรถ</label>
+            <div class="readonly-field">${qtyText}</div>
+          </div>
+          <div>
+            <label>หมดอายุเร็วสุด</label>
+            <div class="readonly-field">${type === 'electric' ? '—' : (expiry ? UI.escape(UI.formatDateThai(expiry)) : 'ไม่มีข้อมูล')}</div>
           </div>
         </div>
         <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">${stamp}</div>
@@ -354,13 +354,9 @@ class VehiclesPage {
     document.getElementById('addItemForm').classList.add('hidden');
     document.getElementById('stockName').value = '';
     document.getElementById('stockStandard').value = '';
-    document.getElementById('stockExpiry').value = '';
-    document.getElementById('stockBattery').value = 'false';
-    const onboardEl = document.getElementById('stockOnboard');
-    if (onboardEl) onboardEl.value = '';
-    const currentEl = document.getElementById('stockCurrent');
-    if (currentEl) currentEl.value = '';
-    const minEl = document.getElementById('stockMin');
+    const typeEl = document.getElementById('stockItemType');
+    if (typeEl) typeEl.value = 'piece';
+    const minEl = null;
     if (minEl) minEl.value = '';
   }
 
@@ -369,11 +365,7 @@ class VehiclesPage {
 
     const name = document.getElementById('stockName')?.value?.trim();
     const standard = document.getElementById('stockStandard')?.value?.trim();
-    const expiry = document.getElementById('stockExpiry')?.value || '';
-    const isBattery = document.getElementById('stockBattery')?.value === 'true';
-    const onboard = document.getElementById('stockOnboard')?.value?.trim() ?? '';
-    const currentStock = document.getElementById('stockCurrent')?.value?.trim() ?? '';
-    const minStock = document.getElementById('stockMin')?.value?.trim() ?? '';
+    const itemType = document.getElementById('stockItemType')?.value || 'piece';
     const vehicleId = this.currentVehicleId;
 
     if (!name || !standard) {
@@ -386,21 +378,12 @@ class VehiclesPage {
       return;
     }
 
-    // เดิมอ่าน stockExpiry แต่ไม่ส่งเข้า payload → วันหมดอายุที่กรอกหาย (แก้แล้ว)
-    const payload = { name, standard, is_battery: isBattery, expiry_text: expiry };
-    if (onboard !== '') payload.onboard_qty = Number(onboard);
-    if (currentStock !== '') payload.current_stock = Number(currentStock);
-    if (minStock !== '') payload.min_stock = Number(minStock);
+    const payload = { name, standard, item_type: itemType };
 
     try {
-      const res = await window.vehicleApi.addItem(vehicleId, payload);
+      await window.vehicleApi.addItem(vehicleId, payload);
       this.hideAddItemForm();
-      const stock = res?.data?.warehouse;
-      if (stock && stock.current_qty !== undefined) {
-        window.toast.success(`เพิ่มอุปกรณ์เรียบร้อย • คลัง “${stock.name}” = ${stock.current_qty}` + (Number(stock.min_qty) > 0 ? ` (ขั้นต่ำ ${stock.min_qty})` : ''));
-      } else {
-        window.toast.success('เพิ่มอุปกรณ์เรียบร้อย');
-      }
+      window.toast.success('เพิ่มอุปกรณ์เรียบร้อย — เพิ่มของ/วันหมดอายุได้ที่เมนู “เติมอุปกรณ์”');
       await this.loadItems(vehicleId);
     } catch (error) {
       window.toast.error('เพิ่มไม่สำเร็จ: ' + error.message);
@@ -436,23 +419,9 @@ class VehiclesPage {
       if (v !== String(item.standard || '')) data.standard = v;
     }
 
-    const expiryEl = field('expiry_text');
-    // renderItems() เลือกชนิด input ตามค่าจริง (date เฉพาะค่ารูปแบบ yyyy-mm-dd)
-    // จึงไม่มีกรณี "input ว่างเพราะเบราว์เซอร์รับค่าข้อความอิสระไม่ได้" ที่ทำให้ค่าเดิมถูกล้าง
-    if (expiryEl && expiryEl.value !== String(item.expiry_text || '')) data.expiry_text = expiryEl.value;
-
-    const batteryEl = field('is_battery');
-    if (batteryEl && (batteryEl.value === 'true') !== !!item.is_battery) data.is_battery = batteryEl.value === 'true';
-
-    const onboardEl = field('onboard_qty');
-    if (onboardEl && onboardEl.value.trim() !== '') {
-      const n = Number(onboardEl.value);
-      if (!Number.isFinite(n) || n < 0) {
-        window.toast.error('ยอดคงเหลือบนรถต้องเป็นตัวเลขไม่ติดลบ');
-        return null;
-      }
-      data.onboard_qty = Math.round(n * 100) / 100;
-    }
+    const typeEl = field('item_type');
+    const currentType = item.item_type || (item.is_battery ? 'electric' : 'piece');
+    if (typeEl && typeEl.value !== currentType) data.item_type = typeEl.value;
 
     return data;
   }
@@ -468,11 +437,9 @@ class VehiclesPage {
     const btn = document.querySelector(`[data-action="save"][data-item-id="${itemId}"]`);
     if (btn) UI.setLoading(btn, true);
     try {
-      const res = await window.vehicleApi.updateItem(itemId, data);
-      const warehouse = res?.data?.warehouse;
+      await window.vehicleApi.updateItem(itemId, data);
       let message = 'อัปเดตเรียบร้อย';
       if (data.standard) message += ' • คำนวณจำนวนเป้าหมายใหม่จากมาตรฐานแล้ว';
-      if (warehouse && warehouse.current_qty !== undefined) message += ` • คลัง “${warehouse.name}” = ${warehouse.current_qty}`;
       window.toast.success(message);
       await this.loadItems(this.currentVehicleId);
     } catch (error) {
@@ -578,7 +545,7 @@ class VehiclesPage {
     this.renderCopyPreview();
     window.toast.info(
       `ดึงรายการจาก ${sourceLabel} จำนวน ${sourceItems.length} รายการ `
-      + `— คัดลอกยอดคงเหลือบนรถมา ${stockCount} รายการ (ตรวจสอบก่อนกดยืนยัน)`
+      + '— คัดลอกเฉพาะรายการ/มาตรฐาน/ประเภท (ไม่คัดลอกยอดคงเหลือ เพราะของจริงไม่ได้ย้ายรถ)'
     );
   }
 
@@ -590,7 +557,7 @@ class VehiclesPage {
         content: `
           <p class="mb-2">คุณต้องการคัดลอกรายการอุปกรณ์จากรถคัน <strong>${UI.escape(sourceLabel)}</strong> ใช่หรือไม่?</p>
           <p class="mb-2">ระบบจะนำอุปกรณ์ทั้งหมด <strong>${count} รายการ</strong> มาแสดงในรถคัน <strong>${UI.escape(targetLabel)}</strong> เพื่อให้ตรวจสอบ/แก้ไขก่อนบันทึก — ยังไม่มีการบันทึกจนกว่าจะกด “ยืนยันคัดลอก”</p>
-          <p class="mb-2 text-sm">สิ่งที่คัดลอกมาด้วย: จำนวนมาตรฐาน, วันหมดอายุ, สถานะใช้งาน/พัก, แบตเตอรี่ และ <strong>ยอดคงเหลือบนรถ ${stockCount} รายการ</strong> (รายการที่ต้นทางยังไม่เคยตรวจนับจะปล่อยว่าง ไม่ใส่เป็น 0)</p>
+          <p class="mb-2 text-sm">สิ่งที่คัดลอกมาด้วย: ชื่อ, จำนวนมาตรฐาน, ประเภทอุปกรณ์ และสถานะใช้งาน/พัก — <strong>ไม่คัดลอกยอดคงเหลือ/Lot</strong> (รถปลายทางเริ่มเป็น "ยังไม่เคยตรวจนับ" จนกว่าจะเติมของหรือตรวจนับ)</p>
           ${replacing ? '<p class="mb-2 text-sm" style="color: var(--warn);">⚠️ มีรายการรอคัดลอกอยู่ก่อนแล้ว — รายการชุดใหม่นี้จะแทนที่ชุดเดิม</p>' : ''}
         `,
         onClose: () => resolve(false),
@@ -860,6 +827,16 @@ class VehiclesPage {
           <p class="mt-1 hidden text-xs font-semibold text-red-600" id="vehOdometerError" role="alert"></p>
         </div>
         <div class="md:col-span-2">
+          <label for="vehColor">สีประจำรถ</label>
+          <div class="color-row">
+            <input id="vehColor" type="color" value="${UI.escape(/^#[0-9A-Fa-f]{6}$/.test(v.vehicle_color || '') ? v.vehicle_color : window.VEHICLE_DEFAULT_COLOR)}" aria-describedby="vehColorPreview">
+            <input id="vehColorHex" type="text" maxlength="7" value="${UI.escape(v.vehicle_color || '')}" placeholder="${window.VEHICLE_DEFAULT_COLOR} (เริ่มต้น)" aria-label="รหัสสี #RRGGBB" autocomplete="off" spellcheck="false">
+            <button type="button" id="vehColorReset" class="small-btn gray">ใช้สีเริ่มต้น</button>
+          </div>
+          <p class="mt-1 text-xs text-slate-500">ตัวอย่าง: <span id="vehColorPreview"></span> — ใช้แสดงรถคันนี้ในหน้าแรก ตรวจเช็ค และเติมอุปกรณ์</p>
+          <p class="mt-1 hidden text-xs font-semibold text-red-600" id="vehColorHexError" role="alert"></p>
+        </div>
+        <div class="md:col-span-2">
           <label for="vehNotes">หมายเหตุเพิ่มเติม</label>
           <textarea id="vehNotes" rows="2" placeholder="รายละเอียดเพิ่มเติม เช่น ประจำจุดใด ใช้งานช่วงไหน">${UI.escape(v.notes || '')}</textarea>
         </div>
@@ -913,6 +890,7 @@ class VehiclesPage {
     });
     form.querySelector('#vehPlate')?.addEventListener('input', () => this.setVehicleFieldError('vehPlate', ''));
     form.querySelector('#vehOdometer')?.addEventListener('input', () => this.setVehicleFieldError('vehOdometer', ''));
+    this.bindColorFields(form);
 
     if (!isEdit) {
       const source = form.querySelector('#vehItemSource');
@@ -977,6 +955,38 @@ class VehiclesPage {
     return this._vehicleModal?.element.querySelector('#vehicleForm') || null;
   }
 
+  // ช่องเลือกสี (color picker) + ช่องรหัส #RRGGBB + ตัวอย่างป้ายทะเบียนก่อนบันทึก
+  bindColorFields(form) {
+    const picker = form.querySelector('#vehColor');
+    const hex = form.querySelector('#vehColorHex');
+    const preview = form.querySelector('#vehColorPreview');
+    const plateInput = form.querySelector('#vehPlate');
+    const paint = () => {
+      const value = (hex.value || '').trim().toUpperCase();
+      const color = /^#[0-9A-F]{6}$/.test(value) ? value : window.VEHICLE_DEFAULT_COLOR;
+      const label = UI.escape(plateInput?.value?.trim() || 'ทะเบียนรถ');
+      preview.innerHTML = `<span class="vehicle-chip" style="background:${color};color:${window.vehicleTextColor(color)}">🚑 ${label}</span>`;
+    };
+    picker?.addEventListener('input', () => {
+      hex.value = picker.value.toUpperCase();
+      this.setVehicleFieldError('vehColorHex', '');
+      paint();
+    });
+    hex?.addEventListener('input', () => {
+      const value = hex.value.trim();
+      if (/^#[0-9A-Fa-f]{6}$/.test(value)) picker.value = value.toLowerCase();
+      this.setVehicleFieldError('vehColorHex', '');
+      paint();
+    });
+    form.querySelector('#vehColorReset')?.addEventListener('click', () => {
+      hex.value = '';
+      picker.value = window.VEHICLE_DEFAULT_COLOR.toLowerCase();
+      paint();
+    });
+    plateInput?.addEventListener('input', paint);
+    paint();
+  }
+
   setVehicleFieldError(inputId, message) {
     const form = this.getVehicleFormEl();
     const input = form?.querySelector('#' + inputId);
@@ -1039,7 +1049,12 @@ class VehiclesPage {
       brand_model: value('vehBrand'),
       status: form.querySelector('#vehStatus')?.value || 'available',
       notes: value('vehNotes'),
+      vehicle_color: (value('vehColorHex') || '').toUpperCase(),
     };
+    if (payload.vehicle_color && !/^#[0-9A-F]{6}$/.test(payload.vehicle_color)) {
+      this.setVehicleFieldError('vehColorHex', 'สีต้องอยู่ในรูปแบบ #RRGGBB เช่น #2563EB');
+      return null;
+    }
 
     // โหมด edit: ส่งเฉพาะฟิลด์ที่เปลี่ยนจริง (เซิร์ฟเวอร์ตรวจว่า "ไม่มีข้อมูลที่ต้องแก้ไข")
     if (mode === 'edit') {
@@ -1050,6 +1065,7 @@ class VehiclesPage {
       if (payload.brand_model !== (v.brand_model || '')) patch.brand_model = payload.brand_model;
       if (payload.status !== (v.status || '')) patch.status = payload.status;
       if (payload.notes !== (v.notes || '')) patch.notes = payload.notes;
+      if (payload.vehicle_color !== String(v.vehicle_color || '').toUpperCase()) patch.vehicle_color = payload.vehicle_color;
       if (odometerRaw !== '' && Number(odometerRaw) !== Number(v.odometer_initial ?? -1)) {
         patch.odometer_initial = Number(odometerRaw);
       }

@@ -5,63 +5,92 @@ namespace App\Services;
 
 use App\Models\Vehicle;
 use App\Models\Item;
+use App\Models\ItemUnit;
 use App\Models\Nurse;
 use App\Models\Inspection;
 use App\Models\InspectionItem;
 use App\Models\Draft;
 use App\Models\DraftItem;
+use App\Models\CheckHistory;
 use App\Models\Metadata;
 use App\Models\RestockRequest;
 use App\Models\RestockItem;
 use App\Models\RestockAction;
+use App\Models\StockMovement;
 use App\Config\Database;
+use App\Exceptions\ApiException;
 
+/**
+ * การตรวจเช็คอุปกรณ์ประจำรถตามเวร (1 รอบต่อ รถ + วันที่ + เวร — UNIQUE uk_check_car_date_shift)
+ *
+ * ของสิ้นเปลือง (box / piece):
+ *   ผู้ตรวจกรอก "ใช้ไป" (0 ได้) → ระบบคาดการณ์ "คงเหลือ = ก่อนตรวจ − ใช้ไป"
+ *   → ผู้ตรวจยืนยัน "ครบถ้วน" (นับได้ตรงที่คาด) หรือกรอก "นับได้จริง" ถ้าไม่ตรง (= ผิดปกติ ต้องมีหมายเหตุ)
+ *   ตัดยอดแบบ FEFO ผ่าน VehicleStockService และบันทึก ledger ทุก Lot ที่ถูกแตะ
+ * เครื่องไฟฟ้า (electric): บันทึกสถานะ/แบต 1-4 ขีด รายเครื่อง — ไม่ตัดสต๊อคเด็ดขาด
+ *
+ * แก้รอบเดิม: เก็บสำเนาก่อนแก้ลง refer_check_history → ย้อนผลรอบเดิมจาก ledger → คำนวณใหม่
+ * ทั้งหมดใน transaction เดียว จึงไม่หักซ้ำไม่ว่าจะแก้กี่ครั้ง
+ */
 class InspectionService
 {
-    /** สถานะที่หน้าตรวจรถใช้ได้ (ตรงกับปุ่มใน inspections.js) */
-    public const STATUS_PENDING = 'ยังไม่ตรวจ';   // ยังไม่ได้ตรวจนับ ห้ามบันทึก
-    public const STATUS_ENOUGH  = 'Checked';      // "ครบ" = มีตามเป้าหมาย
-    public const STATUS_USED    = 'ใช้ไป';         // ต้องกรอก "จำนวนคงเหลือจริง"
-    public const STATUS_MISSING = 'ขาด';           // ต้องกรอก "จำนวนคงเหลือจริง"
+    // ---- สถานะผลตรวจรายรายการ (refer_check_items.check_status) ----
+    public const RESULT_COMPLETE = 'complete';        // ตรวจสอบแล้ว ครบถ้วน
+    public const RESULT_REFILL = 'needs_refill';      // ตรวจสอบแล้ว ต้องเติม (คงเหลือ < เป้าหมาย)
+    public const RESULT_ANOMALY = 'anomaly';          // ตรวจสอบแล้ว พบความผิดปกติ
+    public const RESULT_PENDING = 'pending';          // ยังไม่ได้ตรวจสอบ
 
-    /** สถานะที่ถือว่าการตรวจนับถูกรีคอร์ดแล้ว */
-    public const COUNTED_STATUSES = [self::STATUS_ENOUGH, self::STATUS_USED, self::STATUS_MISSING];
+    /** สถานะรุ่นเก่า (คอลัมน์ status) — ยังเขียนคู่กันเพื่อให้หน้าประวัติ/รายงานเดิมอ่านได้ */
+    public const STATUS_PENDING = 'ยังไม่ตรวจ';
+    public const STATUS_ENOUGH  = 'Checked';
+    public const STATUS_USED    = 'ใช้ไป';
+    public const STATUS_MISSING = 'ขาด';
 
-    /**เพดานที่ยอมรับได้ของจำนวนที่กรอก (กันกรอกผิดหลัก/ข้อมูลขยะ) */
-    public const MAX_QTY = 1000000.0;
+    public const SHIFTS = [
+        'morning' => ['name' => 'เช้า', 'label' => 'เวรเช้า (08:00-16:00)'],
+        'afternoon' => ['name' => 'บ่าย', 'label' => 'เวรบ่าย (16:00-24:00)'],
+        'night' => ['name' => 'ดึก', 'label' => 'เวรดึก (00:00-08:00)'],
+    ];
+
+    /** เพดานที่ยอมรับได้ของจำนวนที่กรอก (กันกรอกผิดหลัก/ข้อมูลขยะ) */
+    public const MAX_QTY = 100000.0;
 
     private Vehicle $vehicleModel;
     private Item $itemModel;
+    private ItemUnit $unitModel;
     private Nurse $nurseModel;
     private Inspection $inspectionModel;
     private InspectionItem $inspectionItemModel;
     private Draft $draftModel;
     private DraftItem $draftItemModel;
+    private CheckHistory $historyModel;
     private Metadata $metadataModel;
     private RestockRequest $restockRequestModel;
     private RestockItem $restockItemModel;
     private RestockAction $restockActionModel;
-    private StockService $stockService;
+    private VehicleStockService $stock;
 
     public function __construct()
     {
         $this->vehicleModel = new Vehicle();
         $this->itemModel = new Item();
+        $this->unitModel = new ItemUnit();
         $this->nurseModel = new Nurse();
         $this->inspectionModel = new Inspection();
         $this->inspectionItemModel = new InspectionItem();
         $this->draftModel = new Draft();
         $this->draftItemModel = new DraftItem();
+        $this->historyModel = new CheckHistory();
         $this->metadataModel = new Metadata();
         $this->restockRequestModel = new RestockRequest();
         $this->restockItemModel = new RestockItem();
         $this->restockActionModel = new RestockAction();
-        $this->stockService = new StockService();
+        $this->stock = new VehicleStockService();
     }
 
     public function getVehicles(): array
     {
-        return $this->vehicleModel->all();
+        return $this->vehicleModel->all(['*'], 'name');
     }
 
     public function getVehicle(string $id): ?array
@@ -89,178 +118,312 @@ class InspectionService
         return $this->nurseModel->all();
     }
 
-    public function createDraft(array $data): array
-    {
-        $db = Database::getConnection();
-        $db->beginTransaction();
-        try {
-            // Delete existing draft for this vehicle
-            $existingDraft = $this->draftModel->firstWhere('car_id', $data['car_id']);
-            if ($existingDraft) {
-                $this->draftItemModel->query(
-                    "DELETE FROM " . $this->draftItemModel->getTable() . " WHERE draft_id = ?",
-                    [$existingDraft['id']]
-                );
-                $this->draftModel->delete($existingDraft['id']);
-            }
-
-            // Create new draft
-            $draftId = $data['id'] ?? generate_id();
-            $draftData = [
-                'id' => $draftId,
-                'car_id' => $data['car_id'],
-                'nurse_id' => $data['nurse_id'],
-                'car_name' => $data['car_name'],
-                'nurse_name' => $data['nurse_name'],
-                'shift_name' => $data['shift_name'],
-                'started_at' => $data['started_at'],
-            ];
-            $this->draftModel->create($draftData);
-
-            // Create draft items
-            foreach ($data['results'] as $index => $item) {
-                $this->draftItemModel->create([
-                    'draft_id' => $draftId,
-                    'item_id' => $item['id'],
-                    'sort_order' => $index,
-                    'name' => $item['name'],
-                    'standard' => $item['standard'],
-                    'expiry_text' => $item['expire'],
-                    'is_battery' => $item['isBattery'] ? 1 : 0,
-                    'status' => $item['status'],
-                    'detail' => self::rawActualInput($item),
-                    'battery_level' => $item['batteryLevel'] ?? null,
-                ]);
-            }
-
-            $db->commit();
-            return $this->draftModel->getWithItems($draftId) ?? $draftData;
-        } catch (\Throwable $e) {
-            $db->rollBack();
-            throw $e;
-        }
-    }
-
     public function getDraft(string $carId): ?array
     {
         return $this->draftModel->getByVehicle($carId);
     }
 
-    /**
-     * Checklist ของรถพร้อมร่างที่ค้างอยู่ — อ่านยอดสต็อก "จากฐานข้อมูลตอนเรียกทุกครั้ง"
-     * ไม่มี cache/session state (ข้อ 1.1 และข้อ 5.1)
-     */
-    public function getDraftResults(string $carId): array
-    {
-        $draft = $this->draftModel->getByVehicle($carId);
-        if (!$draft) return [];
+    // ==================== เวร ====================
 
-        $stored = [];
-        foreach ($this->draftItemModel->getByDraft($draft['id']) as $row) {
-            $stored[(string)$row['item_id']] = $row;
+    /** เวรปัจจุบันตามเวลาไทย: 08-16 เช้า / 16-24 บ่าย / 00-08 ดึก (วันที่เดียวกัน) */
+    public static function currentShift(?\DateTimeImmutable $at = null): array
+    {
+        $at = ($at ?? new \DateTimeImmutable('now'))->setTimezone(new \DateTimeZone('Asia/Bangkok'));
+        $hour = (int)$at->format('G');
+        $code = $hour < 8 ? 'night' : ($hour < 16 ? 'morning' : 'afternoon');
+        return ['check_date' => $at->format('Y-m-d'), 'shift_code' => $code];
+    }
+
+    public static function shiftName(?string $code): string
+    {
+        return self::SHIFTS[$code ?? '']['name'] ?? '';
+    }
+
+    /** ตรวจ/ปรับวันที่+เวรจาก client — ห้ามวันในอนาคต และย้อนหลังได้ไม่เกิน 7 วัน */
+    public static function normalizeShift(array $input): array
+    {
+        $code = (string)($input['shift_code'] ?? '');
+        if ($code === '' && isset($input['shift'])) {
+            // client รุ่นเก่าส่งชื่อเวรภาษาไทย
+            foreach (self::SHIFTS as $key => $shift) {
+                if ($shift['name'] === (string)$input['shift']) {
+                    $code = $key;
+                }
+            }
         }
-
-        return $this->decorateResults($this->itemModel->getActiveByVehicle($carId), $stored);
+        if (!isset(self::SHIFTS[$code])) {
+            throw new ApiException('กรุณาเลือกเวร (เช้า / บ่าย / ดึก)', 422);
+        }
+        $date = (string)($input['check_date'] ?? '');
+        if ($date === '') {
+            $date = self::currentShift()['check_date'];
+        }
+        if (!VehicleStockService::validDate($date)) {
+            throw new ApiException('วันที่ตรวจไม่ถูกต้อง', 422);
+        }
+        $today = VehicleStockService::today();
+        if ($date > $today) {
+            throw new ApiException('ไม่สามารถบันทึกการตรวจของวันในอนาคตได้', 422);
+        }
+        $oldest = (new \DateTimeImmutable($today))->modify('-7 days')->format('Y-m-d');
+        if ($date < $oldest) {
+            throw new ApiException('ย้อนหลังได้ไม่เกิน 7 วัน', 422);
+        }
+        return ['check_date' => $date, 'shift_code' => $code];
     }
 
-    /**
-     * Checklist ใหม่ของรถ (ยังไม่ตรวจ) พร้อมยอดสต็อกจริงจากฐานข้อมูล
-     */
-    public function buildResultsFromVehicle(string $carId): array
+    public function findCheckByShift(string $carId, string $date, string $shiftCode): ?array
     {
-        return $this->decorateResults($this->itemModel->getActiveByVehicle($carId), []);
+        $stmt = $this->inspectionModel->query(
+            "SELECT * FROM " . $this->inspectionModel->getTable() . " WHERE car_id = ? AND check_date = ? AND shift_code = ? LIMIT 1",
+            [$carId, $date, $shiftCode]
+        );
+        $row = $stmt->fetch();
+        return $row ?: null;
     }
 
-    /**
-     * ประกอบข้อมูลแต่ละบรรทัดของฟอร์มตรวจรถ: เป้าหมาย + หน่วย + ยอดบนรถล่าสุด + ยอดคลังกลาง
-     * และคำนวณ used / ต้องเติม "ด้วยกติกาเดียวกับที่จะบันทึกจริง" เพื่อให้หน้าจอกับ DB ตรงกัน
-     *
-     * @param array $itemRows แถวจาก refer_items
-     * @param array $storedMap item_id => แถว refer_draft_items (ค่าที่ผู้ใช้เลือกไว้ก่อนหน้า)
-     */
-    private function decorateResults(array $itemRows, array $storedMap): array
+    /** รอบตรวจของรถในวันหนึ่ง: shift_code => {id, nurse_name, completed_at} — ใช้แสดงว่าเวรไหนตรวจแล้ว */
+    public function shiftsDoneOn(string $date): array
     {
-        $warehouse = $this->stockService->getQtyByNameMap(array_column($itemRows, 'name'));
-
+        $stmt = $this->inspectionModel->query(
+            "SELECT id, car_id, shift_code, nurse_name, completed_at FROM " . $this->inspectionModel->getTable() . " WHERE check_date = ?",
+            [$date]
+        );
         $out = [];
-        foreach ($itemRows as $item) {
-            $itemId = (string)$item['id'];
-            $name = (string)$item['name'];
-            $stored = $storedMap[$itemId] ?? null;
-
-            $target = self::itemTargetQty($item);
-            $unit = self::itemUnit($item);
-            $before = self::itemCountedQty($item);      // null = ยังไม่เคยตรวจนับ (ห้ามตีความเป็น 0)
-
-            $status = (string)($stored['status'] ?? self::STATUS_PENDING);
-            if (!in_array($status, self::COUNTED_STATUSES, true)) {
-                $status = self::STATUS_PENDING;
-            }
-            $battery = (isset($stored['battery_level']) && $stored['battery_level'] !== null)
-                ? (int)$stored['battery_level'] : null;
-
-            $detail = (string)($stored['detail'] ?? '');
-            $actual = null;
-            if ($status !== self::STATUS_PENDING) {
-                $actual = self::parseActualRemaining($status, $detail, $target)['qty'];
-            }
-
-            $calc = self::deriveNumbers($before, $actual, $target);
-            $wh = $warehouse[$name] ?? null;
-
-            $out[] = [
-                'id' => $itemId,
-                'name' => $name,
-                'standard' => $item['standard'],
-                'target_qty' => $target,
-                'unit' => $unit,
-                'expire' => $item['expiry_text'],
-                'isBattery' => (bool)$item['is_battery'],
-                'status' => $status,
-                'missing' => $detail,                 // คง key เดิมไว้ให้ client/หน้าประวัติเดิมอ่านได้
-                'actual_remaining' => $actual,         // ค่าที่ตรวจนับจริง (ชนิดตัวเลข)
-                'batteryLevel' => $battery,
-                'car_qty' => $before,                  // ยอดบนรถก่อนตรวจ (null = ยังไม่เคยตรวจนับ)
-                'car_qty_at' => self::itemCountedAt($item),
-                'used_qty' => $calc['used'],
-                'qty_to_refill' => self::refillQty($calc, (bool)$item['is_battery'], $battery),
-                'warehouse_qty' => $wh['qty'] ?? null,
-                'warehouse_min' => $wh['min'] ?? null,
-                'warehouse_status' => $wh['status'] ?? null,   // ok / low / out / unset (unset = ยังไม่ตั้งยอดคลัง)
-            ];
+        foreach ($stmt->fetchAll() as $row) {
+            $out[(string)$row['car_id']][(string)$row['shift_code']] = $row;
         }
-
         return $out;
     }
 
-    // ==================== กติกาตัวเลข (ใช้ซ้ำทั้งตอนแสดงและตอนบันทึก) ====================
+    // ==================== เริ่ม/ร่าง ====================
 
     /**
-     * เป้าหมายตัวเลขของอุปกรณ์ — อ่านจาก target_qty (migration 006) เป็นหลัก
-     * ถ้าไม่มี (มาตรฐานไม่ตัวเลข) คืน null เพื่อให้ผู้เรียก "ไม่เดา"
+     * เริ่มตรวจ: ถ้าเวรนี้ของรถนี้บันทึกไปแล้ว → เปิดรอบเดิมเพื่อแก้ไข (mode=edit)
+     * ถ้ามีร่างของคน/เวรเดียวกัน → ทำต่อ (mode=draft) / ร่างของคนอื่น → 409 ให้ยืนยันแทนที่
      */
+    public function start(array $vehicle, array $nurse, array $shift, bool $replace, ?array $user): array
+    {
+        $carId = (string)$vehicle['id'];
+        $existing = $this->findCheckByShift($carId, $shift['check_date'], $shift['shift_code']);
+        if ($existing) {
+            $this->assertCanEditCheck($existing, $user);
+            return $this->sessionPayload('edit', $existing, $this->buildForm($carId, null, (string)$existing['id']));
+        }
+
+        $draft = $this->draftModel->getByVehicle($carId);
+        $sameOwner = $draft
+            && (string)$draft['nurse_id'] === (string)$nurse['id']
+            && (string)($draft['check_date'] ?? '') === $shift['check_date']
+            && (string)($draft['shift_code'] ?? '') === $shift['shift_code'];
+        if ($draft && $sameOwner) {
+            $payload = json_decode((string)($draft['payload'] ?? ''), true);
+            return $this->sessionPayload('draft', $draft, $this->buildForm($carId, is_array($payload) ? $payload : null, null));
+        }
+        if ($draft && !$replace) {
+            throw new ApiException(
+                sprintf('มีร่างการตรวจของ %s (%s %s) ค้างอยู่', $draft['nurse_name'], $draft['check_date'] ?? '', self::shiftName($draft['shift_code'] ?? null) ?: $draft['shift_name']),
+                409,
+                ['code' => 'DRAFT_EXISTS', 'draft' => [
+                    'nurse_id' => $draft['nurse_id'],
+                    'nurse_name' => $draft['nurse_name'],
+                    'shift_name' => self::shiftName($draft['shift_code'] ?? null) ?: $draft['shift_name'],
+                    'check_date' => $draft['check_date'] ?? null,
+                    'started_at' => $draft['started_at'],
+                ]]
+            );
+        }
+
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $old = $this->draftModel->lockByVehicle($carId);
+            if ($old) {
+                $this->draftItemModel->query("DELETE FROM " . $this->draftItemModel->getTable() . " WHERE draft_id = ?", [$old['id']]);
+                $this->draftModel->delete((string)$old['id']);
+            }
+            $draft = [
+                'id' => generate_id(),
+                'car_id' => $carId,
+                'nurse_id' => (string)$nurse['id'],
+                'car_name' => (string)$vehicle['name'],
+                'nurse_name' => (string)$nurse['name'],
+                'shift_name' => self::shiftName($shift['shift_code']),
+                'check_date' => $shift['check_date'],
+                'shift_code' => $shift['shift_code'],
+                'started_at' => VehicleStockService::now(),
+                'payload' => null,
+            ];
+            $this->draftModel->create($draft);
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
+        return $this->sessionPayload('new', $draft, $this->buildForm($carId, null, null));
+    }
+
+    private function sessionPayload(string $mode, array $row, array $results): array
+    {
+        return [
+            'mode' => $mode,
+            'id' => (string)$row['id'],
+            'car_id' => (string)$row['car_id'],
+            'nurse_id' => (string)$row['nurse_id'],
+            'car_name' => (string)$row['car_name'],
+            'nurse_name' => (string)$row['nurse_name'],
+            'check_date' => $row['check_date'] ?? null,
+            'shift_code' => $row['shift_code'] ?? null,
+            'shift_name' => self::shiftName($row['shift_code'] ?? null) ?: (string)($row['shift_name'] ?? ''),
+            'started_at' => $row['started_at'] ?? null,
+            'revision' => isset($row['revision']) ? (int)$row['revision'] : null,
+            'results' => $results,
+        ];
+    }
+
+    /** ร่าง: เก็บสถานะฟอร์มทั้งชุดเป็น JSON (ไม่แตะยอดสต๊อค) */
+    public function saveDraft(string $carId, array $lines, ?array $user): void
+    {
+        $draft = $this->draftModel->getByVehicle($carId);
+        if (!$draft) {
+            throw new ApiException('ไม่พบร่างการตรวจของรถคันนี้ (อาจถูกบันทึกหรือแทนที่ไปแล้ว)', 404);
+        }
+        $this->assertDraftOwner($draft, $user);
+        $clean = [];
+        foreach (array_slice($lines, 0, 500) as $line) {
+            if (!is_array($line) || !isset($line['id'])) {
+                continue;
+            }
+            $clean[] = [
+                'id' => (string)$line['id'],
+                'used' => $line['used'] ?? null,
+                'confirmed' => !empty($line['confirmed']),
+                'actual' => $line['actual'] ?? null,
+                'note' => mb_substr((string)($line['note'] ?? ''), 0, 500),
+                'units' => is_array($line['units'] ?? null) ? array_slice($line['units'], 0, 50) : [],
+            ];
+        }
+        $this->draftModel->update((string)$draft['id'], ['payload' => json_encode($clean, JSON_UNESCAPED_UNICODE)]);
+    }
+
+    private function assertDraftOwner(array $draft, ?array $user): void
+    {
+        if (($user['role'] ?? '') === 'staff' && (string)($user['nurse_id'] ?? '') !== (string)$draft['nurse_id']) {
+            throw new ApiException('ร่างการตรวจนี้เป็นของ ' . $draft['nurse_name'] . ' กรุณาเริ่มการตรวจในชื่อของท่าน', 403);
+        }
+    }
+
+    /** แก้รอบตรวจที่บันทึกแล้ว: admin ทุกรอบ / staff เฉพาะรอบที่ตนเป็นผู้ตรวจ */
+    private function assertCanEditCheck(array $check, ?array $user): void
+    {
+        if (($user['role'] ?? '') === 'admin') {
+            return;
+        }
+        if ((string)($user['nurse_id'] ?? '') !== (string)$check['nurse_id']) {
+            throw new ApiException(
+                sprintf('เวรนี้ถูกตรวจและบันทึกแล้วโดย %s — แก้ไขได้เฉพาะผู้ตรวจเดิมหรือผู้ดูแลระบบ', $check['nurse_name']),
+                409,
+                ['code' => 'SHIFT_ALREADY_CHECKED']
+            );
+        }
+    }
+
+    // ==================== สร้างข้อมูลฟอร์ม ====================
+
+    /**
+     * รายการฟอร์มตรวจของรถ 1 คัน — ยอดจาก DB ตอนเรียกทุกครั้ง
+     * @param array|null $payload สถานะฟอร์มจากร่าง
+     * @param string|null $checkId รอบตรวจเดิม (โหมดแก้ไข) — ยอดก่อนตรวจ = ยอดปัจจุบันที่ย้อนผลของรอบนี้ออก
+     */
+    public function buildForm(string $carId, ?array $payload, ?string $checkId): array
+    {
+        $items = $this->itemModel->getActiveByVehicle($carId);
+        $ids = array_map(fn($i) => (string)$i['id'], $items);
+        $details = $this->stock->detailsForItems($ids);
+
+        $state = [];
+        foreach ($payload ?? [] as $line) {
+            $state[(string)($line['id'] ?? '')] = $line;
+        }
+        $netByItem = [];
+        if ($checkId !== null) {
+            foreach ($this->inspectionItemModel->where('check_id', $checkId) as $row) {
+                $snapshotUnits = json_decode((string)($row['units_snapshot'] ?? ''), true);
+                $state[(string)$row['item_id']] = [
+                    'used' => $row['used_qty'] !== null ? (float)$row['used_qty'] : null,
+                    'confirmed' => $row['discrepancy'] !== null && (float)$row['discrepancy'] == 0.0 && $row['used_qty'] !== null,
+                    'actual' => $row['actual_qty'] !== null ? (float)$row['actual_qty'] : null,
+                    'note' => (string)($row['note'] ?? ''),
+                    'units' => is_array($snapshotUnits) ? $snapshotUnits : [],
+                ];
+            }
+            foreach ((new StockMovement())->netByLotForCheck($checkId) as $mv) {
+                $netByItem[(string)$mv['item_id']] = ($netByItem[(string)$mv['item_id']] ?? 0.0) + (float)$mv['net'];
+            }
+        }
+
+        $out = [];
+        foreach ($items as $item) {
+            $itemId = (string)$item['id'];
+            $type = VehicleStockService::itemType($item);
+            $lots = $details['lots'][$itemId] ?? [];
+            $units = $details['units'][$itemId] ?? [];
+            $before = Item::countedQty($item);
+            if ($before !== null && isset($netByItem[$itemId])) {
+                $before = round($before - $netByItem[$itemId], 2);
+            }
+            $s = $state[$itemId] ?? [];
+            $unitState = [];
+            foreach ($s['units'] ?? [] as $u) {
+                if (isset($u['id'])) {
+                    $unitState[(string)$u['id']] = $u;
+                }
+            }
+
+            $out[] = [
+                'id' => $itemId,
+                'name' => (string)$item['name'],
+                'standard' => (string)$item['standard'],
+                'unit' => self::itemUnit($item),
+                'item_type' => $type,
+                'target_qty' => self::itemTargetQty($item),
+                'before' => $type === VehicleStockService::TYPE_ELECTRIC ? (float)count($units) : $before,
+                'counted' => Item::countedQty($item) !== null,
+                'lots' => $lots,
+                'expiry' => VehicleStockService::expirySummary($lots),
+                'units' => array_map(fn($u) => [
+                    'id' => (string)$u['id'],
+                    'label' => (string)$u['label'],
+                    'status' => (string)($unitState[(string)$u['id']]['status'] ?? $u['status']),
+                    'battery_level' => isset($unitState[(string)$u['id']]['battery_level'])
+                        ? (int)$unitState[(string)$u['id']]['battery_level']
+                        : ($u['battery_level'] !== null ? (int)$u['battery_level'] : null),
+                    'note' => (string)($unitState[(string)$u['id']]['note'] ?? $u['note']),
+                    // true = ค่าเป็นผลตรวจของรอบนี้ (จากร่าง/รอบที่บันทึก) ไม่ใช่สถานะค้างจากรอบก่อน
+                    'checked' => isset($unitState[(string)$u['id']]),
+                ], $units),
+                'used' => $s['used'] ?? null,
+                'confirmed' => !empty($s['confirmed']),
+                'actual' => $s['actual'] ?? null,
+                'note' => (string)($s['note'] ?? ''),
+            ];
+        }
+        return $out;
+    }
+
+    // ==================== กติกาตัวเลข ====================
+
     private static function itemTargetQty(array $item): ?float
     {
         if (isset($item['target_qty']) && $item['target_qty'] !== '' && $item['target_qty'] !== null) {
             return round((float)$item['target_qty'], 2);
         }
-        $parsed = self::parseStandardQuantity((string)($item['standard'] ?? ''));
-        return $parsed > 0 ? round($parsed, 2) : null;
-    }
-
-    /**
-     * ตัวเลขนำหน้าใน standard เช่น "2" → 2, "1 ชุด" → 1, "ชุด" → 0 (ไม่มีตัวเลข)
-     * กติกาเดียวกับ migration 006 (REGEXP_SUBSTR(standard, '[0-9]+([.][0-9]+)?'))
-     */
-    private static function parseStandardQuantity(string $standard): float
-    {
-        if (preg_match('/\d+(?:[.]\d+)?/', $standard, $m)) {
-            return (float)$m[0];
+        if (preg_match('/\d+(?:[.]\d+)?/', (string)($item['standard'] ?? ''), $m) && (float)$m[0] > 0) {
+            return round((float)$m[0], 2);
         }
-        return 0.0;
+        return null;
     }
 
-    /** หน่วยนับ: ใช้คอลัมน์ unit ก่อน ถ้าว่างให้ลองแกะจากข้อความ standard */
     private static function itemUnit(array $item): string
     {
         $unit = trim((string)($item['unit'] ?? ''));
@@ -270,400 +433,390 @@ class InspectionService
         if (preg_match('/^[^0-9]*\d+(?:[.]\d+)?\s+(\S.*)$/u', (string)($item['standard'] ?? ''), $m)) {
             return trim($m[1]);
         }
-        return '';
+        return VehicleStockService::itemType($item) === VehicleStockService::TYPE_BOX ? 'กล่อง' : '';
     }
 
-    /**
-     * ยอดคงเหลือ "บนรถ" ที่ตรวจนับแล้วเท่านั้น — กฎเก็บอยู่ใน Item::countedQty()
-     * (ทั้งหน้าตรวจรถ หน้าเติมของ และประวัติ ใช้กฎเดียวกัน ตัวเลขจึงไม่ขัดกัน)
-     */
-    private static function itemCountedQty(array $item): ?float
+    /** ตัวเลขไม่ติดลบจาก client; '' / null = ไม่ได้กรอก */
+    private static function parseQty(mixed $raw, string $label): ?float
     {
-        return Item::countedQty($item);
-    }
-
-    private static function itemCountedAt(array $item): ?string
-    {
-        return Item::countedAt($item);
-    }
-
-    /**
-     * อ่าน "จำนวนคงเหลือจริง" ที่ผู้ใช้กรอก (ข้อ 1.4: ระบบรับเฉพาะแบบคงเหลือจริง ไม่ปน "ใช้ไป")
-     * - ครบ  → คงเหลือจริง = เป้าหมาย
-     * - ใช้ไป/ขาด → ต้องเป็นตัวเลขไม่ติดลบเท่านั้น (ค่าว่าง/ข้อความ/ติดลบ = error)
-     *
-     * @return array{qty: ?float, error: ?string}
-     */
-    private static function parseActualRemaining(string $status, string $raw, ?float $target): array
-    {
-        if ($status === self::STATUS_ENOUGH) {
-            return ['qty' => $target, 'error' => null];
+        if ($raw === null || $raw === '') {
+            return null;
         }
-
-        $text = trim($raw);
-        if ($text === '') {
-            return ['qty' => null, 'error' => 'ต้องกรอกจำนวนคงเหลือจริง (ถ้าหมดรถกรอก 0 ได้)'];
+        if (!is_numeric($raw) || (float)$raw < 0) {
+            throw new ApiException($label . ' ต้องเป็นตัวเลขไม่ติดลบ', 422);
         }
-        if (!preg_match('/^\d+(?:[.]\d+)?$/', $text)) {
-            return ['qty' => null, 'error' => 'จำนวนคงเหลือจริงต้องเป็นตัวเลขไม่ติดลบ เช่น 7 หรือ 7.5'];
-        }
-        $qty = round((float)$text, 2);
+        $qty = round((float)$raw, 2);
         if ($qty > self::MAX_QTY) {
-            return ['qty' => null, 'error' => 'จำนวนคงเหลือจริงสูงเกินกำหนด (ไม่เกิน ' . rtrim(rtrim(number_format(self::MAX_QTY, 2, '.', ''), '0'), '.') . ')'];
+            throw new ApiException($label . ' สูงเกินกำหนด', 422);
         }
-        return ['qty' => $qty, 'error' => null];
-    }
-
-    /** ค่าที่ client ส่งมาในช่อง "คงเหลือจริง" (รับทั้ง key ใหม่และ key เดิม) */
-    private static function rawActualInput(array $line): string
-    {
-        if (isset($line['actual_remaining']) && $line['actual_remaining'] !== '' && $line['actual_remaining'] !== null) {
-            return trim((string)$line['actual_remaining']);
-        }
-        return trim((string)($line['missing'] ?? ''));
+        return $qty;
     }
 
     /**
-     * คำนวณ "ใช้ไป" ตามข้อ 2 ของสเปก (Case B เท่านั้น เพราะระบบรับคงเหลือจริง)
-     *  - ไม่มียอดก่อนตรวจ → used = null (ไม่เดา ไม่ใช่ 0)
-     *  - นับได้มากกว่ายอดเดิม → ไม่ใช่ "ใช้ไปติดลบ" แต่ถือเป็นการปรับยอด/นับคลาดเคลื่อน
-     *    จึงใช้ used = 0 และตั้ง flag over_count ให้ไปแสดง/ทบทวน (ข้อ 2.5 ห้ามสร้างติดลบอัตโนมัติ)
+     * คำนวณผลของ 1 รายการจากค่าที่ผู้ตรวจกรอก (ใช้ทั้งตอนบันทึก — กติกาเดียวกับหน้าจอ)
+     * @return array ผลลัพธ์ + 'result' (complete/needs_refill/anomaly/pending)
      */
-    private static function deriveNumbers(?float $before, ?float $actual, ?float $target): array
+    public static function evaluateLine(array $form, array $raw): array
     {
-        $used = null;
-        $overCount = false;
+        $name = (string)$form['name'];
+        $target = $form['target_qty'];
 
-        if ($before !== null && $actual !== null) {
-            if ($actual > $before) {
-                $used = 0.0;
-                $overCount = true;
-            } else {
-                $used = round($before - $actual, 2);
-            }
-        }
-
-        $refill = ($target !== null && $actual !== null)
-            ? round(max(0.0, $target - $actual), 2)   // ข้อ 3.4: ต้องเติม = MAX(0, เป้าหมาย − คงเหลือจริง)
-            : null;
-
-        return ['used' => $used, 'over_count' => $overCount, 'refill' => $refill];
-    }
-
-    /**
-     * จำนวนที่ต้องเติมเข้ารายการรอเติม
-     * อุปกรณ์ที่ใช้แบตเตอรี่: ถ้ายอดแบตต่ำกว่า 4 ขีด ถือว่าต้องเปลี่ยน/ชาร์จ 1 หน่วย
-     * (ของยังอยู่บนรถ ยอดคงเหลือจึงไม่ได้บอกปัญหา — ถ้าไม่บังคับตรงนี้ รายการแบตจะไม่ถูกรอเติมเลย)
-     */
-    private static function refillQty(array $calc, bool $isBattery, ?int $batteryLevel): float
-    {
-        $qty = (float)($calc['refill'] ?? 0.0);
-        if ($isBattery && $batteryLevel !== null && $batteryLevel < 4) {
-            $qty = max($qty, 1.0);
-        }
-        return round($qty, 2);
-    }
-
-    /** ข้อความรายละเอียดที่เก็บในคอลัมน์ detail (เดิมเป็น free-text) — ตอนนี้เขียนเป็น "คงเหลือ N" */
-    private static function detailText(?float $actual, string $unit, ?int $batteryLevel, bool $isBattery, string $status): string
-    {
-        if ($isBattery && $batteryLevel !== null) {
-            return $batteryLevel . '/4 ขีด';
-        }
-        if ($status === self::STATUS_ENOUGH || $actual === null) {
-            return '';
-        }
-        return 'คงเหลือ ' . self::fmtQty($actual) . ($unit !== '' ? ' ' . $unit : '');
-    }
-
-    private static function fmtQty(float $qty): string
-    {
-        return rtrim(rtrim(number_format($qty, 2, '.', ''), '0'), '.') ?: '0';
-    }
-
-
-    public function updateDraft(string $carId, array $results): bool
-    {
-        $db = Database::getConnection();
-        $db->beginTransaction();
-        try {
-            // ล็อกแถวร่างก่อน (car_id เป็น UNIQUE) → สองคนบันทึกร่างเดียวกันไม่ทับกันหายไปครึ่งหนึ่ง
-            $draft = $this->draftModel->lockByVehicle($carId);
-            if (!$draft) {
-                $db->rollBack();
-                return false;
-            }
-
-            $this->draftItemModel->query(
-                "DELETE FROM " . $this->draftItemModel->getTable() . " WHERE draft_id = ?",
-                [$draft['id']]
-            );
-
-            // Insert new items
-            foreach ($results as $index => $item) {
-                $this->draftItemModel->create([
-                    'draft_id' => $draft['id'],
-                    'item_id' => $item['id'],
-                    'sort_order' => $index,
-                    'name' => $item['name'],
-                    'standard' => $item['standard'],
-                    'expiry_text' => $item['expire'],
-                    'is_battery' => $item['isBattery'] ? 1 : 0,
-                    'status' => $item['status'],
-                    'detail' => self::rawActualInput($item),
-                    'battery_level' => $item['batteryLevel'] ?? null,
-                ]);
-            }
-
-            // Update item expiry in main items table
-            foreach ($results as $item) {
-                $this->itemModel->updateExpiry($item['id'], $item['expire']);
-            }
-
-            $db->commit();
-            return true;
-        } catch (\Throwable $e) {
-            $db->rollBack();
-            throw $e;
-        }
-    }
-
-    /**
-     * ตรวจความถูกต้องของรายการที่จะบันทึก "ก่อน" เข้า transaction จริง
-     * คืน map ข้อผิดพลาด (คีย์เป็น index ของรายการ) เพื่อให้ controller ตอบ 422 แทนที่จะพังเป็น 500
-     * ยังมีการตรวจซ้ำชั้นใน saveInspection (ตอนล็อกแถวแล้ว) เป็นชั้นที่สอง
-     *
-     * @return array<string,string> เช่น ['results[3]' => '...']
-     */
-    public function validateSubmission(string $carId, array $results): array
-    {
-        $errors = [];
-        if (empty($results)) {
-            return ['results' => 'ไม่มีรายการตรวจให้บันทึก'];
-        }
-
-        $itemsById = [];
-        foreach ($this->itemModel->getActiveByVehicle($carId) as $row) {
-            $itemsById[(string)$row['id']] = $row;
-        }
-
-        foreach (array_values($results) as $index => $raw) {
-            $itemId = (string)($raw['id'] ?? '');
-            $item = $itemsById[$itemId] ?? null;
-            if (!$item) {
-                $errors['results[' . $index . ']'] = 'ไม่พบอุปกรณ์รายการนี้ในรถคันนี้ (กรุณาโหลดหน้าใหม่)';
-                continue;
-            }
-
-            $status = (string)($raw['status'] ?? self::STATUS_PENDING);
-            if (!in_array($status, self::COUNTED_STATUSES, true)) {
-                $errors['results[' . $index . ']'] = 'ยังตรวจไม่ครบทุกรายการ: ' . $item['name'];
-                continue;
-            }
-
-            if ((bool)$item['is_battery']) {
-                $level = $raw['batteryLevel'] ?? null;
-                if ($level === null || $level === '' || !is_numeric($level) || (int)$level != $level || (int)$level < 0 || (int)$level > 4) {
-                    $errors['results[' . $index . ']'] = 'ระดับแบตเตอรี่ของ ' . $item['name'] . ' ต้องเป็นจำนวนเต็ม 0-4';
-                    continue;
+        if ($form['item_type'] === VehicleStockService::TYPE_ELECTRIC) {
+            $units = [];
+            $byId = [];
+            foreach ((array)($raw['units'] ?? []) as $u) {
+                if (is_array($u) && isset($u['id'])) {
+                    $byId[(string)$u['id']] = $u;
                 }
             }
-
-            $check = self::parseActualRemaining($status, self::rawActualInput($raw), self::itemTargetQty($item));
-            if ($check['error'] !== null) {
-                $errors['results[' . $index . ']'] = $item['name'] . ': ' . $check['error'];
+            $anyNotReady = false;
+            foreach ($form['units'] as $unit) {
+                $input = $byId[$unit['id']] ?? null;
+                if ($input === null) {
+                    return ['result' => self::RESULT_PENDING, 'error' => $name . ': ยังไม่ได้ระบุสถานะเครื่อง ' . ($unit['label'] ?: '')];
+                }
+                $parsed = VehicleStockService::parseUnitInput($input, trim($name . ' ' . $unit['label']));
+                $units[] = ['id' => $unit['id'], 'label' => $unit['label']] + $parsed;
+                $anyNotReady = $anyNotReady || $parsed['status'] === ItemUnit::STATUS_NOT_READY;
             }
+            $note = trim((string)($raw['note'] ?? ''));
+            if (empty($form['units'])) {
+                if ($note === '') {
+                    return ['result' => self::RESULT_PENDING, 'error' => $name . ': ยังไม่มีเครื่องลงทะเบียนบนรถ — ระบุหมายเหตุ หรือเพิ่มเครื่องที่หน้าเติมของ'];
+                }
+                return ['result' => self::RESULT_ANOMALY, 'units' => [], 'note' => $note, 'before' => 0.0, 'used' => null, 'expected' => null, 'actual' => 0.0, 'discrepancy' => null, 'refill' => 0.0];
+            }
+            return [
+                'result' => $anyNotReady ? self::RESULT_ANOMALY : self::RESULT_COMPLETE,
+                'units' => $units,
+                'note' => mb_substr($note, 0, 500),
+                'before' => (float)count($form['units']),
+                'used' => null,
+                'expected' => null,
+                'actual' => (float)count($form['units']),
+                'discrepancy' => null,
+                'refill' => 0.0,
+            ];
         }
 
-        return $errors;
+        $note = mb_substr(trim((string)($raw['note'] ?? '')), 0, 500);
+        $before = $form['before'];
+
+        // ยังไม่เคยตรวจนับ → ต้องนับจริงเพื่อตั้งยอดครั้งแรก (ไม่มี "ใช้ไป" ให้คำนวณ)
+        if ($before === null) {
+            $actual = self::parseQty($raw['actual'] ?? null, $name . ': จำนวนนับได้จริง');
+            if ($actual === null) {
+                return ['result' => self::RESULT_PENDING, 'error' => $name . ': ยังไม่เคยตรวจนับ กรุณากรอกจำนวนที่นับได้จริงเพื่อตั้งยอดครั้งแรก'];
+            }
+            return [
+                'result' => ($target !== null && $actual < $target) ? self::RESULT_REFILL : self::RESULT_COMPLETE,
+                'initial' => true, 'note' => $note,
+                'before' => null, 'used' => null, 'expected' => null, 'actual' => $actual, 'discrepancy' => null,
+                'refill' => $target !== null ? round(max(0.0, $target - $actual), 2) : 0.0,
+            ];
+        }
+
+        $used = self::parseQty($raw['used'] ?? 0, $name . ': จำนวนที่ใช้ไป') ?? 0.0;
+        if ($used > $before) {
+            throw new ApiException(sprintf(
+                '%s: ใช้ไป %s มากกว่ายอดบนรถ %s — ถ้านับของจริงได้ไม่ตรง ให้กรอก "นับได้จริง" พร้อมหมายเหตุแทน',
+                $name, VehicleStockService::fmt($used), VehicleStockService::fmt($before)
+            ), 422);
+        }
+        $expected = round($before - $used, 2);
+
+        $actual = null;
+        if (!empty($raw['confirmed'])) {
+            $actual = $expected;
+        } else {
+            $actual = self::parseQty($raw['actual'] ?? null, $name . ': จำนวนนับได้จริง');
+        }
+        if ($actual === null) {
+            return ['result' => self::RESULT_PENDING, 'error' => $name . ': ยังไม่ยืนยันผลตรวจนับ (กด "ครบถ้วน" หรือกรอกจำนวนนับได้จริง)'];
+        }
+        $discrepancy = round($actual - $expected, 2);
+        if ($discrepancy != 0.0 && $note === '') {
+            throw new ApiException(sprintf(
+                '%s: นับได้ %s ไม่ตรงกับที่ระบบคาดการณ์ %s — กรุณาระบุหมายเหตุ',
+                $name, VehicleStockService::fmt($actual), VehicleStockService::fmt($expected)
+            ), 422);
+        }
+
+        $result = $discrepancy != 0.0
+            ? self::RESULT_ANOMALY
+            : (($target !== null && $actual < $target) ? self::RESULT_REFILL : self::RESULT_COMPLETE);
+
+        return [
+            'result' => $result, 'note' => $note,
+            'before' => $before, 'used' => $used, 'expected' => $expected, 'actual' => $actual, 'discrepancy' => $discrepancy,
+            'refill' => $target !== null ? round(max(0.0, $target - $actual), 2) : 0.0,
+        ];
     }
 
+    // ==================== บันทึก ====================
+
     /**
-     * บันทึกรอบตรวจรถ 1 รอบแบบ all-or-nothing (ข้อ 2.6)
-     *  ตรวจข้อมูล → ล็อกแถวอุปกรณ์ → คำนวณด้วยกติกาเดียวกับที่แสดงบนหน้าจอ
-     *  → เขียนยอดคงเหลือบนรถ + เก็บรอยเท้าตัวเลขต่อรายการ → สร้าง/อัปเดตรายการรอเติม → ลบร่าง
-     * ขั้นใดขั้นหนึ่งพลาดจะ rollback ทั้งชุด จึงไม่มีสถานะ "รถถูกตัดยอด แต่ไม่มีรายการเติม"
+     * บันทึกรอบตรวจ (ใหม่หรือแก้รอบเดิม) แบบ all-or-nothing
+     * @param array $input {car_id, check_id, mode: new|edit, results: [...]}
      */
-    public function saveInspection(array $data, ?string $currentUserId = null, string $currentUserName = ''): array
+    public function submit(array $input, ?array $user): array
     {
+        $carId = (string)($input['car_id'] ?? '');
+        $checkId = (string)($input['check_id'] ?? $input['id'] ?? '');
+        $mode = (string)($input['mode'] ?? 'new');
+        $rawLines = [];
+        foreach ((array)($input['results'] ?? []) as $line) {
+            if (is_array($line) && isset($line['id'])) {
+                $rawLines[(string)$line['id']] = $line;
+            }
+        }
+        if ($carId === '' || $checkId === '') {
+            throw new ApiException('ข้อมูลไม่ครบ: ไม่พบรหัสรถหรือรหัสรอบตรวจ', 422);
+        }
+
+        $userId = isset($user['id']) ? (string)$user['id'] : null;
+        $userName = (string)($user['full_name'] ?? '');
+        $now = VehicleStockService::now();
+
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
-            $checkId = (string)($data['id'] ?? '');
-            $carId = (string)($data['car_id'] ?? '');
-            if ($checkId === '' || $carId === '') {
-                throw new \RuntimeException('บันทึกไม่ได้: ไม่พบรหัสรอบตรวจหรือรหัสรถ');
-            }
-
-            // กันการกดซ้ำ/ส่งร่างเดิมซ้ำ: รหัสรอบตรวจมาจาก ร่างที่ค้างอยู่เสมอ
-            if ($this->inspectionModel->find($checkId)) {
-                throw new \RuntimeException('รอบตรวจนี้ถูกบันทึกไปแล้ว กรุณาเริ่มการตรวจใหม่');
-            }
-
             $vehicle = $this->vehicleModel->find($carId);
             if (!$vehicle) {
-                throw new \RuntimeException('ไม่พบรถในฐานข้อมูล');
+                throw new ApiException('ไม่พบรถในฐานข้อมูล', 404);
             }
 
-            $results = array_values($data['results'] ?? []);
-            if (empty($results)) {
-                throw new \RuntimeException('ไม่มีรายการตรวจให้บันทึก');
+            if ($mode === 'edit') {
+                $stmt = $this->inspectionModel->query("SELECT * FROM " . $this->inspectionModel->getTable() . " WHERE id = ? FOR UPDATE", [$checkId]);
+                $header = $stmt->fetch() ?: null;
+                if (!$header || (string)$header['car_id'] !== $carId) {
+                    throw new ApiException('ไม่พบรอบตรวจที่ต้องการแก้ไข', 404);
+                }
+                $this->assertCanEditCheck($header, $user);
+                $expectedRevision = isset($input['revision']) ? (int)$input['revision'] : null;
+                if ($expectedRevision !== null && $expectedRevision !== (int)$header['revision']) {
+                    throw new ApiException('รอบตรวจนี้ถูกแก้ไขโดยผู้อื่นระหว่างที่ท่านกำลังแก้ กรุณาเปิดใหม่เพื่อดูข้อมูลล่าสุด', 409, ['code' => 'STALE_REVISION']);
+                }
+                $ctx = ['check_id' => $checkId, 'by_user_id' => $userId, 'by_name' => $userName, 'at' => $now];
+
+                // 1) เก็บสำเนาก่อนแก้ 2) ย้อนผลต่อยอดของรอบเดิม 3) ล้างบรรทัดเดิม
+                $this->historyModel->create([
+                    'check_id' => $checkId,
+                    'revision' => (int)$header['revision'],
+                    'snapshot' => json_encode([
+                        'header' => $header,
+                        'lines' => $this->inspectionItemModel->where('check_id', $checkId),
+                    ], JSON_UNESCAPED_UNICODE),
+                    'by_name' => $userName,
+                    'at' => $now,
+                ]);
+                $this->stock->reverseCheck($checkId, $ctx + ['reason' => 'ย้อนผลรอบตรวจเดิมก่อนบันทึกการแก้ไข']);
+                $this->inspectionItemModel->query("DELETE FROM " . $this->inspectionItemModel->getTable() . " WHERE check_id = ?", [$checkId]);
+                $this->inspectionModel->update($checkId, [
+                    'revision' => (int)$header['revision'] + 1,
+                    'updated_at' => $now,
+                    'updated_by' => $userName,
+                    'completed_at' => $now,
+                ]);
+                $draftLike = $header;
+            } else {
+                $draft = $this->draftModel->lockByVehicle($carId);
+                if (!$draft || (string)$draft['id'] !== $checkId) {
+                    if ($this->inspectionModel->find($checkId)) {
+                        throw new ApiException('รอบตรวจนี้ถูกบันทึกไปแล้ว (กดซ้ำ?) — เปิดเวรเดิมเพื่อแก้ไขได้', 409, ['code' => 'ALREADY_SUBMITTED']);
+                    }
+                    throw new ApiException('ไม่พบร่างการตรวจนี้ (อาจถูกแทนที่) กรุณาเริ่มตรวจใหม่', 404);
+                }
+                $this->assertDraftOwner($draft, $user);
+                try {
+                    $this->inspectionModel->create([
+                        'id' => $checkId,
+                        'car_id' => $carId,
+                        'nurse_id' => (string)$draft['nurse_id'],
+                        'car_name' => (string)$vehicle['name'],
+                        'nurse_name' => (string)$draft['nurse_name'],
+                        'check_date' => $draft['check_date'],
+                        'shift_code' => $draft['shift_code'],
+                        'shift_name' => self::shiftName($draft['shift_code']) ?: (string)$draft['shift_name'],
+                        'started_at' => (string)$draft['started_at'],
+                        'completed_at' => $now,
+                        'revision' => 1,
+                    ]);
+                } catch (\PDOException $e) {
+                    if (stripos($e->getMessage(), 'uk_check_car_date_shift') !== false) {
+                        throw new ApiException('เวรนี้ของรถคันนี้ถูกบันทึกไปแล้วโดยผู้อื่น — เปิดเวรเดิมเพื่อตรวจสอบ/แก้ไข', 409, ['code' => 'SHIFT_ALREADY_CHECKED']);
+                    }
+                    throw $e;
+                }
+                $draftLike = $draft;
+                $ctx = ['check_id' => $checkId, 'by_user_id' => $userId, 'by_name' => $userName, 'at' => $now];
             }
 
-            // ล็อกแถวอุปกรณ์ (เรียงตาม id เพื่อกัน deadlock) แล้วค่อยอ่านยอด "จาก DB" เท่านั้น
-            $itemByKey = [];
-            foreach ($this->itemModel->lockByIds(array_map(fn($r) => (string)($r['id'] ?? ''), $results)) as $row) {
-                $itemByKey[(string)$row['id']] = $row;
+            // ล็อกอุปกรณ์ทั้งหมดของรถ (เรียง id กัน deadlock) แล้วสร้างฟอร์มจากยอด "หลังย้อนผล" ใน DB
+            $activeIds = array_map(fn($i) => (string)$i['id'], $this->itemModel->getActiveByVehicle($carId));
+            $locked = [];
+            foreach ($this->itemModel->lockByIds($activeIds) as $row) {
+                $locked[(string)$row['id']] = $row;
             }
+            $forms = $this->buildForm($carId, null, null);
 
-            $now = (new \DateTime())->format('Y-m-d\TH:i:s.u\Z');
             $lines = [];
-            $adjustments = [];
-
-            foreach ($results as $index => $raw) {
-                $itemId = (string)($raw['id'] ?? '');
-                $item = $itemByKey[$itemId] ?? null;
-                if (!$item) {
-                    throw new \RuntimeException(sprintf(
-                        'ไม่พบอุปกรณ์ "%s" ในฐานข้อมูล (รายการอาจถูกลบ/ย้ายคันไปแล้ว) กรุณาโหลดหน้าใหม่',
-                        (string)($raw['name'] ?? $itemId)
-                    ));
+            $errors = [];
+            foreach ($forms as $index => $form) {
+                $raw = $rawLines[$form['id']] ?? null;
+                if ($raw === null) {
+                    $errors[] = $form['name'] . ': ไม่มีผลตรวจ (กรุณาโหลดหน้าใหม่)';
+                    continue;
                 }
-                if ((string)$item['car_id'] !== $carId) {
-                    throw new \RuntimeException(sprintf(
-                        'อุปกรณ์ "%s" ไม่ได้อยู่ในรถ %s กรุณาโหลดหน้าใหม่',
-                        (string)$item['name'],
-                        (string)$vehicle['name']
-                    ));
+                $eval = self::evaluateLine($form, $raw);
+                if ($eval['result'] === self::RESULT_PENDING) {
+                    $errors[] = $eval['error'];
+                    continue;
                 }
-
-                $status = (string)($raw['status'] ?? self::STATUS_PENDING);
-                if (!in_array($status, self::COUNTED_STATUSES, true)) {
-                    throw new \RuntimeException(sprintf('ยังตรวจไม่ครบทุกรายการ (พบสถานะ "%s")', $status));
-                }
-
-                $isBattery = (bool)$item['is_battery'];
-                $batteryLevel = null;
-                if ($isBattery) {
-                    $rawLevel = $raw['batteryLevel'] ?? null;
-                    if ($rawLevel === null || $rawLevel === '') {
-                        throw new \RuntimeException('กรุณาระบุระดับแบตเตอรี่ของ ' . $item['name']);
-                    }
-                    if (!is_numeric($rawLevel) || (float)$rawLevel !== (float)(int)$rawLevel || (int)$rawLevel < 0 || (int)$rawLevel > 4) {
-                        throw new \RuntimeException('ระดับแบตเตอรี่ของ ' . $item['name'] . ' ต้องเป็นจำนวนเต็ม 0-4');
-                    }
-                    $batteryLevel = (int)$rawLevel;
-                }
-
-                $target = self::itemTargetQty($item);
-                $unit = self::itemUnit($item);
-                $before = self::itemCountedQty($item);   // null = ยังไม่เคยตรวจนับ → ไม่เดา "ใช้ไป"
-
-                $parsed = self::parseActualRemaining($status, self::rawActualInput($raw), $target);
-                if ($parsed['error'] !== null) {
-                    throw new \RuntimeException($item['name'] . ': ' . $parsed['error']);
-                }
-                $actual = $parsed['qty'];
-
-                $calc = self::deriveNumbers($before, $actual, $target);
-                if ($calc['over_count']) {
-                    // นับได้มากกว่ายอดเดิม = ปรับยอด/นับคลาดเคลื่อน ห้ามกลายเป็น "ใช้ไป" ติดลบ (ข้อ 2.5)
-                    $adjustments[] = [
-                        'item_id' => $itemId,
-                        'name' => (string)$item['name'],
-                        'qty_before' => $before,
-                        'qty_actual' => $actual,
-                        'message' => sprintf(
-                            'ตรวจนับได้ %s ซึ่งมากกว่ายอดเดิม %s → บันทึกเป็นยอดคงเหลือใหม่ (ไม่ได้หักใช้ไปติดลบ) โปรดทบทวนว่ามีการเติมของที่ยังไม่ได้บันทึกหรือไม่',
-                            self::fmtQty((float)$actual),
-                            self::fmtQty((float)$before)
-                        ),
-                    ];
-                }
-
-                $lines[] = [
-                    'index' => $index,
-                    'item' => $item,
-                    'status' => $status,
-                    'unit' => $unit,
-                    'target' => $target,
-                    'before' => $before,
-                    'actual' => $actual,
-                    'used' => $calc['used'],
-                    'refill' => self::refillQty($calc, $isBattery, $batteryLevel),
-                    'battery' => $batteryLevel,
-                    'is_battery' => $isBattery,
-                    'expire' => (string)($raw['expire'] ?? ($item['expiry_text'] ?? '')),
-                ];
+                $lines[] = ['index' => $index, 'form' => $form, 'item' => $locked[$form['id']]] + $eval;
+            }
+            if ($errors) {
+                throw new ApiException('ยังตรวจไม่ครบ ' . count($errors) . ' รายการ', 422, ['errors' => array_slice($errors, 0, 20)]);
             }
 
-            // 1) หัวรอบตรวจ
-            $this->inspectionModel->create([
-                'id' => $checkId,
-                'car_id' => $carId,
-                'nurse_id' => $data['nurse_id'] ?? null,
-                'car_name' => (string)$vehicle['name'],
-                'nurse_name' => $data['nurse_name'] ?? '',
-                'shift_name' => $data['shift_name'] ?? '',
-                'started_at' => $data['started_at'] ?? $now,
-                'completed_at' => $data['completed_at'] ?? $now,
-            ]);
-
-            // 2) บรรทัดตรวจ + รอยเท้าตัวเลข (ข้อ 6: ก่อน/หลัง/ใช้ไป/เป้าหมาย/หน่วย)
+            // ปรับยอดบนรถ (ของสิ้นเปลืองเท่านั้น) + บันทึกสถานะเครื่องไฟฟ้า
+            $adjustments = [];
             foreach ($lines as $line) {
                 $item = $line['item'];
+                if ($line['form']['item_type'] === VehicleStockService::TYPE_ELECTRIC) {
+                    foreach ($line['units'] as $u) {
+                        $this->unitModel->update($u['id'], [
+                            'status' => $u['status'],
+                            'battery_level' => $u['battery_level'],
+                            'note' => $u['note'],
+                            'updated_at' => $now,
+                            'updated_by' => $userName,
+                        ]);
+                    }
+                    $this->stock->syncItemTotal($item, $now);
+                    continue;
+                }
+                if (!empty($line['initial'])) {
+                    if ($line['actual'] > 0) {
+                        $this->stock->addLot($item, $line['actual'], null, 'ADJUST', StockMovement::TYPE_INIT,
+                            $ctx + ['reason' => 'ตั้งยอดครั้งแรกจากการตรวจนับ (ยังไม่ทราบวันหมดอายุ)']);
+                    } else {
+                        $this->stock->syncItemTotal($item, $now);
+                    }
+                    continue;
+                }
+                if ($line['used'] > 0) {
+                    $this->stock->consume($item, $line['used'], StockMovement::TYPE_USE, $ctx + ['reason' => 'ใช้ไประหว่างเวร']);
+                }
+                if ($line['discrepancy'] < 0) {
+                    $this->stock->consume($item, -$line['discrepancy'], StockMovement::TYPE_ADJUST, $ctx + ['reason' => 'นับได้น้อยกว่าที่คาด: ' . $line['note']]);
+                } elseif ($line['discrepancy'] > 0) {
+                    $this->stock->addLot($item, $line['discrepancy'], null, 'ADJUST', StockMovement::TYPE_ADJUST,
+                        $ctx + ['reason' => 'นับได้มากกว่าที่คาด: ' . $line['note']]);
+                } elseif ($line['used'] <= 0) {
+                    $this->stock->syncItemTotal($item, $now);   // ประทับเวลาตรวจนับล่าสุด
+                }
+                if ($line['discrepancy'] != 0.0) {
+                    $adjustments[] = ['item_id' => $item['id'], 'name' => $item['name'], 'expected' => $line['expected'], 'actual' => $line['actual'], 'note' => $line['note']];
+                }
+            }
+
+            foreach ($lines as $line) {
+                $form = $line['form'];
+                $legacy = match ($line['result']) {
+                    self::RESULT_COMPLETE => self::STATUS_ENOUGH,
+                    default => ($line['used'] ?? 0) > 0 ? self::STATUS_USED : self::STATUS_MISSING,
+                };
+                $batteries = array_column($line['units'] ?? [], 'battery_level');
                 $this->inspectionItemModel->create([
                     'check_id' => $checkId,
-                    'item_id' => $item['id'],
+                    'item_id' => $form['id'],
                     'sort_order' => $line['index'],
-                    'name' => $item['name'],
-                    'standard' => $item['standard'],
-                    'expiry_text' => $line['expire'],
-                    'is_battery' => $line['is_battery'] ? 1 : 0,
-                    'status' => $line['status'],
-                    'detail' => self::detailText($line['actual'], $line['unit'], $line['battery'], $line['is_battery'], $line['status']),
-                    'battery_level' => $line['battery'],
+                    'name' => $form['name'],
+                    'standard' => $form['standard'],
+                    'expiry_text' => (string)($form['expiry']['nearest'] ?? ''),
+                    'is_battery' => $form['item_type'] === VehicleStockService::TYPE_ELECTRIC ? 1 : 0,
+                    'status' => $legacy,
+                    'check_status' => $line['result'],
+                    'item_type' => $form['item_type'],
+                    'detail' => self::detailText($line, $form),
+                    'note' => $line['note'] ?? '',
+                    'battery_level' => $batteries ? min($batteries) : null,
                     'qty_before' => $line['before'],
                     'actual_qty' => $line['actual'],
                     'used_qty' => $line['used'],
-                    'qty_target' => $line['target'],
-                    'unit' => $line['unit'],
+                    'expected_qty' => $line['expected'],
+                    'discrepancy' => $line['discrepancy'],
+                    'qty_target' => $form['target_qty'],
+                    'unit' => $form['unit'],
+                    'lots_snapshot' => $form['lots'] ? json_encode($form['lots'], JSON_UNESCAPED_UNICODE) : null,
+                    'units_snapshot' => !empty($line['units']) ? json_encode($line['units'], JSON_UNESCAPED_UNICODE) : null,
                 ]);
             }
 
-            // 3) เขียนยอดคงเหลือบนรถ (เฉพาะบรรทัดที่ตรวจนับได้จริง) + วันหมดอายุ
+            if ($mode !== 'edit') {
+                $this->draftItemModel->query("DELETE FROM " . $this->draftItemModel->getTable() . " WHERE draft_id = ?", [$checkId]);
+                $this->draftModel->delete($checkId);
+            }
+
+            // รายการรอเติม: เฉพาะของสิ้นเปลืองที่คงเหลือต่ำกว่าเป้าหมาย (ไม่รวมเครื่องไฟฟ้า)
+            $refillLines = [];
             foreach ($lines as $line) {
-                $itemId = (string)$line['item']['id'];
-                $this->itemModel->updateExpiry($itemId, $line['expire']);
-                if ($line['actual'] !== null) {
-                    $this->itemModel->updateStock($itemId, $line['actual'], $now);
+                if ($line['form']['item_type'] !== VehicleStockService::TYPE_ELECTRIC && $line['refill'] > 0) {
+                    $refillLines[] = ['item' => $line['item'], 'refill' => $line['refill'], 'actual' => $line['actual'], 'before' => $line['before']];
                 }
             }
+            $refill = $this->createRestockRequestsFromInspection([
+                'id' => $checkId,
+                'car_id' => $carId,
+                'car_name' => (string)$vehicle['name'],
+                'nurse_id' => (string)$draftLike['nurse_id'],
+                'nurse_name' => (string)$draftLike['nurse_name'],
+            ], $refillLines, $userId, $now);
 
-            // 4) ลบร่าง (ล็อกแถวร่างก่อน กันสองคนบันทึกร่างเดียวกันพร้อมกัน)
-            $draft = $this->draftModel->lockByVehicle($carId);
-            if ($draft) {
-                $this->draftItemModel->query(
-                    "DELETE FROM " . $this->draftItemModel->getTable() . " WHERE draft_id = ?",
-                    [$draft['id']]
-                );
-                $this->draftModel->delete($draft['id']);
+            $issues = $this->stock->reconcile($carId);
+            if ($issues) {
+                // ไม่ควรเกิด — ถ้าเกิดให้ยกเลิกทั้งรอบดีกว่าบันทึกยอดที่ขัดกัน
+                error_log('reconcile failed after inspection ' . $checkId . ': ' . json_encode($issues, JSON_UNESCAPED_UNICODE));
+                throw new \RuntimeException('ยอดคงเหลือไม่สอดคล้องกันหลังคำนวณ ระบบยกเลิกการบันทึกเพื่อป้องกันข้อมูลผิด');
             }
-
-            // 5) สร้างรายการ "รอเติมอุปกรณ์" อัตโนมัติตามยอดที่ต้องเติมจริง (ข้อ 3)
-            $refill = $this->createRestockRequestsFromInspection($data, $lines, $currentUserId, $now);
 
             $db->commit();
 
-            $result = $this->inspectionModel->getWithItems($checkId) ?? $data;
+            $result = $this->inspectionModel->getWithItems($checkId) ?? [];
+            $result['mode'] = $mode;
             $result['refill'] = $refill;
             $result['adjustments'] = $adjustments;
-            // หมายเหตุ: การตัดคลังกลางไม่เกิดที่นี่ แต่เกิดตอน "เติมขึ้นรถจริง" (RestockService::recordRestock)
             return $result;
         } catch (\Throwable $e) {
             $db->rollBack();
             throw $e;
         }
+    }
+
+    private static function detailText(array $line, array $form): string
+    {
+        if ($form['item_type'] === VehicleStockService::TYPE_ELECTRIC) {
+            $parts = [];
+            foreach ($line['units'] ?? [] as $u) {
+                $parts[] = trim(($u['label'] ?: 'เครื่อง') . ' ' . ($u['status'] === ItemUnit::STATUS_READY ? 'พร้อมใช้' : 'ไม่พร้อมใช้') . ' แบต ' . $u['battery_level'] . '/4');
+            }
+            return implode(' • ', $parts) ?: (string)($line['note'] ?? '');
+        }
+        $unit = $form['unit'] !== '' ? ' ' . $form['unit'] : '';
+        if (!empty($line['initial'])) {
+            return 'ตั้งยอดครั้งแรก ' . VehicleStockService::fmt((float)$line['actual']) . $unit;
+        }
+        $text = 'ใช้ไป ' . VehicleStockService::fmt((float)$line['used']) . ' • คงเหลือ ' . VehicleStockService::fmt((float)$line['actual']) . $unit;
+        if ($line['discrepancy'] != 0.0) {
+            $text .= ' (คาด ' . VehicleStockService::fmt((float)$line['expected']) . ')';
+        }
+        return $text;
+    }
+
+    private static function fmtQty(float $qty): string
+    {
+        return VehicleStockService::fmt($qty);
     }
 
     /**
@@ -923,7 +1076,7 @@ class InspectionService
     {
         $vehicles = $this->getVehicles();
         $inspections = $this->getInspections();
-        $today = (new \DateTime())->format('Y-m-d');
+        $today = VehicleStockService::today();
 
         $lastByCar = [];
         $draftByCar = [];
@@ -944,13 +1097,16 @@ class InspectionService
         foreach ($vehicles as $vehicle) {
             $last = $lastByCar[$vehicle['id']] ?? null;
             if ($last) {
-                $inspectionDate = (new \DateTime($last['completed_at']))->format('Y-m-d');
+                $inspectionDate = $last['check_date'] ?? (new \DateTime($last['completed_at']))->format('Y-m-d');
                 if ($inspectionDate === $today) {
                     $checkedToday++;
                 }
                 $attnItems = array_filter($last['results'] ?? [], function($item) {
-                    return in_array($item['status'], ['ขาด', 'ใช้ไป']) || 
-                           ($item['is_battery'] && ($item['battery_level'] ?? 4) < 4);
+                    if (!empty($item['check_status'])) {
+                        return in_array($item['check_status'], [self::RESULT_REFILL, self::RESULT_ANOMALY], true);
+                    }
+                    return in_array($item['status'], [self::STATUS_MISSING, self::STATUS_USED], true) ||
+                           ($item['is_battery'] && ($item['battery_level'] ?? 4) < 4);   // รอบตรวจรุ่นเก่า
                 });
                 $attnTotal += count($attnItems);
             }
@@ -964,6 +1120,9 @@ class InspectionService
             'vehicles' => $vehicles,
             'last_inspections' => $lastByCar,
             'drafts' => $draftByCar,
+            'today' => $today,
+            'current_shift' => self::currentShift()['shift_code'],
+            'shifts_today' => $this->shiftsDoneOn($today),   // car_id => shift_code => รอบตรวจ
         ];
     }
 

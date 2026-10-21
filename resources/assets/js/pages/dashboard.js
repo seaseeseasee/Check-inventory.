@@ -47,6 +47,7 @@ class DashboardPage {
       attention_items: insp.attention_items ?? 0,
       last_inspections: insp.last_inspections || {},
       drafts: insp.drafts || {},
+      shifts_today: insp.shifts_today || {},
     };
   }
 
@@ -151,8 +152,19 @@ class DashboardPage {
   }
 
   gotoRestock(filter) {
+    // ไม่มีขั้น "กำลังเติม" แยกแล้ว: รอเติม/เติมบางส่วน (และสถานะเดิม IN_PROGRESS) = รายการที่ยังไม่ครบ
+    if (['PENDING', 'IN_PROGRESS', 'PARTIAL'].includes(filter)) filter = 'open';
     switchTab('restock');
     if (typeof window.setRestockFilter === 'function') window.setRestockFilter(filter);
+  }
+
+  // สถานะ 3 เวรของวันนี้ (เช้า/บ่าย/ดึก) จาก shifts_today ของ API
+  shiftDots(carId) {
+    const done = (this.data.shifts_today || {})[carId] || {};
+    const names = { morning: 'เช้า', afternoon: 'บ่าย', night: 'ดึก' };
+    return '<span class="car-shifts">' + Object.keys(names).map(code =>
+      `<span class="shift-dot ${done[code] ? 'done' : ''}" title="เวร${names[code]}${done[code] ? ' ตรวจแล้ว' : ' ยังไม่ตรวจ'}">${names[code]}${done[code] ? ' ✓' : ''}</span>`
+    ).join('') + '</span>';
   }
 
   renderContent() {
@@ -196,7 +208,7 @@ class DashboardPage {
       return `
         <article class="dash-car${alertClass}">
           <div class="dash-car-head">
-            <span class="plate-chip">${UI.escape(vehiclePlate(vehicle))}</span>
+            ${window.vehicleChip(vehicle)} ${this.shiftDots(vehicle.id)}
             <span class="chip ${draft ? 'chip-warn' : isToday ? 'chip-ok' : 'chip-off'}">
               ${draft ? 'มีร่างค้าง' : isToday ? 'ตรวจแล้ววันนี้' : 'ยังไม่ตรวจวันนี้'}
             </span>
@@ -211,7 +223,7 @@ class DashboardPage {
           ${expiring.length > 0 ? `
             <p class="dash-attn">
               วันหมดอายุ: ${expiring.slice(0, 3).map(item => 
-                `${UI.escape(item.name)} ${item.days_left < 0 ? 'หมดอายุแล้ว' : 'ใกล้หมดอายุ'} (${UI.escape(item.expiry_text)})`
+                `${UI.escape(item.name)} ${item.days_left < 0 ? 'หมดอายุแล้ว' : 'ใกล้หมดอายุ'} (${UI.escape(UI.formatDateThai(item.expiry_date))})`
               ).join(' • ')}${expiring.length > 3 ? ` และอีก ${expiring.length - 3} รายการ` : ''}
             </p>
           ` : ''}
@@ -245,17 +257,15 @@ class DashboardPage {
               <span class="chip chip-${req.status}">${this.getStatusLabel(req.status)}</span>
             </div>
             <div class="rs-meta">
-              <span class="plate-chip">${UI.escape(vehiclePlate({ id: req.car_id, name: req.car_name }))}</span>
+              ${window.vehicleChip({ id: req.car_id, name: req.car_name })}
               <span>รถ: ${UI.escape(req.car_name)}</span>
               <span>${UI.formatDateTimeThai(req.created_at)}</span>
             </div>
             <div class="rs-actions">
-              ${req.status === 'PENDING' ? `
-                <button type="button" class="act-btn ok" onclick="dashboardPage.startRestock('${req.id}')">เริ่มเติม</button>
-              ` : req.status === 'IN_PROGRESS' || req.status === 'PARTIAL' ? `
-                <button type="button" class="act-btn secondary" onclick="dashboardPage.viewRestockDetail('${req.id}')">ดำเนินการต่อ</button>
+              ${['PENDING', 'IN_PROGRESS', 'PARTIAL'].includes(req.status) ? `
+                <button type="button" class="act-btn ok" onclick="dashboardPage.viewRestock('${UI.escape(req.car_id)}')">เติมรถคันนี้</button>
               ` : `
-                <button type="button" class="act-btn gray" onclick="dashboardPage.viewRestockDetail('${req.id}')">ดูรายละเอียด</button>
+                <button type="button" class="act-btn gray" onclick="dashboardPage.viewRestockDetail('${UI.escape(req.id)}')">ดูรายละเอียด</button>
               `}
             </div>
           </article>
@@ -270,7 +280,7 @@ class DashboardPage {
           return `
             <article class="dash-car">
               <div class="dash-car-head">
-                <span class="plate-chip">${UI.escape(vehiclePlate(vehicle))}</span>
+                ${window.vehicleChip(vehicle)} ${this.shiftDots(vehicle.id)}
                 <span class="chip ${isToday ? 'chip-ok' : 'chip-off'}">
                   ${isToday ? 'ตรวจแล้ววันนี้' : 'ยังไม่ตรวจวันนี้'}
                 </span>

@@ -21,15 +21,24 @@
       </select>
       <p id="inspectionNurseLock" class="mt-1 hidden text-xs font-semibold" role="status"></p>
 
-      <label for="inspectionShift">เวร</label>
-      <select id="inspectionShift">
-        <option value="">-- เลือกเวร --</option>
-        <option value="เช้า">เช้า (08:00 - 16:00)</option>
-        <option value="บ่าย">บ่าย (16:00 - 24:00)</option>
-        <option value="ดึก">ดึก (24:00 - 08:00)</option>
-      </select>
+      <div class="shift-row">
+        <div>
+          <label for="inspectionDate">วันที่ตรวจ</label>
+          <input type="date" id="inspectionDate" required>
+        </div>
+        <div>
+          <label for="inspectionShift">เวร</label>
+          <select id="inspectionShift" required>
+            <option value="">-- เลือกเวร --</option>
+            <option value="morning">เวรเช้า (08:00 - 16:00)</option>
+            <option value="afternoon">เวรบ่าย (16:00 - 24:00)</option>
+            <option value="night">เวรดึก (00:00 - 08:00)</option>
+          </select>
+        </div>
+      </div>
+      <p id="inspectionShiftHint" class="shift-hint" role="status" aria-live="polite"></p>
 
-      <button type="submit">เริ่มตรวจเช็ค</button>
+      <button type="submit" id="inspectionStartBtn">เริ่มตรวจเช็ค</button>
     </form>
   </div>
 
@@ -37,6 +46,15 @@
   <div class="card hidden" id="inspectionCheckPage">
     <h2>แบบฟอร์มตรวจสอบอุปกรณ์</h2>
     <div class="top-info" id="inspectionLoginInfo"></div>
+    <p id="inspectionModeNote" class="mode-note hidden" role="status"></p>
+    <details class="check-help">
+      <summary>วิธีตรวจ</summary>
+      <ol>
+        <li>กรอก <b>ใช้ไป</b> ในเวรนี้ (ไม่ได้ใช้ = 0) ระบบคำนวณ <b>คงเหลือที่ควรมี</b> ให้</li>
+        <li>นับของจริงแล้วกด <b>✓ ครบถ้วน</b> ถ้าตรง — ถ้าไม่ตรงให้กรอก <b>นับได้จริง</b> พร้อมหมายเหตุ (= พบความผิดปกติ)</li>
+        <li>เครื่องใช้ไฟฟ้า: เลือก พร้อม/ไม่พร้อมใช้งาน และแบต 1-4 ขีด ทีละเครื่อง (ไม่พร้อมใช้ต้องระบุสาเหตุ)</li>
+      </ol>
+    </details>
 
     <div class="check-sticky">
       <div class="progress-wrap">
@@ -47,12 +65,12 @@
       <div class="filter-chips" role="group" aria-label="กรองรายการตรวจ">
         <button type="button" class="chip-btn on" id="inspectionChipAll" onclick="setInspectionFilter('all')">ทั้งหมด <b id="inspectionCntAll"></b></button>
         <button type="button" class="chip-btn" id="inspectionChipPending" onclick="setInspectionFilter('pending')">ยังไม่ตรวจ <b id="inspectionCntPending"></b></button>
-        <button type="button" class="chip-btn" id="inspectionChipAttn" onclick="setInspectionFilter('attn')">ต้องติดตาม <b id="inspectionCntAttn"></b></button>
+        <button type="button" class="chip-btn" id="inspectionChipAttn" onclick="setInspectionFilter('attn')">ต้องเติม/ผิดปกติ <b id="inspectionCntAttn"></b></button>
       </div>
     </div>
 
     <div class="btn-row">
-      <button type="button" onclick="checkAllInspection()">✅ ตรวจครบทั้งหมด</button>
+      <button type="button" onclick="checkAllInspection()" title="ยืนยันเฉพาะรายการที่ยังไม่ตรวจ ว่าใช้ไป 0 และนับได้ครบตามยอด">✅ ยืนยันครบถ้วนรายการที่เหลือ (ใช้ไป 0)</button>
       <button type="button" class="gray" onclick="cancelInspection()">ยกเลิก</button>
     </div>
 
@@ -68,13 +86,32 @@
 <!-- Restock Tab -->
 <div id="tabContentRestock" class="hidden">
   <div class="card">
-    <h2>รายการเติมอุปกรณ์</h2>
+    <h2>เติมอุปกรณ์เข้ารถ</h2>
+    <p class="text-sm text-slate-500">เติมเข้ารถที่เลือกโดยตรง (ไม่มีคลังกลาง) — ของสิ้นเปลืองต้องระบุวันหมดอายุทุก Lot, เติมหลายวันหมดอายุได้ในครั้งเดียว</p>
+    <div class="car-grid" aria-label="เลือกรถที่จะเติมของ" id="refillCarGrid"></div>
+    <div id="refillSheet" class="hidden">
+      <div class="refill-head" id="refillHead"></div>
+      <div class="filter-chips" role="group" aria-label="กรองรายการ">
+        <button type="button" class="chip-btn on" id="refillFilterNeed" onclick="setRefillFilter('need')">ต้องเติม <b id="refillCntNeed"></b></button>
+        <button type="button" class="chip-btn" id="refillFilterAll" onclick="setRefillFilter('all')">ทั้งหมด <b id="refillCntAll"></b></button>
+        <button type="button" class="chip-btn" id="refillFilterExp" onclick="setRefillFilter('expiry')">หมดอายุ/ใกล้หมด <b id="refillCntExp"></b></button>
+      </div>
+      <div id="refillItems" class="list"></div>
+      <div class="save-bar">
+        <input type="text" id="refillNote" maxlength="200" placeholder="หมายเหตุการเติม (ถ้ามี)" aria-label="หมายเหตุการเติม">
+        <p id="refillSummary" class="save-hint" role="status" aria-live="polite"></p>
+        <button id="refillSubmitBtn" type="button" class="secondary" onclick="submitRefill()">💾 บันทึกการเติม</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>รายการรอเติม (สร้างจากผลตรวจเช็ค)</h3>
     <div class="filter-chips" role="group" aria-label="กรองสถานะ" style="margin-bottom: 12px;">
-      <button type="button" class="chip-btn on" id="restockFilterAll" onclick="setRestockFilter('all')">ทั้งหมด</button>
-      <button type="button" class="chip-btn" id="restockFilterPending" onclick="setRestockFilter('PENDING')">รอเติม</button>
-      <button type="button" class="chip-btn" id="restockFilterProgress" onclick="setRestockFilter('IN_PROGRESS')">กำลังเติม</button>
-      <button type="button" class="chip-btn" id="restockFilterPartial" onclick="setRestockFilter('PARTIAL')">เติมไม่ครบ</button>
+      <button type="button" class="chip-btn on" id="restockFilterOpen" onclick="setRestockFilter('open')">ยังไม่ครบ</button>
       <button type="button" class="chip-btn" id="restockFilterCompleted" onclick="setRestockFilter('COMPLETED')">เติมครบ</button>
+      <button type="button" class="chip-btn" id="restockFilterCancelled" onclick="setRestockFilter('CANCELLED')">ยกเลิก</button>
+      <button type="button" class="chip-btn" id="restockFilterAll" onclick="setRestockFilter('all')">ทั้งหมด</button>
     </div>
     <div id="restockList"></div>
   </div>
@@ -128,24 +165,18 @@
         <div class="editor">
           <div><label for="stockName">ชื่ออุปกรณ์</label><input id="stockName" placeholder="ชื่ออุปกรณ์" required></div>
           <div><label for="stockStandard">จำนวนมาตรฐาน</label><input id="stockStandard" placeholder="จำนวนมาตรฐาน เช่น 10 หรือ 1 ชุด" required></div>
-          <div><label for="stockExpiry">วันหมดอายุ</label><input id="stockExpiry" type="date"></div>
-          <div><label for="stockBattery">เป็นแบตเตอรี่</label><select id="stockBattery"><option value="false">ไม่ใช่</option><option value="true">ใช่</option></select></div>
           <div>
-            <label for="stockOnboard">ยอดคงเหลือบนรถ (ชิ้น)</label>
-            <input id="stockOnboard" type="number" min="0" step="any" inputmode="decimal" placeholder="เว้นว่าง = ยังไม่ตรวจนับ">
-          </div>
-          <div>
-            <label for="stockCurrent">สต็อกปัจจุบันในคลัง</label>
-            <input id="stockCurrent" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 20 (เว้นว่าง = ไม่แตะคลัง)">
-          </div>
-          <div>
-            <label for="stockMin">จุดเตือนขั้นต่ำ (Minimum)</label>
-            <input id="stockMin" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 5 (เตือนเมื่อต่ำกว่านี้)">
+            <label for="stockItemType">ประเภทอุปกรณ์</label>
+            <select id="stockItemType">
+              <option value="piece">แบบชิ้น — แต่ละชิ้นวันหมดอายุอาจต่างกัน</option>
+              <option value="box">แบบกล่อง — ทั้งกล่อง/Lot วันหมดอายุเดียวกัน</option>
+              <option value="electric">เครื่องใช้ไฟฟ้า — สถานะ/แบตรายเครื่อง</option>
+            </select>
           </div>
           <button type="submit">เพิ่มอุปกรณ์</button>
           <button type="button" class="gray" onclick="hideAddItemForm()">ยกเลิก</button>
         </div>
-        <p class="text-xs text-slate-500">คลังสต็อกกลางนับรวมตามชื่ออุปกรณ์ (ใช้ร่วมกันทุกรถ) — กำหนดสต็อกปัจจุบัน/ขั้นต่ำได้ที่นี่ หรือที่เมนู “คลังสต็อกกลาง”</p>
+        <p class="text-xs text-slate-500">รายการใหม่ยังไม่มียอดบนรถ — เพิ่มของพร้อมวันหมดอายุ/ลงทะเบียนเครื่องที่เมนู “เติมอุปกรณ์” หรือตรวจนับในเวรถัดไป</p>
       </form>
     </div>
     
@@ -178,55 +209,6 @@
     </div>
 
     <div id="stockTable" class="list"></div>
-  </div>
-</div>
-
-<!-- Warehouse Tab (คลังสต็อกกลาง) -->
-<div id="tabContentWarehouse" class="hidden">
-  <div class="card">
-    <div class="wh-head">
-      <div>
-        <h2>🏬 คลังสต็อกกลาง</h2>
-        <p>สต็อกใช้ร่วมกันทุกรถตามชื่ออุปกรณ์ — ระบบตัดให้อัตโนมัติเมื่อบันทึกผลตรวจสถานะ “ใช้ไป” และแจ้งเตือนเมื่อคงเหลือต่ำกว่าจำนวนขั้นต่ำ</p>
-      </div>
-      <button type="button" id="whRefreshBtn" class="small-btn gray">↻ รีเฟรช</button>
-    </div>
-
-    <div class="wh-stats">
-      <div class="wh-stat"><span class="wh-stat-num" id="whStatTotal">–</span><span class="wh-stat-label">รายการทั้งหมด</span></div>
-      <div class="wh-stat is-ok"><span class="wh-stat-num" id="whStatOk">–</span><span class="wh-stat-label">ปกติ</span></div>
-      <div class="wh-stat is-low"><span class="wh-stat-num" id="whStatLow">–</span><span class="wh-stat-label">ต่ำกว่าขั้นต่ำ</span></div>
-      <div class="wh-stat is-out"><span class="wh-stat-num" id="whStatOut">–</span><span class="wh-stat-label">หมดสต็อก</span></div>
-    </div>
-
-    <div id="whAlertBanner" class="wh-alert hidden" role="alert">
-      <span id="whAlertText"></span>
-      <button type="button" class="small-btn" id="whAlertFilterBtn">ดูรายการที่ต้องเติม</button>
-    </div>
-
-    <div class="wh-toolbar">
-      <input type="search" id="whSearch" placeholder="ค้นหาชื่ออุปกรณ์…" aria-label="ค้นหาอุปกรณ์ในคลัง">
-      <div class="wh-filters" role="group" aria-label="กรองตามสถานะ">
-        <button type="button" class="wh-filter-btn active" data-wh-filter="all">ทั้งหมด</button>
-        <button type="button" class="wh-filter-btn" data-wh-filter="alert">ต้องเติม</button>
-        <button type="button" class="wh-filter-btn" data-wh-filter="ok">ปกติ</button>
-        <button type="button" class="wh-filter-btn" data-wh-filter="unset">ยังไม่กำหนด</button>
-      </div>
-    </div>
-
-    <div id="whTable" class="wh-table"></div>
-  </div>
-
-  <div class="card">
-    <div class="wh-log-head">
-      <h3>📜 ประวัติการเคลื่อนไหวสต็อก (Stock Transaction Log)</h3>
-      <select id="whTxLimit" aria-label="จำนวนรายการประวัติที่แสดง">
-        <option value="50">ล่าสุด 50</option>
-        <option value="100" selected>ล่าสุด 100</option>
-        <option value="200">ล่าสุด 200</option>
-      </select>
-    </div>
-    <div id="whTxList" class="wh-log-list"></div>
   </div>
 </div>
 

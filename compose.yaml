@@ -76,6 +76,8 @@ services:
       # sorts before 001-initial.sql alphabetically and would fail on a fresh DB).
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      # schema.sql already contains migrations 001-009; 010+ are applied on top
+      - ./database/migrations/010-lots-shifts-colors.sql:/docker-entrypoint-initdb.d/03-migration-010.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 5s

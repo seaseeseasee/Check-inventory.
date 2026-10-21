@@ -1,63 +1,83 @@
 // ========================================
-// PAGE: INSPECTION (CHECKLIST)
+// PAGE: INSPECTION (ตรวจเช็คอุปกรณ์ประจำรถตามเวร)
 // ========================================
+// กติกาเดียวกับ InspectionService::evaluateLine ฝั่ง server (server ตรวจซ้ำทุกครั้ง):
+//  ของสิ้นเปลือง: ใช้ไป (0 ได้) → คงเหลือที่ควรมี = ก่อนตรวจ − ใช้ไป → ✓ ครบถ้วน หรือ กรอกนับได้จริง (+หมายเหตุ)
+//  เครื่องไฟฟ้า: พร้อม/ไม่พร้อมใช้ + แบต 1-4 ขีด รายเครื่อง (ไม่ตัดสต๊อค)
+
+const SHIFT_LABEL = { morning: 'เวรเช้า', afternoon: 'เวรบ่าย', night: 'เวรดึก' };
+const ITEM_TYPE_LABEL = { box: '📦 กล่อง', piece: '🧩 ชิ้น', electric: '🔌 ไฟฟ้า' };
+const RESULT_LABEL = {
+  pending: 'ยังไม่ได้ตรวจสอบ',
+  complete: 'ตรวจสอบแล้ว ครบถ้วน',
+  needs_refill: 'ตรวจสอบแล้ว ต้องเติม',
+  anomaly: 'ตรวจสอบแล้ว พบความผิดปกติ',
+};
+const EXPIRY_LABEL = { expired: 'หมดอายุแล้ว', soon: 'ใกล้หมดอายุ', ok: '', unknown: 'ไม่ทราบวันหมดอายุ' };
 
 class InspectionPage {
   constructor() {
-    this.currentInspection = null;
-    this.checkResults = [];
+    this.session = null;          // {mode, id, car_id, check_date, shift_code, revision, results}
+    this.items = [];
     this.vehicles = [];
     this.nurses = [];
+    this.selectedCarId = '';
+    this.shiftStatus = null;      // ผลจาก /staff/inspections/shifts
     this.checkFilter = 'all';
     this.inspectorLocked = false;
     this.inspectorLockError = false;
-    // ค่าที่พิมพ์ค้างในช่อง "คงเหลือจริง" ระหว่างที่หน้า list ถูก render ใหม่
-    this.pendingInputs = new Map();
-    this.focusRemainingIndex = null;
     this.submitting = false;
+    this.draftTimer = null;
     this.init();
   }
 
   async init() {
-    await this.loadReferenceData();
     this.bindEvents();
+    await this.loadReferenceData();
     this.checkUrlParams();
   }
 
   async loadReferenceData() {
     try {
-      const [vehiclesRes, nursesRes] = await Promise.all([
+      const [vehiclesRes, nursesRes, shiftRes] = await Promise.all([
         window.vehicleApi.getAll(),
         window.nurseApi.getAll(),
+        window.staffApi.getShiftStatus(),
       ]);
       this.vehicles = vehiclesRes.data || [];
       this.nurses = nursesRes.data || [];
+      this.shiftStatus = shiftRes.data || null;
       window.vehicleRef.remember(this.vehicles);
-      
+
+      const dateEl = document.getElementById('inspectionDate');
+      const shiftEl = document.getElementById('inspectionShift');
+      if (this.shiftStatus && dateEl && !dateEl.value) {
+        dateEl.value = this.shiftStatus.current.check_date;
+        dateEl.max = this.shiftStatus.current.check_date;
+      }
+      if (this.shiftStatus && shiftEl && !shiftEl.value) {
+        shiftEl.value = this.shiftStatus.current.shift_code;
+      }
+
       this.renderVehicleSelection();
       this.renderNurseSelect();
-      this.renderShiftSelect();
+      this.renderShiftHint();
     } catch (error) {
       console.error('Failed to load reference data:', error);
+      window.toast.error('โหลดข้อมูลรถ/พยาบาลไม่สำเร็จ: ' + error.message);
     }
   }
 
   bindEvents() {
-    // Vehicle selection
-    document.querySelectorAll('.car-symbol').forEach(btn => {
-      btn.addEventListener('click', () => this.selectVehicle(btn.dataset.carId));
-    });
-    
-    // Form submission
-    const startForm = document.getElementById('inspectionStartForm');
-    if (startForm) {
-      startForm.addEventListener('submit', (e) => this.handleStartInspection(e));
+    document.getElementById('inspectionStartForm')?.addEventListener('submit', (e) => this.handleStartInspection(e));
+    document.getElementById('inspectionShift')?.addEventListener('change', () => this.renderShiftHint());
+    document.getElementById('inspectionDate')?.addEventListener('change', () => this.refreshShiftStatus());
+
+    const table = document.getElementById('inspectionItemTable');
+    if (table) {
+      table.addEventListener('input', (e) => this.onFieldInput(e));
+      table.addEventListener('click', (e) => this.onCardClick(e));
     }
-    
-    // Filter chips
-    document.getElementById('inspectionChipAll')?.addEventListener('click', () => this.setFilter('all'));
-    document.getElementById('inspectionChipPending')?.addEventListener('click', () => this.setFilter('pending'));
-    document.getElementById('inspectionChipAttn')?.addEventListener('click', () => this.setFilter('attn'));
   }
 
   checkUrlParams() {
@@ -66,33 +86,53 @@ class InspectionPage {
     const hashQuery = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : '';
     const params = new URLSearchParams(hashQuery || window.location.search);
     const carId = params.get('car');
-    if (carId) {
-      this.selectVehicle(carId);
+    if (carId) this.selectVehicle(carId);
+  }
+
+  // ---------------- หน้าเริ่มตรวจ ----------------
+
+  async refreshShiftStatus() {
+    const date = document.getElementById('inspectionDate')?.value;
+    try {
+      const res = await window.staffApi.getShiftStatus(date);
+      this.shiftStatus = res.data;
+    } catch (error) {
+      window.toast.error(error.message);
     }
+    this.renderVehicleSelection();
+    this.renderShiftHint();
+  }
+
+  doneFor(carId) {
+    return (this.shiftStatus && this.shiftStatus.done && this.shiftStatus.done[carId]) || {};
   }
 
   renderVehicleSelection() {
     const container = document.getElementById('inspectionCarGrid');
     if (!container) return;
 
-    // รถ "งดใช้งาน" ยังอยู่ในทะเบียน/ประวัติ แต่ไม่อยู่ในรอบตรวจ — เซิร์ฟเวอร์ยืนยันอีกชั้น
-    // ที่ StaffController::startInspection (การซ่อนปุ่มอย่างเดียวเชื่อถือไม่ได้)
+    // รถ "งดใช้งาน" ยังอยู่ในทะเบียน/ประวัติ แต่ไม่อยู่ในรอบตรวจ — server ตรวจซ้ำที่ startInspection
     const usable = this.vehicles.filter(v => v.status !== 'disabled');
     const hiddenCount = this.vehicles.length - usable.length;
 
-    const cards = usable.map(vehicle => `
-      <button type="button" 
-        class="car-symbol" 
-        data-car-id="${UI.escape(vehicle.id)}" 
-        aria-pressed="false" 
+    const cards = usable.map(vehicle => {
+      const done = this.doneFor(vehicle.id);
+      const shifts = ['morning', 'afternoon', 'night']
+        .map(code => `<span class="shift-dot ${done[code] ? 'done' : ''}" title="${SHIFT_LABEL[code]}${done[code] ? ' ตรวจแล้ว' : ' ยังไม่ตรวจ'}">${SHIFT_LABEL[code].replace('เวร', '')}${done[code] ? ' ✓' : ''}</span>`)
+        .join('');
+      const color = window.vehicleColor(vehicle);
+      return `
+      <button type="button" class="car-symbol" data-car-id="${UI.escape(vehicle.id)}"
+        aria-pressed="${String(vehicle.id) === this.selectedCarId}"
         aria-label="เลือกรถ ${UI.escape(vehiclePlate(vehicle))}"
+        style="border-color:${color};box-shadow: inset 0 6px 0 ${color}"
         onclick="inspectionPage.selectVehicle('${UI.escape(vehicle.id)}')">
-        <img src="${this.getVehicleIcon(vehicle.id)}" alt="" width="64" height="64">
-        <span>${UI.escape(vehiclePlate(vehicle))}</span>
+        <img src="${this.getVehicleIcon()}" alt="" width="64" height="64">
+        ${window.vehicleChip(vehicle)}
         <span class="car-selected-mark">✓</span>
-        <span class="car-stat">ยังไม่มีประวัติ</span>
-      </button>
-    `).join('');
+        <span class="car-shifts">${shifts}</span>
+      </button>`;
+    }).join('');
 
     container.innerHTML = (cards || '<p class="empty">ยังไม่มีรถที่พร้อมตรวจเช็ค — เพิ่มรถที่แท็บ "ทะเบียนรถ/อุปกรณ์"</p>')
       + (hiddenCount > 0
@@ -106,21 +146,42 @@ class InspectionPage {
       window.toast.warning(`รถ ${vehiclePlate(vehicle)} งดใช้งานอยู่ — เปิดกลับที่แท็บ "ทะเบียนรถ/อุปกรณ์" ก่อนเริ่มตรวจ`);
       return;
     }
-
-    document.querySelectorAll('.car-symbol').forEach(btn => {
-      btn.setAttribute('aria-pressed', btn.dataset.carId === carId);
+    this.selectedCarId = String(carId);
+    document.querySelectorAll('#inspectionCarGrid .car-symbol').forEach(btn => {
+      btn.setAttribute('aria-pressed', btn.dataset.carId === this.selectedCarId);
     });
+    this.renderShiftHint();
+  }
+
+  renderShiftHint() {
+    const hint = document.getElementById('inspectionShiftHint');
+    const btn = document.getElementById('inspectionStartBtn');
+    if (!hint) return;
+    const shift = document.getElementById('inspectionShift')?.value;
+    if (!this.selectedCarId || !shift) {
+      hint.textContent = '';
+      if (btn) btn.textContent = 'เริ่มตรวจเช็ค';
+      return;
+    }
+    const done = this.doneFor(this.selectedCarId)[shift];
+    if (done) {
+      hint.textContent = `ℹ️ ${SHIFT_LABEL[shift]}ของรถคันนี้ตรวจแล้วโดย ${done.nurse_name} — กดเพื่อเปิดรายการเดิมมาแก้ไข (ไม่สร้างรายการซ้ำ)`;
+      hint.className = 'shift-hint is-done';
+      if (btn) btn.textContent = '✏️ เปิดแก้ไขรายการเดิม';
+    } else {
+      hint.textContent = `${SHIFT_LABEL[shift]}ของรถคันนี้ยังไม่ได้ตรวจ`;
+      hint.className = 'shift-hint';
+      if (btn) btn.textContent = 'เริ่มตรวจเช็ค';
+    }
   }
 
   renderNurseSelect() {
     const select = document.getElementById('inspectionNurse');
     if (!select) return;
-    
     select.innerHTML = '<option value="">-- เลือกรายชื่อพยาบาล --</option>' +
       this.nurses.filter(n => n.active).map(nurse => `
-        <option value="${nurse.id}">${UI.escape(nurse.name)} (${UI.escape(nurse.department)})</option>
+        <option value="${UI.escape(nurse.id)}">${UI.escape(nurse.name)} (${UI.escape(nurse.department)})</option>
       `).join('');
-
     this.applyInspectorLock(select);
   }
 
@@ -134,9 +195,7 @@ class InspectionPage {
     }
   }
 
-  // Staff are locked to the nurse linked to their account; admins pick freely.
-  // The server re-checks this (StaffController::startInspection) — UI lock is
-  // only there so the nurse never has to pick their own name.
+  // Staff ถูกล็อกกับพยาบาลที่ผูกกับบัญชี (server บังคับซ้ำที่ StaffController::startInspection)
   applyInspectorLock(select) {
     const note = document.getElementById('inspectionNurseLock');
     const user = this.getCurrentUserSafe();
@@ -149,682 +208,504 @@ class InspectionPage {
     }
 
     const nurse = this.nurses.find(n => String(n.id) === String(user.nurse_id || '') && n.active);
+    select.disabled = true;
     if (nurse) {
       select.value = nurse.id;
-      select.disabled = true;
       this.inspectorLocked = true;
       if (note) {
         note.textContent = `🔒 ผู้ตรวจ: ${nurse.name} — ล็อกตามบัญชีที่เข้าสู่ระบบ`;
-        note.classList.remove('hidden');
-        note.classList.add('text-teal-700');
-        note.classList.remove('text-red-600');
+        note.className = 'mt-1 text-xs font-semibold text-teal-700';
       }
     } else {
-      select.disabled = true;
       this.inspectorLockError = true;
       if (note) {
         note.textContent = '⚠️ บัญชีนี้ยังไม่ได้เชื่อมโยงรายชื่อพยาบาลที่ใช้งานอยู่ กรุณาติดต่อผู้ดูแลระบบ';
-        note.classList.remove('hidden');
-        note.classList.add('text-red-600');
-        note.classList.remove('text-teal-700');
+        note.className = 'mt-1 text-xs font-semibold text-red-600';
       }
     }
   }
 
-  renderShiftSelect() {
-    const select = document.getElementById('inspectionShift');
-    if (!select) return;
-    
-    select.innerHTML = `
-      <option value="">-- เลือกเวร --</option>
-      <option value="เช้า">เช้า (08:00 - 16:00)</option>
-      <option value="บ่าย">บ่าย (16:00 - 24:00)</option>
-      <option value="ดึก">ดึก (24:00 - 08:00)</option>
-    `;
-  }
-
-  getVehicleIcon(carId) {
-    // ต้อง URL-encode: double quote ใน data URI จะปิด attribute src ของ <img> ทำให้อิโมจิหลุดออกมาแสดงบนหน้าจอ
+  getVehicleIcon() {
+    // ต้อง URL-encode: double quote ใน data URI จะปิด attribute src ของ <img>
     const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚑</text></svg>";
     return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
 
-  async handleStartInspection(event) {
-    event.preventDefault();
-
-    if (this.startSubmitting) return;
-
+  async handleStartInspection(event, replace = false) {
+    if (event) event.preventDefault();
     if (this.inspectorLockError) {
-      window.toast.error('บัญชีนี้ยังไม่ได้เชื่อมโยงรายชื่อพยาบาลที่ใช้งานอยู่ กรุณาติดต่อผู้ดูแลระบบ');
+      window.toast.error('บัญชีนี้ยังไม่ได้เชื่อมโยงรายชื่อพยาบาล กรุณาติดต่อผู้ดูแลระบบ');
       return;
     }
-
     const nurseId = document.getElementById('inspectionNurse')?.value;
     const shift = document.getElementById('inspectionShift')?.value;
-    const carId = document.querySelector('.car-symbol[aria-pressed="true"]')?.dataset.carId;
-
-    if (!nurseId || !shift || !carId) {
-      window.toast.error('กรุณาเลือกพยาบาล เวร และรถให้ครบ');
+    const date = document.getElementById('inspectionDate')?.value;
+    if (!this.selectedCarId || !nurseId || !shift || !date) {
+      window.toast.warning('กรุณาเลือกรถ ผู้ตรวจ วันที่ และเวรให้ครบ');
       return;
     }
 
-    const vehicle = this.vehicles.find(v => v.id === carId);
-    if (!vehicle) {
-      window.toast.error('รถไม่ถูกต้อง');
-      return;
-    }
-
-    const nurse = this.nurses.find(n => n.id === nurseId);
-    if (!nurse || !nurse.active) {
-      window.toast.error('พยาบาลไม่ถูกต้อง');
-      return;
-    }
-
-    this.startSubmitting = true;
-    const startBtn = document.querySelector('#inspectionStartForm button[type="submit"]');
-    const startBtnLabel = startBtn?.textContent;
-    if (startBtn) { startBtn.disabled = true; startBtn.textContent = 'กำลังเริ่มตรวจ...'; }
-
+    const btn = document.getElementById('inspectionStartBtn');
+    UI.setLoading(btn, true);
     try {
-      // Ask about another nurse's open draft before sending the start request,
-      // so the normal flow never produces a failed request in the console
-      let replaceDraft = false;
-      try {
-        const draftInfo = await window.api.get(`/staff/inspections/draft?car=${encodeURIComponent(carId)}`);
-        const draft = draftInfo.data?.draft;
-        const sameOwner = draft && draft.nurse_id === nurseId && draft.shift_name === shift;
-        if (draft && !sameOwner) {
-          replaceDraft = this.confirmReplaceDraft(draft);
-          if (!replaceDraft) return;
-        }
-      } catch (preCheckError) {
-        // Pre-check is best-effort - the start endpoint still guards the conflict
-      }
-
-      const payload = { car_id: carId, nurse_id: nurseId, shift: shift };
-      if (replaceDraft) payload.replace = true;
-
-      const result = await window.api.post('/staff/inspections/start', payload);
-
-      this.applyInspectionStarted(result.data, vehicle, nurse, shift);
+      const res = await window.staffApi.startInspection({
+        car_id: this.selectedCarId, nurse_id: nurseId, shift_code: shift, check_date: date, replace,
+      });
+      this.openSession(res.data);
     } catch (error) {
-      // Race fallback: the draft appeared or changed after the pre-check
-      if (error.data?.code === 'DRAFT_EXISTS') {
-        if (!this.confirmReplaceDraft(error.data.draft || {})) return;
-
-        try {
-          const result = await window.api.post('/staff/inspections/start', {
-            car_id: carId,
-            nurse_id: nurseId,
-            shift: shift,
-            replace: true,
-          });
-          this.applyInspectionStarted(result.data, vehicle, nurse, shift);
-        } catch (retryError) {
-          window.toast.error('เริ่มตรวจไม่สำเร็จ: ' + retryError.message);
-        }
-        return;
+      const code = error.data && error.data.code;
+      if (error.status === 409 && code === 'DRAFT_EXISTS') {
+        const d = error.data.draft || {};
+        const ok = await window.confirmDialog(
+          `รถคันนี้มีร่างการตรวจของ ${d.nurse_name || 'ผู้ตรวจท่านอื่น'} (${d.check_date || ''} เวร${d.shift_name || '-'}) ค้างอยู่\n` +
+          'ต้องการเริ่มการตรวจใหม่แทนที่ร่างนั้นหรือไม่? (ร่างเดิมจะถูกลบ ไม่กระทบยอดคงเหลือ)',
+          { confirmText: 'แทนที่ร่างเดิม', danger: true }
+        );
+        if (ok) await this.handleStartInspection(null, true);
+      } else {
+        window.toast.error(error.message);
       }
-
-      window.toast.error('เริ่มตรวจไม่สำเร็จ: ' + error.message);
     } finally {
-      this.startSubmitting = false;
-      if (startBtn) { startBtn.disabled = false; startBtn.textContent = startBtnLabel; }
+      UI.setLoading(btn, false);
     }
   }
 
-  confirmReplaceDraft(draft) {
-    return window.confirm(
-      `รถคันนี้มีร่างการตรวจของ ${draft.nurse_name || 'พยาบาลท่านอื่น'} (เวร${draft.shift_name || '-'}) อยู่แล้ว\n` +
-      'ต้องการลบร่างเดิมและเริ่มการตรวจใหม่หรือไม่?'
-    );
-  }
+  openSession(data) {
+    this.session = data;
+    this.items = (data.results || []).map(item => this.initItemState(item));
+    this.checkFilter = 'all';
 
-  applyInspectionStarted(data, vehicle, nurse, shift) {
-    this.currentInspection = data;
-    this.checkResults = data.results || [];
-    this.pendingInputs.clear();
-    this.focusRemainingIndex = null;
-
-    if (this.checkResults.length === 0) {
-      window.toast.warning('รถคันนี้ยังไม่มีรายการอุปกรณ์ให้ตรวจ กรุณาเพิ่มรายการอุปกรณ์ก่อน');
-      return;
+    const vehicle = this.vehicles.find(v => String(v.id) === String(data.car_id)) || { id: data.car_id, name: data.car_name };
+    const info = document.getElementById('inspectionLoginInfo');
+    if (info) {
+      info.innerHTML = `${window.vehicleChip(vehicle)} <span>ผู้ตรวจ: <b>${UI.escape(data.nurse_name)}</b></span>
+        <span>วันที่ ${UI.escape(UI.formatDateThai(data.check_date))}</span>
+        <span class="shift-badge">${UI.escape(SHIFT_LABEL[data.shift_code] || data.shift_name)}</span>`;
+    }
+    const modeNote = document.getElementById('inspectionModeNote');
+    if (modeNote) {
+      const text = {
+        edit: `✏️ แก้ไขรายการตรวจเดิม (ครั้งที่แก้ #${data.revision}) — เมื่อบันทึก ระบบจะคำนวณยอดใหม่จากส่วนต่าง ไม่หักซ้ำ และเก็บค่าเดิมไว้ในประวัติ`,
+        draft: '↩️ ทำต่อจากร่างที่บันทึกไว้',
+        new: '',
+      }[data.mode] || '';
+      modeNote.textContent = text;
+      modeNote.classList.toggle('hidden', !text);
     }
 
-    // Show check page
-    this.showCheckPage(vehicle, nurse, shift);
-    this.renderChecklistTable();
-  }
-
-  showCheckPage(vehicle, nurse, shift) {
     document.getElementById('inspectionLoginPage').classList.add('hidden');
     document.getElementById('inspectionCheckPage').classList.remove('hidden');
-    document.getElementById('inspectionLoginInfo').textContent = `ผู้ตรวจ: ${nurse.name} | เวร: ${shift} | ${vehiclePlate(vehicle)}`;
+    this.renderList();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  renderChecklistTable() {
+  initItemState(item) {
+    const units = (item.units || []).map(u => ({ ...u }));
+    return {
+      ...item,
+      used: item.used === null || item.used === undefined ? '' : String(item.used),
+      actual: item.actual === null || item.actual === undefined ? '' : String(item.actual),
+      confirmed: !!item.confirmed,
+      note: item.note || '',
+      units,
+      // เครื่องที่ยังไม่ได้ตรวจในรอบนี้ = ยังไม่ตรวจ (ค่าที่โหลดมาเป็นสถานะล่าสุด ไม่ใช่ผลรอบนี้)
+      unitTouched: Object.fromEntries(units.map(u => [u.id, !!u.checked])),
+    };
+  }
+
+  // ---------------- คำนวณผลรายรายการ (ตรงกับ server) ----------------
+
+  num(value) {
+    if (value === '' || value === null || value === undefined) return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.round(n * 100) / 100 : NaN;
+  }
+
+  fmt(value) {
+    if (value === null || value === undefined || value === '' || Number.isNaN(value)) return '-';
+    return String(Math.round(Number(value) * 100) / 100);
+  }
+
+  evaluate(item) {
+    const target = item.target_qty === null || item.target_qty === undefined ? null : Number(item.target_qty);
+
+    if (item.item_type === 'electric') {
+      if (!item.units.length) {
+        return item.note.trim()
+          ? { result: 'anomaly', text: 'ไม่มีเครื่องลงทะเบียนบนรถ' }
+          : { result: 'pending', text: 'ยังไม่มีเครื่องลงทะเบียน — ระบุหมายเหตุ หรือเพิ่มเครื่องที่หน้าเติมอุปกรณ์' };
+      }
+      for (const u of item.units) {
+        if (!item.unitTouched[u.id]) return { result: 'pending', text: `ยังไม่ได้ตรวจ ${u.label || 'เครื่อง'}` };
+        if (!(u.battery_level >= 1 && u.battery_level <= 4)) return { result: 'pending', text: 'เลือกระดับแบต 1-4 ขีด' };
+        if (u.status === 'not_ready' && !String(u.note || '').trim()) return { result: 'error', text: 'เครื่องไม่พร้อมใช้งาน ต้องระบุสาเหตุ' };
+      }
+      const notReady = item.units.filter(u => u.status === 'not_ready').length;
+      const low = item.units.filter(u => u.battery_level <= 1).length;
+      return notReady
+        ? { result: 'anomaly', text: `ไม่พร้อมใช้งาน ${notReady} เครื่อง` }
+        : { result: 'complete', text: low ? `พร้อมใช้งาน (แบตต่ำ ${low} เครื่อง)` : 'พร้อมใช้งานทุกเครื่อง' };
+    }
+
+    // ยังไม่เคยตรวจนับ → ตั้งยอดครั้งแรกด้วยจำนวนนับจริง
+    if (item.before === null || item.before === undefined) {
+      const actual = this.num(item.actual);
+      if (actual === null) return { result: 'pending', text: 'ยังไม่เคยตรวจนับ — กรอกจำนวนที่นับได้จริง' };
+      if (Number.isNaN(actual) || actual < 0) return { result: 'error', text: 'จำนวนต้องเป็นตัวเลขไม่ติดลบ' };
+      return { result: target !== null && actual < target ? 'needs_refill' : 'complete', actual, text: 'ตั้งยอดครั้งแรก' };
+    }
+
+    const before = Number(item.before);
+    const used = item.used === '' ? 0 : this.num(item.used);
+    if (Number.isNaN(used) || used < 0) return { result: 'error', text: 'ใช้ไปต้องเป็นตัวเลขไม่ติดลบ' };
+    if (used > before) return { result: 'error', text: `ใช้ไปมากกว่ายอดบนรถ (${this.fmt(before)}) — ถ้านับได้ไม่ตรงให้กรอก "นับได้จริง" แทน` };
+    const expected = Math.round((before - used) * 100) / 100;
+
+    let actual = null;
+    if (item.confirmed) actual = expected;
+    else if (item.actual !== '') actual = this.num(item.actual);
+    if (actual === null) return { result: 'pending', expected, used, text: 'กด ✓ ครบถ้วน หรือกรอกจำนวนนับได้จริง' };
+    if (Number.isNaN(actual) || actual < 0) return { result: 'error', expected, used, text: 'จำนวนนับได้จริงต้องเป็นตัวเลขไม่ติดลบ' };
+
+    const diff = Math.round((actual - expected) * 100) / 100;
+    if (diff !== 0) {
+      if (!item.note.trim()) return { result: 'error', expected, used, actual, diff, text: `นับได้ ${this.fmt(actual)} ไม่ตรงกับที่คาด ${this.fmt(expected)} — ต้องระบุหมายเหตุ` };
+      return { result: 'anomaly', expected, used, actual, diff, text: `คลาดเคลื่อน ${diff > 0 ? '+' : ''}${this.fmt(diff)}` };
+    }
+    if (target !== null && actual < target) {
+      return { result: 'needs_refill', expected, used, actual, diff, text: `ต้องเติม ${this.fmt(target - actual)}` };
+    }
+    return { result: 'complete', expected, used, actual, diff, text: used > 0 ? `ใช้ไป ${this.fmt(used)} ยังครบตามเกณฑ์` : 'ครบตามเกณฑ์' };
+  }
+
+  // ---------------- แสดงผล ----------------
+
+  renderList() {
     const container = document.getElementById('inspectionItemTable');
     if (!container) return;
-    
-    const doneCount = this.checkResults.filter(i => i.status !== 'ยังไม่ตรวจ').length;
-    const totalCount = this.checkResults.length;
-    const progress = totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0;
-    
-    document.getElementById('inspectionProgressFill').style.width = progress + '%';
-    document.getElementById('inspectionProgressText').textContent = `ตรวจแล้ว ${doneCount} / ${totalCount} รายการ`;
-    
-    // Update filter counts
-    document.getElementById('inspectionCntAll').textContent = totalCount;
-    document.getElementById('inspectionCntPending').textContent = totalCount - doneCount;
-    document.getElementById('inspectionCntAttn').textContent = this.checkResults.filter(this.needsAttention).length;
-
-    // แถวสรุปก่อนบันทึก: บอกให้รู้ว่ายังขาดอะไร (ข้อ 1.4 + กันกดบันทึกซ้ำ/ค้าง)
-    const needsInput = this.checkResults.filter((item, index) => this.itemNeedsRemainingInput(item, index));
-    const hint = document.getElementById('inspectionSaveHint');
-    const submitBtn = document.getElementById('inspectionSubmitBtn');
-    if (hint) {
-      if (totalCount === 0) hint.textContent = 'รถคันนี้ยังไม่มีรายการอุปกรณ์';
-      else if (doneCount < totalCount) hint.textContent = `เหลือ ${totalCount - doneCount} รายการที่ยังไม่ได้เลือกสถานะ`;
-      else if (needsInput.length > 0) hint.textContent = `ต้องกรอก “จำนวนคงเหลือจริง” อีก ${needsInput.length} รายการจึงจะบันทึกได้`;
-      else hint.textContent = 'ตรวจครบแล้ว — บันทึกเพื่อตั้งยอดคงเหลือบนรถและสร้างรายการรอเติมอัตโนมัติ';
-    }
-    if (submitBtn) submitBtn.disabled = totalCount === 0 || doneCount < totalCount || needsInput.length > 0;
-    
-    // Render items
-    const visible = this.checkResults
-      .map((item, index) => ({ item, index }))
-      .filter(({ item }) => this.checkFilter === 'all' || 
-        (this.checkFilter === 'pending' && item.status === 'ยังไม่ตรวจ') ||
-        (this.checkFilter === 'attn' && this.needsAttention(item)));
-    
-    container.innerHTML = visible.map(({ item, index }) => this.renderItemCard(item, index)).join('');
-    
-    // Bind item events
-    this.bindItemEvents();
+    const rows = this.items
+      .map((item, index) => ({ item, index, ev: this.evaluate(item) }))
+      .filter(({ ev }) => this.checkFilter === 'all'
+        || (this.checkFilter === 'pending' && (ev.result === 'pending' || ev.result === 'error'))
+        || (this.checkFilter === 'attn' && (ev.result === 'needs_refill' || ev.result === 'anomaly')));
+    container.innerHTML = rows.length
+      ? rows.map(({ item, index }) => `<div class="check-card" data-index="${index}">${this.renderCard(item, index)}</div>`).join('')
+      : '<p class="empty">ไม่มีรายการในตัวกรองนี้</p>';
+    this.updateProgress();
   }
 
-  renderItemCard(item, index) {
-    const statusClass = this.getStatusClass(item);
-    const chipClass = this.getChipClass(item.status);
-    
+  renderCard(item, index) {
+    const ev = this.evaluate(item);
+    const unit = item.unit ? ' ' + UI.escape(item.unit) : '';
+    const head = `
+      <div class="check-card-head">
+        <div>
+          <strong>${UI.escape(item.name)}</strong>
+          <span class="type-badge type-${UI.escape(item.item_type)}">${ITEM_TYPE_LABEL[item.item_type] || ''}</span>
+          <div class="check-sub">เป้าหมาย ${item.target_qty === null ? UI.escape(item.standard || '-') : this.fmt(item.target_qty) + unit}</div>
+        </div>
+        <span class="result-chip result-${ev.result}" data-role="chip">${RESULT_LABEL[ev.result] || '⚠️ กรอกไม่ถูกต้อง'}</span>
+      </div>`;
+    const body = item.item_type === 'electric' ? this.renderElectric(item, index) : this.renderConsumable(item, index, ev, unit);
+    return head + body + `<p class="check-msg msg-${ev.result}" data-role="msg">${UI.escape(ev.text || '')}</p>`;
+  }
+
+  renderLots(item) {
+    if (!item.lots || !item.lots.length) {
+      return item.before ? '<div class="lot-list"><span class="lot lot-unknown">ไม่มีข้อมูล Lot</span></div>' : '';
+    }
+    return '<div class="lot-list" aria-label="วันหมดอายุแต่ละ Lot">' + item.lots.map(lot => `
+      <span class="lot lot-${UI.escape(lot.state)}">
+        ${lot.expiry_date ? 'หมดอายุ ' + UI.escape(UI.formatDateThai(lot.expiry_date)) : 'ไม่ทราบวันหมดอายุ'}
+        · ${this.fmt(lot.qty)}${item.unit ? ' ' + UI.escape(item.unit) : ''}
+        ${EXPIRY_LABEL[lot.state] && lot.expiry_date ? `<b>${EXPIRY_LABEL[lot.state]}</b>` : ''}
+      </span>`).join('') + '</div>';
+  }
+
+  renderConsumable(item, index, ev, unit) {
+    if (item.before === null || item.before === undefined) {
+      return `
+        ${this.renderLots(item)}
+        <div class="check-grid">
+          <label>นับได้จริง (ตั้งยอดครั้งแรก)
+            <input type="number" min="0" step="any" inputmode="decimal" data-field="actual" value="${UI.escape(item.actual)}" placeholder="จำนวน">
+          </label>
+          <label>หมายเหตุ <input type="text" maxlength="200" data-field="note" value="${UI.escape(item.note)}"></label>
+        </div>`;
+    }
+    const mismatchOpen = !item.confirmed && (item.actual !== '' || item.note !== '');
     return `
-      <article class="item-card ${statusClass}" data-index="${index}" data-item-id="${item.id}">
-        <div class="item-head">
-          <span class="item-no">${index + 1}</span>
-          <div class="item-name">${UI.escape(item.name)}</div>
-          <span class="chip ${chipClass}">${UI.escape(item.status)}</span>
-        </div>
-        ${this.renderStockRow(item)}
-        <div class="item-meta">
-          <span class="std-chip">มาตรฐาน ${UI.escape(item.standard)}</span>
-          ${this.detailLabel(item) ? `<span class="detail-chip">${UI.escape(this.detailLabel(item))}</span>` : ''}
-        </div>
-        ${this.renderRemainingRow(item, index)}
-        <div class="exp-row">
-          <label for="exp-${index}">วันหมดอายุ</label>
-          <input type="text" id="exp-${index}" value="${UI.escape(item.expire)}" placeholder="วัน/เดือน/ปี" data-index="${index}" data-field="expire">
-        </div>
-        <div class="item-actions">
-          ${item.isBattery ? this.renderBatteryButtons(item, index) : this.renderActionButtons(item, index)}
-        </div>
-      </article>
-    `;
-  }
-
-  // ==================== ยอดสต็อกบนหน้าจอ (ข้อ 1 ของสเปก) ====================
-
-  /**
-   * แถบแสดง "ยอดล่าสุดจากฐานข้อมูล" ของรายการนี้: บนรถ / เป้าหมาย / คลังกลาง
-   * car_qty = null แปลว่า "ยังไม่เคยตรวจนับ" — ห้ามแสดงเป็น 0 (ข้อ 1.5)
-   */
-  renderStockRow(item) {
-    const unit = item.unit ? ' ' + item.unit : '';
-    const counted = item.car_qty !== null && item.car_qty !== undefined && item.car_qty !== '';
-
-    const onCar = counted
-      ? `<span class="stock-chip onhand">บนรถ ${this.fmtQty(item.car_qty)}${UI.escape(unit)}</span>`
-      : '<span class="stock-chip unknown">บนรถ: ยังไม่เคยตรวจนับ</span>';
-    const asof = counted && item.car_qty_at
-      ? `<span class="stock-asof">ณ ${UI.escape(this.shortDateTime(item.car_qty_at))}</span>`
-      : '';
-
-    const hasTarget = item.target_qty !== null && item.target_qty !== undefined && item.target_qty !== '';
-    const target = hasTarget
-      ? `<span class="stock-chip target">เป้าหมาย ${this.fmtQty(item.target_qty)}${UI.escape(unit)}</span>`
-      : '<span class="stock-chip target">เป้าหมายไม่ระบุ</span>';
-
-    const hasWh = item.warehouse_qty !== null && item.warehouse_qty !== undefined && item.warehouse_qty !== '';
-    // คลังที่ "ยังไม่ตั้งยอด" (ยอด 0 ไม่มีขั้นต่ำ) ต้องไม่ทำให้พยาบาลเข้าใจผิดว่าของหมดคลัง
-    const whUntracked = hasWh && item.warehouse_status === 'unset';
-    const whLow = hasWh && !whUntracked
-      && parseFloat(item.warehouse_min) > 0 && parseFloat(item.warehouse_qty) <= parseFloat(item.warehouse_min);
-    const wh = whUntracked
-      ? '<span class="stock-chip wh unknown">คลังกลาง: ยังไม่ตั้งยอด</span>'
-      : hasWh
-        ? `<span class="stock-chip wh${whLow ? ' low' : ''}">คลังกลาง ${this.fmtQty(item.warehouse_qty)}${whLow ? ' (ใกล้หมด)' : ''}</span>`
-        : '<span class="stock-chip wh">คลังกลาง: ยังไม่ได้ขึ้นทะเบียน</span>';
-
-    return `<div class="stock-row">${onCar}${asof}${target}${wh}</div>`;
-  }
-
-  /**
-   * ช่องกรอก "จำนวนคงเหลือจริง" เท่านั้น (ข้อ 1.4)
-   * ระบบไม่รับช่อง "จำนวนที่ใช้ไป" เพื่อไม่ให้ผู้ใช้กรอกสองแบบปนกัน
-   */
-  renderRemainingRow(item, index) {
-    if (item.isBattery) {
-      return `<p class="remaining-hint">เลือกจำนวนขีดแบตเตอรี่ 0-4 (ต่ำกว่า 4 ขีดจะถูกรวมไว้ในรายการรอเติม)</p>`;
-    }
-
-    const unit = item.unit ? ' ' + item.unit : '';
-
-    if (item.status === 'ยังไม่ตรวจ') {
-      return '<p class="remaining-hint">เลือก ครบ / ใช้ไป / ขาด แล้วกรอก “จำนวนคงเหลือจริง” ที่นับได้จากบนรถ</p>';
-    }
-
-    if (item.status === 'Checked') {
-      const hasTarget = item.target_qty !== null && item.target_qty !== undefined && item.target_qty !== '';
-      const shown = hasTarget ? `${this.fmtQty(item.target_qty)}${UI.escape(unit)}` : 'ครบตามมาตรฐาน';
-      return `<div class="remaining-row"><span class="remaining-static">คงเหลือจริง = ${shown} (บันทึกว่าครบ)</span></div>`;
-    }
-
-    const stored = (item.actual_remaining === null || item.actual_remaining === undefined) ? '' : String(item.actual_remaining);
-    // ค่าที่ผู้ใช้พิมพ์ค้างไว้ก่อน render ใหม่ (ยังไม่ commit) ห้ามหายไป (ข้อ 1.5)
-    const pending = this.pendingInputs instanceof Map ? this.pendingInputs.get(String(index)) : null;
-    const raw = pending !== null && pending !== undefined ? pending : stored;
-
-    return `
-      <div class="remaining-row">
-        <label class="remaining-label" for="rem-${index}">
-          จำนวนคงเหลือจริงบนรถ <span class="muted">(ไม่ใช่จำนวนที่ใช้ไป${UI.escape(unit)})</span>
+      <div class="qty-line">ก่อนตรวจ <b>${this.fmt(item.before)}</b>${unit}</div>
+      ${this.renderLots(item)}
+      <div class="check-grid">
+        <label>ใช้ไปในเวรนี้
+          <input type="number" min="0" step="any" inputmode="decimal" data-field="used" value="${UI.escape(item.used)}" placeholder="0">
         </label>
-        <input class="remaining-input" id="rem-${index}" type="number" min="0" step="0.5" inputmode="decimal"
-          data-index="${index}" data-field="actual" value="${UI.escape(raw)}" placeholder="เช่น 7"
-          aria-describedby="rem-calc-${index}">
-        <p class="remaining-help">ระบบจะคำนวณ “ใช้ไป” เอง = ยอดบนรถเดิม − คงเหลือจริงที่กรอก</p>
-        <p class="remaining-calc" id="rem-calc-${index}">${this.calcPreviewHtml(item, raw)}</p>
+        <div class="expected-box">คงเหลือที่ควรมี <b data-role="expected">${this.fmt(ev.expected)}</b>${unit}</div>
       </div>
-    `;
+      <div class="confirm-row">
+        <button type="button" class="confirm-btn ${item.confirmed ? 'on' : ''}" data-action="confirm" aria-pressed="${item.confirmed}">✓ ครบถ้วน (นับได้ตรง)</button>
+        <button type="button" class="mismatch-btn ${mismatchOpen ? 'on' : ''}" data-action="mismatch">นับได้ไม่ตรง</button>
+      </div>
+      <div class="mismatch-box ${mismatchOpen ? '' : 'hidden'}" data-role="mismatch">
+        <label>นับได้จริง <input type="number" min="0" step="any" inputmode="decimal" data-field="actual" value="${UI.escape(item.actual)}"></label>
+        <label>หมายเหตุ (จำเป็นเมื่อไม่ตรง) <input type="text" maxlength="200" data-field="note" value="${UI.escape(item.note)}" placeholder="เช่น ชำรุดทิ้ง / หาไม่พบ"></label>
+      </div>`;
   }
 
-  /** ข้อความสรุปใต้ชื่ออุปกรณ์ (แบตใช้ขีด, อื่น ๆ ใช้ "คงเหลือ N หน่วย") */
-  detailLabel(item) {
-    if (item.isBattery && item.batteryLevel !== null && item.batteryLevel !== undefined) {
-      return item.batteryLevel + '/4 ขีด';
+  renderElectric(item, index) {
+    if (!item.units.length) {
+      return `<p class="text-sm text-amber-700">ยังไม่มีเครื่องลงทะเบียนบนรถ — เพิ่มที่เมนู “เติมอุปกรณ์”</p>
+        <label>หมายเหตุ <input type="text" maxlength="200" data-field="note" value="${UI.escape(item.note)}" placeholder="เช่น ส่งซ่อมทั้งหมด / ไม่มีเครื่อง"></label>`;
     }
-    const has = item.actual_remaining !== null && item.actual_remaining !== undefined && item.actual_remaining !== '';
-    if (has && item.status !== 'Checked') {
-      return 'คงเหลือ ' + this.fmtQty(item.actual_remaining) + (item.unit ? ' ' + item.unit : '');
-    }
-    return item.missing || '';
+    return '<div class="unit-list">' + item.units.map((u, ui) => {
+      const touched = item.unitTouched[u.id];
+      return `
+      <div class="unit-row ${touched ? '' : 'untouched'}" data-unit="${ui}">
+        <div class="unit-name">${UI.escape(u.label || `เครื่องที่ ${ui + 1}`)}</div>
+        <div class="seg" role="group" aria-label="สถานะ">
+          <button type="button" class="seg-btn ${touched && u.status === 'ready' ? 'on' : ''}" data-action="unit-status" data-value="ready">พร้อมใช้งาน</button>
+          <button type="button" class="seg-btn danger ${touched && u.status === 'not_ready' ? 'on' : ''}" data-action="unit-status" data-value="not_ready">ไม่พร้อมใช้งาน</button>
+        </div>
+        <div class="battery-row" role="group" aria-label="ระดับแบตเตอรี่">
+          ${[1, 2, 3, 4].map(level => `<button type="button" class="bat-btn ${touched && u.battery_level === level ? 'on' : ''}" data-action="unit-battery" data-value="${level}" aria-label="แบต ${level} ขีด">${'▮'.repeat(level)}${'▯'.repeat(4 - level)}</button>`).join('')}
+        </div>
+        <input type="text" maxlength="200" class="unit-note ${u.status === 'not_ready' ? '' : 'hidden'}" data-field="unit-note" value="${UI.escape(u.note || '')}" placeholder="สาเหตุ เช่น แบตเสื่อม / ชำรุด / ส่งซ่อม">
+      </div>`;
+    }).join('') + '</div>';
   }
 
-  /** ตัวเลขคาดไว้ที่จะถูกบันทึก (ใช้กติกาเดียวกับฝั่งเซิร์ฟเวอร์) */
-  calcPreviewHtml(item, rawValue) {
-    const unit = item.unit ? ' ' + item.unit : '';
-    const actual = this.toNum(rawValue);
-
-    if (actual === null) {
-      return '<span class="muted">ยังไม่ได้กรอก — ยังไม่บันทึกยอดของรายการนี้</span>';
+  refreshCard(index) {
+    const card = document.querySelector(`#inspectionItemTable .check-card[data-index="${index}"]`);
+    if (!card) return;
+    const item = this.items[index];
+    const ev = this.evaluate(item);
+    const chip = card.querySelector('[data-role="chip"]');
+    if (chip) {
+      chip.className = `result-chip result-${ev.result}`;
+      chip.textContent = RESULT_LABEL[ev.result] || '⚠️ กรอกไม่ถูกต้อง';
     }
+    const msg = card.querySelector('[data-role="msg"]');
+    if (msg) {
+      msg.className = `check-msg msg-${ev.result}`;
+      msg.textContent = ev.text || '';
+    }
+    const expected = card.querySelector('[data-role="expected"]');
+    if (expected) expected.textContent = this.fmt(ev.expected);
+    this.updateProgress();
+  }
 
-    const counted = item.car_qty !== null && item.car_qty !== undefined && item.car_qty !== '';
-    const before = counted ? parseFloat(item.car_qty) : null;
+  updateProgress() {
+    const evs = this.items.map(item => this.evaluate(item).result);
+    const total = evs.length;
+    const done = evs.filter(r => r === 'complete' || r === 'needs_refill' || r === 'anomaly').length;
+    const attn = evs.filter(r => r === 'needs_refill' || r === 'anomaly').length;
+    const pct = total ? Math.round(done * 100 / total) : 0;
+    const fill = document.getElementById('inspectionProgressFill');
+    if (fill) fill.style.width = pct + '%';
+    const text = document.getElementById('inspectionProgressText');
+    if (text) text.textContent = `ตรวจแล้ว ${done}/${total} รายการ`;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('inspectionCntAll', total);
+    set('inspectionCntPending', total - done);
+    set('inspectionCntAttn', attn);
+    const hint = document.getElementById('inspectionSaveHint');
+    if (hint) hint.textContent = done < total ? `เหลืออีก ${total - done} รายการก่อนบันทึก` : 'ตรวจครบแล้ว พร้อมบันทึก';
+  }
 
-    let usedText;
-    if (before === null) {
-      usedText = '<span class="muted">ใช้ไป: ยังคำนวณไม่ได้ (รถยังไม่เคยตรวจนับ) — รอบนี้จะตั้งยอดคงเหลือเป็นค่าใหม่</span>';
-    } else if (actual > before) {
-      usedText = `<span class="warn-text">นับได้มากกว่ายอดเดิม (${this.fmtQty(before)}${UI.escape(unit)}) → บันทึกเป็นการปรับยอด ไม่ใช่ “ใช้ไป” ติดลบ</span>`;
+  // ---------------- การกรอก ----------------
+
+  onFieldInput(event) {
+    const el = event.target;
+    const field = el.dataset.field;
+    const card = el.closest('.check-card');
+    if (!field || !card) return;
+    const index = Number(card.dataset.index);
+    const item = this.items[index];
+    if (field === 'unit-note') {
+      const ui = Number(el.closest('.unit-row').dataset.unit);
+      item.units[ui].note = el.value;
     } else {
-      usedText = `ใช้ไป ${this.fmtQty(before - actual)}${UI.escape(unit)}`;
+      item[field] = el.value;
+      // แก้ "ใช้ไป" หลังกดครบถ้วน → ต้องยืนยันใหม่กับยอดคาดการณ์ตัวใหม่ (ห้ามถือว่าครบโดยอัตโนมัติ)
+      if (field === 'used' && item.confirmed) {
+        item.confirmed = false;
+        card.querySelector('[data-action="confirm"]')?.classList.remove('on');
+      }
+      if (field === 'actual' && el.value !== '') {
+        item.confirmed = false;
+        card.querySelector('[data-action="confirm"]')?.classList.remove('on');
+      }
     }
-
-    const hasTarget = item.target_qty !== null && item.target_qty !== undefined && item.target_qty !== '';
-    const refillText = hasTarget
-      ? `ต้องเติม ${this.fmtQty(Math.max(0, parseFloat(item.target_qty) - actual))}${UI.escape(unit)}`
-      : 'ต้องเติม: ไม่ระบุเป้าหมาย';
-
-    return `<span>${usedText}</span><span class="sep">•</span><span>${refillText}</span>`;
+    this.refreshCard(index);
+    this.scheduleDraft();
   }
 
-  toNum(value) {
-    const text = String(value ?? '').trim();
-    if (text === '' || !/^\d+(?:[.]\d+)?$/.test(text)) return null;
-    const n = parseFloat(text);
-    return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
-  }
+  onCardClick(event) {
+    const btn = event.target.closest('[data-action]');
+    const card = event.target.closest('.check-card');
+    if (!btn || !card) return;
+    const index = Number(card.dataset.index);
+    const item = this.items[index];
+    const action = btn.dataset.action;
 
-  /** รายการที่ต้องมี "ตัวเลขคงเหลือจริง" ก่อนกดบันทึก */
-  itemNeedsRemainingInput(item, index) {
-    if (item.isBattery) return false;
-    if (item.status === 'ยังไม่ตรวจ' || item.status === 'Checked') return false;
-    const pending = this.pendingInputs.get(String(index));
-    return this.toNum(pending === undefined || pending === null || pending === '' ? item.actual_remaining : pending) === null;
-  }
-
-  fmtQty(value) {
-    const n = parseFloat(value);
-    if (!Number.isFinite(n)) return String(value ?? '-');
-    return String(Math.round(n * 100) / 100);
-  }
-
-  shortDateTime(iso) {
-    try {
-      const d = new Date(iso);
-      if (Number.isNaN(d.getTime())) return String(iso).slice(0, 16);
-      const p = new Intl.DateTimeFormat('th-TH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d);
-      return p.replace(/\s+/g, ' ');
-    } catch (e) {
-      return String(iso).slice(0, 16);
+    if (action === 'confirm') {
+      item.confirmed = !item.confirmed;
+      if (item.confirmed) {
+        item.actual = '';
+        item.note = '';
+      }
+      card.innerHTML = this.renderCard(item, index);
+    } else if (action === 'mismatch') {
+      item.confirmed = false;
+      card.innerHTML = this.renderCard(item, index);
+      card.querySelector('.mismatch-box')?.classList.remove('hidden');
+      card.querySelector('.mismatch-btn')?.classList.add('on');
+      card.querySelector('[data-field="actual"]')?.focus();
+    } else if (action === 'unit-status' || action === 'unit-battery') {
+      const ui = Number(btn.closest('.unit-row').dataset.unit);
+      const unit = item.units[ui];
+      if (action === 'unit-status') unit.status = btn.dataset.value;
+      else unit.battery_level = Number(btn.dataset.value);
+      if (!item.unitTouched[unit.id]) {
+        // แตะครั้งแรก: ค่าที่ยังไม่ได้เลือกในรอบนี้ต้องเลือกเองอีกค่า (ไม่ใช้ค่าค้างจากรอบก่อนโดยไม่รู้ตัว)
+        item.unitTouched[unit.id] = true;
+        if (action === 'unit-status') unit.battery_level = null;
+      }
+      card.innerHTML = this.renderCard(item, index);
+      if (unit.status === 'not_ready') card.querySelector(`.unit-row[data-unit="${ui}"] .unit-note`)?.focus();
     }
-  }
-
-  renderActionButtons(item, index) {
-    return `
-      <button type="button" class="act-btn ok" data-action="check" data-index="${index}">✓ ครบ</button>
-      <button type="button" class="act-btn warn" data-action="used" data-index="${index}">ใช้ไป</button>
-      <button type="button" class="act-btn danger" data-action="missing" data-index="${index}">ขาด</button>
-    `;
-  }
-
-  renderBatteryButtons(item, index) {
-    return `
-      <div class="battery-container" role="group" aria-label="ระดับแบตเตอรี่ ${UI.escape(item.name)}">
-        ${[0,1,2,3,4].map(v => `
-          <button type="button" class="bat-btn ${item.batteryLevel === v ? 'on' : ''}" 
-            aria-pressed="${item.batteryLevel === v}" 
-            aria-label="แบตเตอรี่ ${v}/4" 
-            data-action="battery" 
-            data-index="${index}" 
-            data-value="${v}">${v}/4</button>
-        `).join('')}
-      </div>
-    `;
-  }
-
-  bindItemEvents() {
-    // Status buttons
-    document.querySelectorAll('#inspectionItemTable [data-action="check"]').forEach(btn => {
-      btn.addEventListener('click', () => this.setItemStatus(btn.dataset.index, 'Checked'));
-    });
-    document.querySelectorAll('#inspectionItemTable [data-action="used"]').forEach(btn => {
-      btn.addEventListener('click', () => this.beginManualEntry(btn.dataset.index, 'ใช้ไป'));
-    });
-    document.querySelectorAll('#inspectionItemTable [data-action="missing"]').forEach(btn => {
-      btn.addEventListener('click', () => this.beginManualEntry(btn.dataset.index, 'ขาด'));
-    });
-    document.querySelectorAll('#inspectionItemTable [data-action="battery"]').forEach(btn => {
-      btn.addEventListener('click', () => this.setBatteryLevel(btn.dataset.index, parseInt(btn.dataset.value)));
-    });
-    // ช่อง "จำนวนคงเหลือจริง": พิมพ์แล้วเห็นตัวเลขคำนวณทันที, ออกจากช่อง/กด Enter จึงบันทึกร่าง
-    document.querySelectorAll('#inspectionItemTable [data-field="actual"]').forEach(input => {
-      const calc = document.getElementById('rem-calc-' + input.dataset.index);
-      input.addEventListener('input', () => {
-        this.pendingInputs.set(String(input.dataset.index), input.value);
-        const item = this.checkResults[parseInt(input.dataset.index)];
-        if (item && calc) calc.innerHTML = this.calcPreviewHtml(item, input.value);
-      });
-      input.addEventListener('change', () => this.commitActualRemaining(input.dataset.index, input.value));
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); this.commitActualRemaining(input.dataset.index, input.value); }
-      });
-    });
-    // Expiry inputs
-    document.querySelectorAll('#inspectionItemTable [data-field="expire"]').forEach(input => {
-      input.addEventListener('change', () => this.changeExpiration(input.dataset.index, input.value));
-    });
-
-    // หลัง render ใหม่ ให้ cursor กลับไปที่ช่องคงเหลือจริงของรายการที่ผู้ใช้เพิ่งเลือก
-    if (this.focusRemainingIndex !== null && this.focusRemainingIndex !== undefined) {
-      const el = document.getElementById('rem-' + this.focusRemainingIndex);
-      if (el) el.focus();
-      this.focusRemainingIndex = null;
-    }
-  }
-
-  getStatusClass(item) {
-    if (item.status === 'ขาด') return 'is-missing';
-    if (item.status === 'ใช้ไป') return 'is-used';
-    if (item.status === 'Checked') return 'is-checked';
-    return '';
-  }
-
-  getChipClass(status) {
-    const classes = {
-      'Checked': 'chip-ok',
-      'ขาด': 'chip-miss',
-      'ใช้ไป': 'chip-used',
-      'ยังไม่ตรวจ': 'chip-pending',
-    };
-    return classes[status] || 'chip-pending';
-  }
-
-  needsAttention(item) {
-    return item.status === 'ขาด' || item.status === 'ใช้ไป' || (item.isBattery && (item.batteryLevel || 4) < 4);
+    this.updateProgress();
+    this.scheduleDraft();
   }
 
   setFilter(filter) {
     this.checkFilter = filter;
-    // Update active chip
-    document.querySelectorAll('#inspectionChipAll, #inspectionChipPending, #inspectionChipAttn').forEach(btn => {
-      btn.classList.toggle('on', btn.id.includes(filter.charAt(0).toUpperCase() + filter.slice(1)) || 
-        (filter === 'all' && btn.id === 'inspectionChipAll'));
+    ['All', 'Pending', 'Attn'].forEach(name => {
+      document.getElementById('inspectionChip' + name)?.classList.toggle('on', name.toLowerCase() === filter);
     });
-    this.renderChecklistTable();
-  }
-
-  async setItemStatus(index, status) {
-    const item = this.checkResults[index];
-    if (!item) return;
-
-    item.status = status;
-    item.missing = '';
-    if (status === 'Checked') {
-      // "ครบ" = คงเหลือจริงเท่าเป้าหมาย → ฝั่งเซิร์ฟเวอร์คำนวณใช้ไปต่อเอง
-      item.actual_remaining = (item.target_qty === null || item.target_qty === undefined || item.target_qty === '')
-        ? null : parseFloat(item.target_qty);
-    }
-    await this.saveDraft();
-  }
-
-  /**
-   * เลือก "ใช้ไป"/"ขาด" → เปิดช่องกรอก "จำนวนคงเหลือจริง" (ไม่ใช้ prompt free-text อีกแล้ว)
-   */
-  async beginManualEntry(index, status) {
-    const item = this.checkResults[index];
-    if (!item) return;
-
-    item.status = status;
-    item.missing = '';
-    // คงค่าเดิมไว้ถ้าเคยกรอกแล้ว (เช่น สลับสถานะกลับไปกลับมา)
-    if (item.actual_remaining === undefined) item.actual_remaining = null;
-
-    this.focusRemainingIndex = index;
-    await this.saveDraft();
-  }
-
-  /**
-   * รับตัวเลขคงเหลือจริงจากช่องกรอก (ข้อ 1.4 + ข้อ 2.4)
-   * - ต้องเป็นตัวเลขไม่ติดลบเท่านั้น (0 ได้ = หมดรถ)
-   * - ห้ามกรอก "จำนวนที่ใช้ไป" ปนมา — ถ้ามากกว่ายอดบนรถจะเตือนว่าถือเป็นการปรับยอด
-   */
-  async commitActualRemaining(index, rawValue) {
-    const i = parseInt(index);
-    const item = this.checkResults[i];
-    if (!item) return;
-
-    const text = String(rawValue ?? '').trim();
-    if (text === '' || !/^\d+(?:[.]\d+)?$/.test(text) || parseFloat(text) < 0) {
-      window.toast.error('จำนวนคงเหลือจริงต้องเป็นตัวเลขไม่ติดลบ เช่น 7 หรือ 7.5 (ถ้าหมดรถกรอก 0)');
-      this.pendingInputs.delete(String(i));
-      const el = document.getElementById('rem-' + i);
-      if (el) { el.value = (item.actual_remaining === null || item.actual_remaining === undefined) ? '' : String(item.actual_remaining); el.focus(); }
-      return;
-    }
-
-    const value = Math.round(parseFloat(text) * 100) / 100;
-    this.pendingInputs.delete(String(i));
-    item.actual_remaining = value;
-    item.missing = 'คงเหลือ ' + this.fmtQty(value) + (item.unit ? ' ' + item.unit : '');
-
-    const counted = item.car_qty !== null && item.car_qty !== undefined && item.car_qty !== '';
-    if (counted && value > parseFloat(item.car_qty)) {
-      window.toast.warning(
-        `"${item.name}": นับได้ ${this.fmtQty(value)} มากกว่ายอดเดิม ${this.fmtQty(item.car_qty)} `
-        + '→ ระบบจะบันทึกเป็นยอดคงเหลือใหม่ (ไม่สร้าง “ใช้ไป” ติดลบ) กรุณาตรวจว่ามีการเติมที่ยังไม่ได้บันทึกหรือไม่'
-      );
-    }
-
-    await this.saveDraft();
-  }
-
-  /** ทางเลือกเดิมสำหรับ inline handler เก่า — ตอนนี้เปิดช่องกรอกตัวเลขแทน prompt */
-  async promptManualValue(index, status) {
-    return this.beginManualEntry(index, status);
-  }
-
-  async setBatteryLevel(index, level) {
-    const item = this.checkResults[index];
-    if (!item) return;
-
-    item.batteryLevel = level;
-    item.status = 'Checked';
-    item.missing = level + '/4 ขีด';
-    item.actual_remaining = (item.target_qty === null || item.target_qty === undefined || item.target_qty === '')
-      ? null : parseFloat(item.target_qty);
-    await this.saveDraft();
-  }
-
-  async changeExpiration(index, value) {
-    this.checkResults[index].expire = value;
-    await this.saveDraft();
+    this.renderList();
   }
 
   async checkAll() {
-    if (!confirm('ยืนยันเฉพาะรายการที่ยังไม่ตรวจว่าได้ตรวจครบแล้ว? รายการขาด/ใช้ไปและแบตเตอรี่จะคงเดิม')) return;
-    
-    this.checkResults = this.checkResults.map(item => 
-      item.status === 'ยังไม่ตรวจ' && !item.isBattery ? { ...item, status: 'Checked' } : item
+    const pending = this.items.filter(item => item.item_type !== 'electric'
+      && item.before !== null && item.before !== undefined
+      && this.evaluate(item).result === 'pending');
+    if (!pending.length) {
+      window.toast.info('ไม่มีรายการของสิ้นเปลืองที่รอยืนยัน (เครื่องไฟฟ้าและรายการที่ยังไม่เคยนับต้องตรวจทีละรายการ)');
+      return;
+    }
+    const ok = await window.confirmDialog(
+      `ยืนยันว่าได้ตรวจนับแล้ว: ${pending.length} รายการที่เหลือ "ไม่ได้ใช้ในเวรนี้ และนับได้ครบตามยอด"?\n` +
+      'รายการที่ใช้ไปหรือนับได้ไม่ตรง ให้กรอกทีละรายการก่อนกดปุ่มนี้',
+      { confirmText: 'ยืนยันครบถ้วน' }
     );
-    await this.saveDraft();
+    if (!ok) return;
+    pending.forEach(item => {
+      if (item.used === '') item.used = '0';
+      item.confirmed = true;
+      item.actual = '';
+    });
+    this.renderList();
+    this.scheduleDraft();
   }
 
-  /**
-   * บันทึกร่างทุกครั้งที่แก้ไขรายการ — ไม่ขึ้น toast ทุกครั้ง (ลดการรบกวนเวลาตรวจรายการยาว ๆ)
-   * ใช้ข้อความเบา ๆ ข้างแถบ progress แทน และขึ้น toast เฉพาะเมื่อบันทึกไม่สำเร็จ
-   */
-  async saveDraft() {
-    if (!this.currentInspection) return;
+  // ---------------- ร่าง / บันทึก ----------------
 
+  payloadLines() {
+    return this.items.map(item => ({
+      id: item.id,
+      used: item.used === '' ? 0 : item.used,
+      confirmed: item.confirmed,
+      actual: item.confirmed ? null : (item.actual === '' ? null : item.actual),
+      note: item.note,
+      units: item.units
+        .filter(u => item.unitTouched[u.id])
+        .map(u => ({ id: u.id, status: u.status, battery_level: u.battery_level, note: u.note || '' })),
+    }));
+  }
+
+  scheduleDraft() {
+    if (!this.session || this.session.mode === 'edit') return;   // รายการที่บันทึกแล้วไม่มีร่าง
+    clearTimeout(this.draftTimer);
+    const note = document.getElementById('inspectionAutosaveNote');
+    if (note) note.textContent = 'กำลังจะบันทึกร่าง…';
+    this.draftTimer = setTimeout(() => this.saveDraft(), 1500);
+  }
+
+  async saveDraft() {
+    if (!this.session || this.session.mode === 'edit') return;
     const note = document.getElementById('inspectionAutosaveNote');
     try {
-      await window.api.put('/staff/inspections/draft', {
-        car_id: this.currentInspection.car_id,
-        results: this.checkResults,
-      });
-      this.renderChecklistTable();
-      if (note) {
-        note.removeAttribute('data-state');
-        const time = new Intl.DateTimeFormat('th-TH', { hour: '2-digit', minute: '2-digit' }).format(new Date());
-        note.textContent = `บันทึกร่างล่าสุด ${time} น.`;
-      }
+      await window.staffApi.saveDraft({ car_id: this.session.car_id, results: this.payloadLines() });
+      if (note) note.textContent = '💾 บันทึกร่างอัตโนมัติแล้ว ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
     } catch (error) {
-      if (note) {
-        note.dataset.state = 'error';
-        note.textContent = 'บันทึกร่างไม่สำเร็จ — การเปลี่ยนแปลงล่าสุดอาจยังไม่ถูกเก็บ';
-      }
-      window.toast.error('บันทึกร่างไม่สำเร็จ: ' + error.message);
+      if (note) note.textContent = '⚠️ บันทึกร่างไม่สำเร็จ: ' + error.message;
     }
   }
 
   async submitInspection() {
-    if (this.submitting) {
-      window.toast.warning('กำลังบันทึกอยู่กรุณารอเล็กน้อย');
+    if (!this.session || this.submitting) return;   // กันกดซ้ำระหว่างส่ง
+    const evs = this.items.map(item => ({ item, ev: this.evaluate(item) }));
+    const notReady = evs.filter(({ ev }) => ev.result === 'pending' || ev.result === 'error');
+    if (notReady.length) {
+      window.toast.warning(`ยังตรวจไม่ครบ/กรอกไม่ถูกต้อง ${notReady.length} รายการ เช่น ${notReady[0].item.name}: ${notReady[0].ev.text}`);
+      this.setFilter('pending');
       return;
     }
 
-    // Validate all checked
-    const unchecked = this.checkResults.filter(i => i.status === 'ยังไม่ตรวจ');
-    if (unchecked.length > 0) {
-      window.toast.error('กรุณาตรวจทุกรายการ รวมถึงระดับแบตเตอรี่ก่อนบันทึก');
-      return;
-    }
+    const attn = evs.filter(({ ev }) => ev.result === 'needs_refill' || ev.result === 'anomaly').length;
+    const ok = await window.confirmDialog(
+      (this.session.mode === 'edit' ? 'บันทึกการแก้ไขรายการตรวจเดิม?' : 'บันทึกผลตรวจเวรนี้?') +
+      `\nครบถ้วน ${evs.length - attn} • ต้องเติม/ผิดปกติ ${attn} รายการ`,
+      { confirmText: 'บันทึก' }
+    );
+    if (!ok) return;
 
-    // ข้อ 1.4 / 2.4: รายการที่ "ใช้ไป" หรือ "ขาด" ต้องมีตัวเลขคงเหลือจริงครบก่อนกดบันทึก
-    const missingQty = this.checkResults.filter((item, index) => this.itemNeedsRemainingInput(item, index));
-    if (missingQty.length > 0) {
-      window.toast.error('กรุณากรอก "จำนวนคงเหลือจริง" ให้ครบ: ' + missingQty.slice(0, 3).map(i => i.name).join(', ') + (missingQty.length > 3 ? ' ฯลฯ' : ''));
-      return;
-    }
-
-    // ส่งค่าคงเหลือจริงที่พิมพ์ค้างไว้ก่อนหน้า submit ด้วย
-    const payload = this.checkResults.map((item, index) => {
-      const pending = this.toNum(this.pendingInputs.get(String(index)));
-      return pending === null ? item : { ...item, actual_remaining: pending };
-    });
-
+    clearTimeout(this.draftTimer);
     this.submitting = true;
-    const button = document.getElementById('inspectionSubmitBtn');
-    if (button) { button.disabled = true; button.dataset.busy = '1'; }
-
+    const btn = document.getElementById('inspectionSubmitBtn');
+    UI.setLoading(btn, true);
     try {
-      const result = await window.api.post('/staff/inspections/submit', {
-        car_id: this.currentInspection.car_id,
-        results: payload,
+      const res = await window.staffApi.submitInspection({
+        car_id: this.session.car_id,
+        check_id: this.session.id,
+        mode: this.session.mode === 'edit' ? 'edit' : 'new',
+        revision: this.session.revision,
+        results: this.payloadLines(),
       });
-
-      const data = result?.data || {};
+      const data = res.data || {};
       const refill = data.refill || {};
-      const adjustments = data.adjustments || [];
-
-      if (refill.created) {
-        window.toast.success(
-          `บันทึกผลตรวจแล้ว • สร้างรายการรอเติม ${refill.request_no || ''} (${refill.line_count || 0} รายการ)`
-        );
-      } else {
-        window.toast.success('บันทึกผลตรวจแล้ว • อุปกรณ์ครบตามมาตรฐาน จึงไม่มีรายการรอเติม');
-      }
-
-      if (refill.skipped && refill.skipped.length > 0) {
-        window.toast.warning(
-          `${refill.skipped.length} รายการมีคำขอเดิมค้างอยู่ จึงไม่สร้างซ้ำ — ดูที่เมนู “รอเติมอุปกรณ์”`
-        );
-      }
-
-      // การนับมากกว่ายอดเดิม = ปรับยอด/นับคลาดเคลื่อน ต้องให้ผู้ตรวจเห็นชัด (ข้อ 2.5)
-      if (adjustments.length > 0) {
-        const names = adjustments.slice(0, 3).map(a => a.name).join(', ');
-        window.toast.warning(
-          `${adjustments.length} รายการนับได้มากกว่ายอดเดิม จึงบันทึกเป็นการปรับยอด (ไม่ใช่ใช้ไปติดลบ): ${names}${adjustments.length > 3 ? ' ฯลฯ' : ''}`
-        );
-      }
-
-      this.pendingInputs.clear();
-      if (typeof refreshWarehouseBadge === 'function') refreshWarehouseBadge();
-      
-      // Reset and go to restock tab
-      this.currentInspection = null;
-      this.checkResults = [];
-      document.getElementById('inspectionCheckPage').classList.add('hidden');
-      document.getElementById('inspectionLoginPage').classList.remove('hidden');
-      
-      switchTab('restock');
+      let msg = this.session.mode === 'edit' ? 'บันทึกการแก้ไขเรียบร้อย' : 'บันทึกผลตรวจเรียบร้อย';
+      if (refill.created) msg += ` • สร้างรายการรอเติม ${refill.request_no || ''} (${refill.line_count} รายการ)`;
+      if ((data.adjustments || []).length) msg += ` • พบความคลาดเคลื่อน ${data.adjustments.length} รายการ (บันทึกไว้แล้ว)`;
+      window.toast.success(msg, 7000);
+      this.closeSession();
+      await this.refreshShiftStatus();
     } catch (error) {
-      window.toast.error('บันทึกไม่สำเร็จ: ' + (error?.message || 'กรุณาลองใหม่'));
+      const list = error.data && Array.isArray(error.data.errors) ? '\n• ' + error.data.errors.slice(0, 5).join('\n• ') : '';
+      window.toast.error(error.message + list, 9000);
+      if (error.data && error.data.code === 'STALE_REVISION') this.closeSession();
     } finally {
       this.submitting = false;
-      if (button) { button.disabled = false; delete button.dataset.busy; }
+      UI.setLoading(btn, false);
     }
   }
 
-  cancelInspection() {
-    if (!confirm('ยกเลิกการตรวจครั้งนี้? ข้อมูลร่างจะถูกเก็บไว้เพื่อทำต่อได้ภายหลัง')) return;
-    
-    this.currentInspection = null;
-    this.checkResults = [];
+  closeSession() {
+    this.session = null;
+    this.items = [];
     document.getElementById('inspectionCheckPage').classList.add('hidden');
     document.getElementById('inspectionLoginPage').classList.remove('hidden');
+  }
+
+  async cancelInspection() {
+    const text = this.session && this.session.mode === 'edit'
+      ? 'ปิดหน้าแก้ไขโดยไม่บันทึก? รายการเดิมจะไม่เปลี่ยนแปลง'
+      : 'ออกจากหน้าตรวจ? ร่างจะถูกเก็บไว้ให้ทำต่อได้ภายหลัง';
+    if (!(await window.confirmDialog(text, { confirmText: 'ออก' }))) return;
+    if (this.session && this.session.mode !== 'edit') await this.saveDraft();
+    this.closeSession();
   }
 }
 
@@ -843,16 +724,13 @@ window.initInspection = () => {
     inspectionPage = new InspectionPage();
     window.inspectionPage = inspectionPage;
   } else {
+    inspectionPage.refreshShiftStatus();
     inspectionPage.checkUrlParams();
   }
 };
 
 // Global functions for inline handlers
 window.setInspectionFilter = (filter) => inspectionPage?.setFilter(filter);
-window.setItemStatus = (index, status) => inspectionPage?.setItemStatus(index, status);
-window.triggerManualValue = (index, status) => inspectionPage?.promptManualValue(index, status);
-window.clickBatteryUI = (index, value) => inspectionPage?.setBatteryLevel(index, value);
-window.changeExpirationRow = (index, value) => inspectionPage?.changeExpiration(index, value);
 window.checkAllInspection = () => inspectionPage?.checkAll();
 window.submitInspection = () => inspectionPage?.submitInspection();
 window.cancelInspection = () => inspectionPage?.cancelInspection();

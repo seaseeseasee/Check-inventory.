@@ -57,7 +57,6 @@
       <button type="button" class="tab-btn" id="btnTabRestock" onclick="switchTab('restock')">🧰 เติมอุปกรณ์</button>
       <button type="button" class="tab-btn" id="btnTabReports" onclick="switchTab('reports')">📋 ประวัติ</button>
       <button type="button" class="tab-btn" id="btnTabStock" onclick="switchTab('stock')">📦 ทะเบียนรถ/อุปกรณ์</button>
-      <button type="button" class="tab-btn" id="btnTabWarehouse" onclick="switchTab('warehouse')">🏬 คลังสต็อกกลาง<span id="whNavBadge" class="wh-nav-badge hidden" aria-hidden="true">0</span></button>
       <button type="button" class="tab-btn" id="btnTabNurses" onclick="switchTab('nurses')">👩‍⚕️ จัดการพยาบาล</button>
       <button type="button" class="tab-btn" id="btnTabUsers" onclick="switchTab('users')">👥 จัดการผู้ใช้</button>
     </nav>
@@ -137,7 +136,7 @@
   <script>
     // Tab switching
     function switchTab(id) {
-      const tabs = ['Dashboard', 'Check', 'Restock', 'Reports', 'Stock', 'Warehouse', 'Nurses', 'Users'];
+      const tabs = ['Dashboard', 'Check', 'Restock', 'Reports', 'Stock', 'Nurses', 'Users'];
       tabs.forEach(name => {
         const content = document.getElementById('tabContent' + name);
         const btn = document.getElementById('btnTab' + name);
@@ -161,9 +160,6 @@
           break;
         case 'stock':
           if (typeof initVehicles === 'function') initVehicles();
-          break;
-        case 'warehouse':
-          if (typeof initWarehouse === 'function') initWarehouse();
           break;
         case 'nurses':
           if (typeof initNurses === 'function') initNurses();

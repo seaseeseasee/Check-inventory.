@@ -7,7 +7,7 @@ class Item extends Model
 {
     protected string $table = 'refer_items';
     protected string $primaryKey = 'id';
-    protected array $fillable = ['id', 'car_id', 'name', 'standard', 'target_qty', 'unit', 'current_qty', 'stock_updated_at', 'expiry_text', 'is_battery', 'active'];
+    protected array $fillable = ['id', 'car_id', 'name', 'standard', 'target_qty', 'unit', 'current_qty', 'stock_updated_at', 'expiry_text', 'is_battery', 'item_type', 'active'];
     protected array $casts = [
         'is_battery' => 'boolean',
         'active' => 'boolean',

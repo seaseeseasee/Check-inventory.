@@ -6,7 +6,6 @@ namespace App\Controllers;
 use App\Services\InspectionService;
 use App\Services\RestockService;
 use App\Services\AuthService;
-use App\Services\StockService;
 use App\Services\VehicleService;
 use App\Services\DepartmentService;
 use App\Config\Database;
@@ -23,7 +22,6 @@ class AdminController extends Controller
     private InspectionService $inspectionService;
     private RestockService $restockService;
     private AuthService $authService;
-    private StockService $stockService;
     private VehicleService $vehicleService;
     private DepartmentService $departmentService;
     private User $userModel;
@@ -37,7 +35,6 @@ class AdminController extends Controller
         $this->inspectionService = new InspectionService();
         $this->restockService = new RestockService();
         $this->authService = new AuthService();
-        $this->stockService = new StockService();
         $this->vehicleService = new VehicleService();
         $this->departmentService = new DepartmentService();
         $this->userModel = new User();
@@ -470,43 +467,4 @@ class AdminController extends Controller
         $this->success($stats);
     }
 
-    /**
-     * Assign restock request to staff (Admin)
-     */
-    public function assignRestock(string $id): void
-    {
-        $this->roleMiddleware->requireAdmin();
-        
-        $input = $this->getInput();
-        
-        $validator = new Validator($input, [
-            'assigned_user_id' => 'required|string|max:100',
-        ]);
-
-        if (!$validator->validate()) {
-            $this->validationError($validator->errors());
-        }
-
-        $result = $this->restockService->assignToStaff($id, $input['assigned_user_id']);
-        
-        if (!$result) {
-            $this->error('Cannot assign: invalid request or status');
-        }
-        $this->success($result);
-    }
-
-    /**
-     * Unassign restock request (Admin)
-     */
-    public function unassignRestock(string $id): void
-    {
-        $this->roleMiddleware->requireAdmin();
-        
-        $result = $this->restockService->unassign($id);
-        
-        if (!$result) {
-            $this->error('Cannot unassign: invalid request');
-        }
-        $this->success($result);
-    }
 }
