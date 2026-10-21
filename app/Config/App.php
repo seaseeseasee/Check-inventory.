@@ -40,7 +40,10 @@ class App
     public static function url(string $path = ''): string
     {
         self::load();
-        $base = rtrim(self::$config['url'], '/');
+        // Path only (no scheme/host): an absolute APP_URL breaks the page when it is
+        // opened under another host name (localhost vs 127.0.0.1) because the CSP
+        // allows only 'self' — the browser would block every CSS/JS file.
+        $base = rtrim((string)parse_url(self::$config['url'], PHP_URL_PATH), '/');
         return $base . '/' . ltrim($path, '/');
     }
 

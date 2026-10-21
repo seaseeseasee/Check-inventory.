@@ -42,6 +42,7 @@
       <div class="progress-wrap">
         <div class="progress-track"><div class="progress-fill" id="inspectionProgressFill"></div></div>
         <div class="progress-text" id="inspectionProgressText"></div>
+        <p class="autosave-note" id="inspectionAutosaveNote" role="status" aria-live="polite"></p>
       </div>
       <div class="filter-chips" role="group" aria-label="กรองรายการตรวจ">
         <button type="button" class="chip-btn on" id="inspectionChipAll" onclick="setInspectionFilter('all')">ทั้งหมด <b id="inspectionCntAll"></b></button>
@@ -115,6 +116,7 @@
       </div>
       <div class="vehicle-pick-actions">
         <button type="button" id="btnEditVehicle" class="small-btn secondary">✏️ แก้ไขข้อมูลรถ</button>
+        <button type="button" id="btnToggleVehicleStatus" class="small-btn">🚫 ปิดใช้งานรถ</button>
         <button type="button" id="btnDeleteVehicle" class="small-btn danger">🗑 ลบรถ</button>
       </div>
     </div>

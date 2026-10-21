@@ -156,6 +156,20 @@
   color: var(--muted);
 }
 
+/* บันทึกร่างอัตโนมัติ: แจ้งแบบเบา ๆ ไม่ popup ทุกครั้งที่แตะ (กันรบกวนเวลาตรวจรายการยาว ๆ) */
+.autosave-note {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  text-align: right;
+  min-height: 15px;
+}
+
+.autosave-note[data-state="error"] {
+  color: var(--bad);
+  font-weight: 600;
+}
+
 .save-bar button:disabled {
   opacity: .55;
   cursor: not-allowed;

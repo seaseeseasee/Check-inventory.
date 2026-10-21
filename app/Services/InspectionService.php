@@ -248,6 +248,18 @@ class InspectionService
         return $parsed > 0 ? round($parsed, 2) : null;
     }
 
+    /**
+     * ตัวเลขนำหน้าใน standard เช่น "2" → 2, "1 ชุด" → 1, "ชุด" → 0 (ไม่มีตัวเลข)
+     * กติกาเดียวกับ migration 006 (REGEXP_SUBSTR(standard, '[0-9]+([.][0-9]+)?'))
+     */
+    private static function parseStandardQuantity(string $standard): float
+    {
+        if (preg_match('/\d+(?:[.]\d+)?/', $standard, $m)) {
+            return (float)$m[0];
+        }
+        return 0.0;
+    }
+
     /** หน่วยนับ: ใช้คอลัมน์ unit ก่อน ถ้าว่างให้ลองแกะจากข้อความ standard */
     private static function itemUnit(array $item): string
     {

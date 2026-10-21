@@ -64,6 +64,7 @@ class VehiclesPage {
 
     // Vehicle CRUD
     document.getElementById('btnEditVehicle')?.addEventListener('click', () => this.showEditVehicleForm());
+    document.getElementById('btnToggleVehicleStatus')?.addEventListener('click', () => this.handleToggleVehicleStatus());
     document.getElementById('btnDeleteVehicle')?.addEventListener('click', () => this.handleDeleteVehicle());
 
     // Add item form
@@ -125,6 +126,7 @@ class VehiclesPage {
   /** แถบสรุปข้อมูลรถที่เลือก — บอกสถานะ + สิ่งที่ผูกอยู่ (ใช้ตอนจะลบรถ) */
   renderVehicleMeta() {
     const el = document.getElementById('stockCarMeta');
+    this.updateToggleStatusButton();
     if (!el) return;
     const v = this.currentVehicle;
     if (!v) {
@@ -148,6 +150,79 @@ class VehiclesPage {
     }
 
     el.innerHTML = bits.join('');
+  }
+
+  /** ปุ่มเดียวสลับ "ปิดใช้งาน" ↔ "เปิดใช้งาน" ตามสถานะปัจจุบันของรถที่เลือก */
+  updateToggleStatusButton() {
+    const btn = document.getElementById('btnToggleVehicleStatus');
+    if (!btn) return;
+    const v = this.currentVehicle;
+    if (!v) {
+      btn.disabled = true;
+      btn.textContent = '🚫 ปิดใช้งานรถ';
+      return;
+    }
+    btn.disabled = false;
+    if (v.status === 'disabled') {
+      btn.textContent = '✅ เปิดใช้งานรถ';
+      btn.classList.remove('danger');
+    } else {
+      btn.textContent = '🚫 ปิดใช้งานรถ';
+      btn.classList.add('danger');
+    }
+  }
+
+  /**
+   * สลับสถานะรถแบบคลิกเดียว — ไม่ต้องเปิดฟอร์มแก้ไขทั้งหมดเพื่อแค่เปลี่ยนสถานะ
+   * เปิดใช้งานกลับ: ตั้งเป็น "พร้อมใช้งาน" ตรง ๆ
+   * ปิดใช้งาน: ใช้ endpoint เดียวกับปุ่มลบ (mode=disable) เพราะเซิร์ฟเวอร์ตรวจประวัติผูกให้แล้ว
+   */
+  async handleToggleVehicleStatus() {
+    const vehicle = this.currentVehicle;
+    const id = this.currentVehicleId;
+    if (!vehicle || !id) {
+      window.toast.warning('กรุณาเลือกรถก่อน');
+      return;
+    }
+
+    const label = vehiclePlate(vehicle);
+    const btn = document.getElementById('btnToggleVehicleStatus');
+
+    if (vehicle.status === 'disabled') {
+      const ok = await window.confirmDialog(
+        `เปิดใช้งานรถ "${label}" กลับหรือไม่? รถจะกลับมาเลือกตรวจเช็คได้ตามปกติ`,
+        { title: 'เปิดใช้งานรถ', confirmText: 'เปิดใช้งาน' }
+      );
+      if (!ok) return;
+
+      if (btn) UI.setLoading(btn, true);
+      try {
+        await window.vehicleApi.update(id, { status: 'available' });
+        window.toast.success(`เปิดใช้งานรถ "${label}" แล้ว`);
+        await this.loadVehicles();
+        this.currentVehicleId = id;
+        this.renderVehicleSelect();
+      } catch (error) {
+        window.toast.error('เปิดใช้งานไม่สำเร็จ: ' + (error.message || 'ไม่ทราบสาเหตุ'));
+      } finally {
+        if (btn) UI.setLoading(btn, false);
+      }
+      return;
+    }
+
+    const ok = await window.confirmDialog(
+      `ปิดใช้งานรถ "${label}" หรือไม่? รถจะหายจากเมนูเลือกสำหรับหน้าตรวจของผู้ใช้งานทั่วไป `
+      + 'แต่ประวัติเดิมยังอยู่ครบ และเปิดใช้งานกลับได้ทุกเมื่อ',
+      { title: 'ปิดใช้งานรถ', confirmText: 'ปิดใช้งาน' }
+    );
+    if (!ok) return;
+
+    if (btn) UI.setLoading(btn, true);
+    try {
+      await this.removeVehicle(label, 'disable');
+    } finally {
+      if (btn) UI.setLoading(btn, false);
+    }
   }
 
   async loadItems(vehicleId) {

@@ -2,15 +2,65 @@
    PAGE: DASHBOARD
    ======================================== */
 
+.dash-stat-group {
+  margin: 0 0 14px;
+}
+
+.dash-stat-group-title {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* จำนวนคอลัมน์ = จำนวนการ์ดจริงของกลุ่มนั้น (data-count มาจาก JS) ทุกการ์ดในแถวจึงขยาย
+   เท่า ๆ กันจนเต็มแถวเสมอ ไม่ว่ากลุ่มจะมีการ์ด 2 หรือ 4 ใบ — ไม่เหลือที่ว่าง ไม่บี้ชิดกัน */
 .dash-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin: 4px 0 14px;
+  gap: 10px;
+  margin: 0;
+}
+
+.dash-stats[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
+.dash-stats[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dash-stats[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+/* .stat ตอนนี้เป็น <button> (คลิกไปหน้าที่เกี่ยวข้องได้) — ล้าง margin/ขนาดเริ่มต้นของปุ่มทิ้ง
+   แล้วเติมความสวยงาม: มุมโค้งขึ้น เงานุ่ม ๆ และยกตัวนิดหน่อยตอน hover/กด */
+.dash-stats .stat {
+  margin: 0;
+  min-height: 64px;
+  padding: 12px 8px;
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.dash-stats .stat:hover {
+  background: var(--teal-100);
+  box-shadow: 0 4px 10px rgba(13, 148, 136, 0.15);
+  transform: translateY(-1px);
+}
+
+.dash-stats .stat:active {
+  transform: translateY(0);
+}
+
+.dash-stats .stat.warn:hover {
+  background: #fde68a;
+  box-shadow: 0 4px 10px rgba(217, 119, 6, 0.18);
 }
 
 @media (max-width: 480px) {
-  .dash-stats {
+  .dash-stats,
+  .dash-stats[data-count="1"],
+  .dash-stats[data-count="2"],
+  .dash-stats[data-count="3"],
+  .dash-stats[data-count="4"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -192,32 +192,39 @@ class InspectionPage {
   async handleStartInspection(event) {
     event.preventDefault();
 
+    if (this.startSubmitting) return;
+
     if (this.inspectorLockError) {
       window.toast.error('บัญชีนี้ยังไม่ได้เชื่อมโยงรายชื่อพยาบาลที่ใช้งานอยู่ กรุณาติดต่อผู้ดูแลระบบ');
       return;
     }
-    
+
     const nurseId = document.getElementById('inspectionNurse')?.value;
     const shift = document.getElementById('inspectionShift')?.value;
     const carId = document.querySelector('.car-symbol[aria-pressed="true"]')?.dataset.carId;
-    
+
     if (!nurseId || !shift || !carId) {
       window.toast.error('กรุณาเลือกพยาบาล เวร และรถให้ครบ');
       return;
     }
-    
+
     const vehicle = this.vehicles.find(v => v.id === carId);
     if (!vehicle) {
       window.toast.error('รถไม่ถูกต้อง');
       return;
     }
-    
+
     const nurse = this.nurses.find(n => n.id === nurseId);
     if (!nurse || !nurse.active) {
       window.toast.error('พยาบาลไม่ถูกต้อง');
       return;
     }
-    
+
+    this.startSubmitting = true;
+    const startBtn = document.querySelector('#inspectionStartForm button[type="submit"]');
+    const startBtnLabel = startBtn?.textContent;
+    if (startBtn) { startBtn.disabled = true; startBtn.textContent = 'กำลังเริ่มตรวจ...'; }
+
     try {
       // Ask about another nurse's open draft before sending the start request,
       // so the normal flow never produces a failed request in the console
@@ -238,7 +245,7 @@ class InspectionPage {
       if (replaceDraft) payload.replace = true;
 
       const result = await window.api.post('/staff/inspections/start', payload);
-      
+
       this.applyInspectionStarted(result.data, vehicle, nurse, shift);
     } catch (error) {
       // Race fallback: the draft appeared or changed after the pre-check
@@ -260,6 +267,9 @@ class InspectionPage {
       }
 
       window.toast.error('เริ่มตรวจไม่สำเร็จ: ' + error.message);
+    } finally {
+      this.startSubmitting = false;
+      if (startBtn) { startBtn.disabled = false; startBtn.textContent = startBtnLabel; }
     }
   }
 
@@ -700,18 +710,31 @@ class InspectionPage {
     await this.saveDraft();
   }
 
+  /**
+   * บันทึกร่างทุกครั้งที่แก้ไขรายการ — ไม่ขึ้น toast ทุกครั้ง (ลดการรบกวนเวลาตรวจรายการยาว ๆ)
+   * ใช้ข้อความเบา ๆ ข้างแถบ progress แทน และขึ้น toast เฉพาะเมื่อบันทึกไม่สำเร็จ
+   */
   async saveDraft() {
     if (!this.currentInspection) return;
-    
+
+    const note = document.getElementById('inspectionAutosaveNote');
     try {
       await window.api.put('/staff/inspections/draft', {
         car_id: this.currentInspection.car_id,
         results: this.checkResults,
       });
       this.renderChecklistTable();
-      window.toast.success('บันทึกร่างแล้ว');
+      if (note) {
+        note.removeAttribute('data-state');
+        const time = new Intl.DateTimeFormat('th-TH', { hour: '2-digit', minute: '2-digit' }).format(new Date());
+        note.textContent = `บันทึกร่างล่าสุด ${time} น.`;
+      }
     } catch (error) {
-      window.toast.error('บันทึกไม่สำเร็จ: ' + error.message);
+      if (note) {
+        note.dataset.state = 'error';
+        note.textContent = 'บันทึกร่างไม่สำเร็จ — การเปลี่ยนแปลงล่าสุดอาจยังไม่ถูกเก็บ';
+      }
+      window.toast.error('บันทึกร่างไม่สำเร็จ: ' + error.message);
     }
   }
 

@@ -349,6 +349,10 @@
   font-weight: 600;
 }
 
+.auth-submit {
+  margin: 16px 0 0;
+}
+
 /* Car Grid (Login Page) */
 .car-grid {
   display: grid;
