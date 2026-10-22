@@ -129,3 +129,13 @@
     flex: 1;
   }
 }
+
+/* ---------- หน้าจัดการผู้ใช้ (รวมพยาบาล + บัญชีผู้ใช้) ---------- */
+#userDirectoryTable .nurse-card { margin-bottom: 8px; }
+.user-section-title { margin: 18px 0 8px; font-size: 1rem; color: var(--teal-800); }
+.account-line { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 6px 0; font-size: 0.85rem; }
+.nurse-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.nurse-actions .small-btn { margin: 0; }
+.user-form-wrap { margin-top: 16px; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; background: var(--bg); }
+.user-form-wrap summary { cursor: pointer; font-weight: 700; color: var(--teal-700); }
+#userRoleFilter, #userStatusFilter { margin: 0; }

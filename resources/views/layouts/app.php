@@ -26,6 +26,8 @@
 
   <!-- Vendored Tailwind utilities (utilities-only build) — must load last so utility classes win -->
   <link rel="stylesheet" href="<?= asset('css/tailwind.css') ?>">
+  <!-- มือถือ/ผู้สูงอายุ: โหลดท้ายสุดเพื่อยกค่าพื้นฐาน (ตัวอักษร/พื้นที่กด/เมนูล่าง) -->
+  <link rel="stylesheet" href="<?= asset('css/a11y.css') ?>">
 </head>
 <body>
   <!-- Auth Gate -->
@@ -47,18 +49,17 @@
   <div class="app-top">
     <header id="mainHeader">
       <img class="brand-logo" src="<?= asset('images/logo.png') ?>" alt="โลโก้ระบบ" width="48" height="48" loading="lazy">
-      <span id="headerTitle">ระบบตรวจเช็กรถ Refer / Ambulance</span>
+      <span id="headerTitle"><span class="header-name">ตรวจเช็กรถ Refer</span></span>
       <button type="button" class="signout" onclick="signOut()">ออกจากระบบ</button>
     </header>
 
     <nav class="nav-tabs" aria-label="เมนูหลัก" id="mainNavTabs">
-      <button type="button" class="tab-btn active" id="btnTabDashboard" onclick="switchTab('dashboard')">🏠 หน้าแรก</button>
-      <button type="button" class="tab-btn" id="btnTabCheck" onclick="switchTab('check')">🚗 ตรวจเช็ครถ</button>
-      <button type="button" class="tab-btn" id="btnTabRestock" onclick="switchTab('restock')">🧰 เติมอุปกรณ์</button>
-      <button type="button" class="tab-btn" id="btnTabReports" onclick="switchTab('reports')">📋 ประวัติ</button>
-      <button type="button" class="tab-btn" id="btnTabStock" onclick="switchTab('stock')">📦 ทะเบียนรถ/อุปกรณ์</button>
-      <button type="button" class="tab-btn" id="btnTabNurses" onclick="switchTab('nurses')">👩‍⚕️ จัดการพยาบาล</button>
-      <button type="button" class="tab-btn" id="btnTabUsers" onclick="switchTab('users')">👥 จัดการผู้ใช้</button>
+      <button type="button" class="tab-btn active" id="btnTabDashboard" onclick="switchTab('dashboard')"><span class="tab-ico" aria-hidden="true">🏠</span><span class="tab-txt">หน้าแรก</span></button>
+      <button type="button" class="tab-btn" id="btnTabCheck" onclick="switchTab('check')"><span class="tab-ico" aria-hidden="true">🚑</span><span class="tab-txt">ตรวจเช็ก</span></button>
+      <button type="button" class="tab-btn" id="btnTabRestock" onclick="switchTab('restock')"><span class="tab-ico" aria-hidden="true">🧰</span><span class="tab-txt">เติมของ</span></button>
+      <button type="button" class="tab-btn" id="btnTabReports" onclick="switchTab('reports')"><span class="tab-ico" aria-hidden="true">📋</span><span class="tab-txt">ประวัติ</span></button>
+      <button type="button" class="tab-btn" id="btnTabStock" onclick="switchTab('stock')"><span class="tab-ico" aria-hidden="true">📦</span><span class="tab-txt">รถ</span></button>
+      <button type="button" class="tab-btn" id="btnTabNurses" onclick="switchTab('nurses')"><span class="tab-ico" aria-hidden="true">👥</span><span class="tab-txt">ผู้ใช้</span></button>
     </nav>
     <div class="storage-note" id="storageState" role="status" aria-live="polite">กำลังเชื่อมต่อฐานข้อมูลของระบบ…</div>
   </div>
@@ -136,7 +137,9 @@
   <script>
     // Tab switching
     function switchTab(id) {
-      const tabs = ['Dashboard', 'Check', 'Restock', 'Reports', 'Stock', 'Nurses', 'Users'];
+      // หน้าจัดการผู้ใช้เดิมถูกรวมเข้ากับหน้าพยาบาล — ลิงก์/โค้ดเก่าที่เรียก 'users' ไปหน้าเดียวกัน
+      if (id === 'users') id = 'nurses';
+      const tabs = ['Dashboard', 'Check', 'Restock', 'Reports', 'Stock', 'Nurses'];
       tabs.forEach(name => {
         const content = document.getElementById('tabContent' + name);
         const btn = document.getElementById('btnTab' + name);
@@ -163,9 +166,7 @@
           break;
         case 'nurses':
           if (typeof initNurses === 'function') initNurses();
-          break;
-        case 'users':
-          if (typeof initUsers === 'function') initUsers();
+          if (typeof initUsers === 'function') initUsers();   // บัญชีที่ไม่ใช่พยาบาลอยู่หน้าเดียวกัน
           break;
       }
     }

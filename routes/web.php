@@ -100,6 +100,10 @@ $route = match (true) {
     // เติมของเข้ารถโดยตรง (แทน start/restock/complete + คลังกลางที่ถูกยกเลิก)
     preg_match('/^\/api\/staff\/refill\/([^\/]+)$/', $path, $matches) && $method === 'GET' => ['StaffController', 'getRefillSheet', $matches[1]],
     preg_match('/^\/api\/staff\/refill\/([^\/]+)$/', $path, $matches) && $method === 'POST' => ['StaffController', 'refillVehicle', $matches[1]],
+    // จัดการล็อต (ไม่มีการลบแถว — ยกเลิก/จำหน่ายหมดอายุเป็น movement)
+    preg_match('/^\/api\/staff\/lots\/([^\/]+)$/', $path, $matches) && $method === 'PUT' => ['StaffController', 'manageLot', $matches[1], 'edit'],
+    preg_match('/^\/api\/staff\/lots\/([^\/]+)\/(adjust|void|expire)$/', $path, $matches) && $method === 'POST' => ['StaffController', 'manageLot', $matches[1], $matches[2]],
+    preg_match('/^\/api\/staff\/items\/([^\/]+)\/movements$/', $path, $matches) && $method === 'GET' => ['StaffController', 'getItemMovements', $matches[1]],
 
     $path === '/api/staff/history/inspections' && $method === 'GET' => ['StaffController', 'getInspections'],
     $path === '/api/staff/history/restock' && $method === 'GET' => ['StaffController', 'getRestockHistory'],

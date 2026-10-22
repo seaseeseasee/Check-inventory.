@@ -1,0 +1,234 @@
+/* ========================================
+   MOBILE-FIRST & ELDERLY-FRIENDLY
+   โหลดเป็นไฟล์สุดท้าย (หลัง tailwind.css) — ปรับขนาดตัวอักษร/พื้นที่กด/แถบเมนูล่าง
+   ไม่เปลี่ยนโครงหน้า: ยกระดับค่าพื้นฐานเดิมใน layout.css / components.css ให้อ่านง่ายและกดง่ายขึ้น
+   ======================================== */
+
+/* ---------- ตัวอักษร: เนื้อหาหลัก 18px, ไม่มีข้อความเล็กกว่า 14px ---------- */
+html { font-size: 112.5%; }   /* 1rem = 18px (เคารพการขยายตัวอักษรของเครื่อง) */
+body {
+  font-family: "Sarabun", "Noto Sans Thai", "Leelawadee UI", "Segoe UI", Tahoma, system-ui, sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: #0f172a;
+}
+.text-xs { font-size: 0.8rem !important; line-height: 1.45 !important; }   /* 14.4px */
+.text-sm { font-size: 0.9rem !important; }
+.text-slate-500 { color: #475569 !important; }                              /* contrast ≥ 7:1 บนพื้นขาว */
+label { font-size: 1rem; color: #1e293b; margin: 14px 0 6px; }
+.card { padding: 16px; margin: 12px 8px; }
+.card h2 { font-size: 1.25rem; line-height: 1.35; }
+.card h3 { font-size: 1.1rem; }
+.card > p { font-size: 0.9rem; color: #475569; }
+.chip { font-size: 0.8rem; padding: 4px 10px; }
+.empty { font-size: 1rem; }
+#headerTitle { font-size: 1rem; }
+.storage-note { font-size: 0.8rem; }
+
+/* ---------- พื้นที่กด ≥ 48px, ช่องกรอกใหญ่ ---------- */
+input:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  font-size: 1rem;              /* 18px — iOS ไม่ซูมเองเมื่อแตะช่อง */
+  min-height: 52px;
+}
+input[type="checkbox"], input[type="radio"] { width: 24px; height: 24px; accent-color: var(--teal-700); vertical-align: middle; }
+button { font-size: 1rem; min-height: 52px; border-radius: 14px; }
+.small-btn { font-size: 0.9rem; min-height: 48px; padding: 10px 16px; }
+.chip-btn, .seg-btn { min-height: 48px; font-size: 0.9rem; }
+.bat-btn { min-height: 52px; font-size: 0.95rem; }
+.signout { min-height: 48px; font-size: 0.8rem; }
+summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; }
+.btn-row, .confirm-row, .lot-actions, .nurse-actions { gap: 10px; }
+
+/* โฟกัสคีย์บอร์ดเห็นชัด */
+:focus-visible, button:focus-visible, .small-btn:focus-visible, summary:focus-visible {
+  outline: 3px solid #f59e0b !important;
+  outline-offset: 2px;
+}
+
+/* ---------- ปุ่มเพิ่ม/ลดจำนวน (stepper) ---------- */
+.stepper { display: flex; align-items: stretch; gap: 6px; }
+.stepper input { text-align: center; font-size: 1.15rem !important; font-weight: 700; margin: 0; min-width: 0; flex: 1 1 auto; }
+.stepper button {
+  flex: 0 0 52px; width: 52px; min-height: 52px; margin: 0; padding: 0;
+  font-size: 1.5rem; line-height: 1; background: #e2e8f0; color: #0f172a; border: 1.5px solid #cbd5e1;
+}
+.stepper button:active { background: #cbd5e1; }
+
+/* ---------- การ์ดตรวจ/เติมของ: ชื่อและจำนวนเด่น ---------- */
+.check-card, .refill-card, .request-card { padding: 14px; border-radius: 16px; }
+.check-card-head strong, .refill-card .check-card-head strong { font-size: 1.1rem; line-height: 1.35; }
+.qty-big { font-size: 1.05rem; margin: 6px 0 2px; }
+.qty-big b { font-size: 1.3rem; }
+.check-sub, .lot-meta, .check-msg { font-size: 0.85rem !important; }
+.check-msg { font-weight: 600; }
+.result-chip { font-size: 0.85rem !important; padding: 5px 12px !important; }
+.type-badge { font-size: 0.8rem !important; }
+.lot, .lot-row { font-size: 0.85rem !important; }
+.expected-box { font-size: 0.9rem !important; min-height: 52px; }
+.confirm-btn, .mismatch-btn { min-height: 56px; font-size: 1.05rem; }
+.unit-name { font-size: 1rem !important; }
+.psi-input input { font-size: 1.15rem !important; font-weight: 700; }
+.psi-unit { font-weight: 800; font-size: 1.05rem; }
+
+/* ---------- แถบเมนูล่าง (มือถือ) — กดด้วยนิ้วโป้งได้ ---------- */
+.tab-ico { font-size: 1.15rem; line-height: 1; }
+.tab-btn { font-size: 0.85rem; }
+@media (max-width: 760px) {
+  .nav-tabs {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 900;
+    gap: 2px;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--line);
+    border-bottom: 0;
+    box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.10);
+    overflow: hidden;
+  }
+  .tab-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 60px;
+    padding: 4px 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    line-height: 1.15;
+    font-size: 0.8rem;
+    border-radius: 12px;
+  }
+  .tab-ico { font-size: 1.4rem; }
+  body { padding-bottom: 88px; }
+  .save-bar { bottom: 82px; }
+  .check-sticky { top: 96px; padding: 8px 10px; }
+  .storage-note { display: none; }   /* สถานะการเชื่อมต่อ: ไม่จำเป็นต่อการทำงานบนมือถือ (ยังแจ้งเตือนเมื่อผิดพลาด) */
+  .storage-note[data-state="error"] { display: block; }
+  #mainHeader { padding: 8px 12px; }
+  .brand-logo { width: 40px; height: 40px; }
+  .card { margin: 10px 6px; padding: 14px 12px; }
+  .lot-input-grid, .shift-row, .check-grid, .mismatch-box { grid-template-columns: 1fr !important; }
+  .stock-fields { grid-template-columns: 1fr 1fr; }
+  .editor { grid-template-columns: 1fr !important; }
+}
+
+/* ---------- แถบบันทึก (sticky) ---------- */
+.save-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1.5px solid var(--teal-100);
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.10);
+}
+.save-bar .save-hint { flex: 1 1 100%; margin: 0; font-size: 0.85rem; font-weight: 700; color: #334155; text-align: center; }
+.save-bar button { flex: 1 1 auto; min-height: 56px; font-size: 1.1rem; }
+
+/* ---------- หัวเว็บ: ชื่อสั้น + บรรทัดผู้ใช้ (ไม่สูงจนบังเนื้อหาบนมือถือ) ---------- */
+#headerTitle { display: flex; flex-direction: column; min-width: 0; }
+.header-name { font-size: 1.05rem; font-weight: 800; line-height: 1.25; }
+.header-user {
+  font-size: 0.8rem; font-weight: 600; opacity: 0.95;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---------- ส่วนประกอบหน้าตรวจ/เติมของ ---------- */
+.step-label { margin: 12px 0 6px; font-weight: 700; font-size: 1rem; color: #1e293b; }
+.chip-line { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.txt-ok { color: #047857; }
+.card-foot { margin-top: 10px; display: flex; justify-content: flex-end; }
+.add-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.add-row .add-btn {
+  flex: 1 1 140px; min-height: 52px; font-size: 1rem; font-weight: 800;
+  background: var(--teal-50); color: var(--teal-800); border: 2px solid var(--teal-300);
+}
+.lot-input-title { margin: 0 0 6px; font-weight: 800; color: var(--teal-800); }
+.lot-input-card .more-fields { margin-top: 6px; }
+.lot-input-card .more-fields summary { font-size: 0.9rem; font-weight: 700; color: #334155; }
+.lot-warn { color: var(--bad); font-weight: 800; margin: 6px 0 0; }
+.psi-input { display: flex; align-items: center; gap: 8px; }
+.psi-input input { flex: 1 1 auto; margin: 0; }
+.battery-row .bat-btn { flex: 1 1 52px; min-width: 52px; }
+.unit-row { padding: 12px; gap: 8px; }
+.qty-line { font-size: 0.9rem; font-weight: 700; display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.lot-inputs input { width: 110px; min-height: 48px; }
+.shift-hint { font-size: 0.95rem; }
+.mode-note { font-size: 0.9rem; }
+.check-help { font-size: 0.9rem; }
+
+/* ไม่บังคับเลื่อนแนวนอน */
+html, body { overflow-x: hidden; }
+.container { padding: 0 4px; }
+
+/* ป้ายเมนูล่างบรรทัดเดียว */
+.tab-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* ปุ่มแจ้งเตือนลอย: บนมือถือวางเหนือแถบเมนูล่าง และเว้นที่ในแถบบันทึกไม่ให้ทับปุ่มบันทึก */
+@media (max-width: 760px) {
+  #notifyFab { bottom: 96px !important; right: 10px !important; width: 52px !important; height: 52px !important; }
+  .save-bar { padding-right: 70px; }
+}
+
+/* ข้อความรองทุกหน้าไม่เล็กกว่า ~14px (หน้าแรก / ทะเบียนรถ / ผู้ใช้ / ประวัติ / หน้าต่างล่าง) */
+#stockTable .stock-fields label, #stockTable .stock-stamp, .stock-fields label, .stock-chip, .std-chip, .stock-asof,
+.copy-box label, .copy-preview-from, .copy-preview-note, .copy-preview-stock, .copy-row-fields label, .copy-row-hint, .copy-start-btn,
+.nurse-sub, .nurse-meta, .nurse-meta span, .ward-sub, .ward-active-toggle, #nurseDeptFilter,
+.stat span, .car-stat, .plate-chip, .detail-chip, .muted, .progress-text, .top-info, .vehicle-meta,
+.report-meta, .report-details p, .report-details summary, .report-details .hist-audit, .timeline li,
+.rs-meta, .rs-items, .rs-items th, .rs-stock, #rsSheetBody label, .exp-row label,
+.admin-badge, .admin-btn, .admin-stat-card .label, .admin-table, .auth-error, .auth-sub,
+.remaining-hint, .remaining-label, .remaining-static, .remaining-row .remaining-help, .remaining-row .remaining-calc,
+.shift-dot, .lot-meta, .autosave-note {
+  font-size: max(0.8rem, 14px) !important;
+}
+.copy-start-btn, #nurseDeptFilter { min-height: 48px; }
+.dash-last, .dash-attn, .act-btn, .lot-inputs small, .check-card small, .unit-row small { font-size: max(0.8rem, 14px) !important; }
+.act-btn { min-height: 48px; }
+#wardManagerBtn, #nurseTemplateBtn, #deptQuickAddBtn, #nurseFileClear { min-height: 48px !important; }
+#tabContentNurses input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(.sr-only),
+#tabContentNurses select { min-height: 48px !important; }
+/* หน้าผู้ใช้: ช่องค้นหาเต็มแถว ตัวกรองขึ้นแถวใหม่ (เดิมช่องค้นหาถูกบีบเหลือ ~35px บนมือถือ) */
+#tabContentNurses .search-box { flex-wrap: wrap; }
+#nurseSearch { flex: 1 1 100% !important; }
+#nurseDeptFilter, #userRoleFilter, #userStatusFilter { flex: 1 1 140px !important; width: auto !important; }
+@media (max-width: 760px) {
+  /* ป้ายเมนูล่างต้องอ่านได้เต็มคำบนจอ 360px */
+  .nav-tabs { padding-left: 2px; padding-right: 2px; gap: 1px; }
+  .tab-btn { padding: 4px 0; }
+  .tab-txt { font-size: 0.78rem; letter-spacing: -0.3px; text-overflow: clip; }
+  /* การ์ดเลือกรถ 2 คอลัมน์ — ทะเบียนรถไม่ถูกตัด */
+  .car-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .car-symbol .vehicle-chip { white-space: normal; text-align: center; justify-content: center; }
+}
+/* หน้าตั้งค่ารถ: ดูล็อตในการ์ด */
+.item-lots-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.item-lots-actions .small-btn { flex: 1 1 130px; }
+.item-lots { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.lot-view { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 0.9rem; }
+.lot-view .lot-state { font-weight: 700; }
+.lot-view .lv-expired .lot-state { color: var(--bad); }
+.lot-view .lv-soon .lot-state { color: #b45309; }
+.refill-card.is-focus { border: 2px solid var(--teal-600); box-shadow: 0 0 0 4px var(--teal-100); }
+.empty .small-btn { display: block; margin: 10px auto 0; }
+
+/* ---- 3 ประเภทอุปกรณ์: ธงแบต/แรงดัน, อัปเดตเครื่องเดิม, ค่าล่าสุด ---- */
+.flag-row { display: flex; flex-wrap: wrap; gap: 8px 16px; grid-column: 1 / -1; }
+.flag-row label { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; font-weight: 600; }
+.flag-row input[type="checkbox"] { width: 24px; height: 24px; }
+.unit-existing-wrap { display: grid; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--line, #e2e8f0); }
+.unit-existing-wrap.lot-expired { background: var(--bad-soft, #fef2f2); border-radius: 8px; padding: 6px 8px; }
+.unit-last { display: block; font-size: 14px; font-weight: 400; color: var(--muted, #475569); }
+
+/* ---- หน้ารถ: วันหมดอายุรายชิ้นที่เพิ่ม + ปุ่มแก้/นำออกรายล็อต ---- */
+.add-dates { grid-column: 1 / -1; }
+.add-dates-title { font-weight: 700; margin: 4px 0; }
+.add-dates-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.add-dates-grid label { display: grid; gap: 4px; font-size: 16px; }
+.lot-view li { display: grid; gap: 6px; padding: 8px 0; }
+.lot-view .lot-actions { display: flex; flex-wrap: wrap; gap: 8px; }

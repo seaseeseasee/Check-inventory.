@@ -119,7 +119,7 @@ class RestockService
         }
         $items = $this->itemModel->getActiveByVehicle($carId);
         $ids = array_map(fn($i) => (string)$i['id'], $items);
-        $details = $this->stock->detailsForItems($ids);
+        $details = $this->stock->detailsForItems($items);
         $outstanding = $this->itemModel2->getOutstandingForCar($carId, $ids);
 
         $rows = [];
@@ -129,6 +129,13 @@ class RestockService
             $target = $item['target_qty'] !== null && $item['target_qty'] !== '' ? round((float)$item['target_qty'], 2) : null;
             $current = Item::countedQty($item);
             $lots = $details['lots'][$id] ?? [];
+            $stock = $details['stock'][$id];
+            $counted = in_array($type, VehicleStockService::COUNTED_TYPES, true);
+            // ยอดพร้อมใช้ไม่รวมของหมดอายุ → ใช้คำนวณที่ต้องเติม; ยอดรวมยังแสดงตามจริง (ไม่ตัดยอดเกินทิ้ง)
+            $units = $details['units'][$id] ?? [];
+            // ไม่มีวันหมดอายุ: ยอด = จำนวนเครื่องบนรถ (ไม่พร้อมใช้ยังนับเป็นเครื่อง แต่ขึ้นเป็น "ตรวจสอบ/เปลี่ยน")
+            $usable = $counted ? round($stock['available'] + $stock['unknown'], 2) : (float)count($units);
+            $notReady = count(array_filter($units, fn($u) => ($u['status'] ?? '') !== ItemUnit::STATUS_READY));
             $rows[] = [
                 'id' => $id,
                 'name' => (string)$item['name'],
@@ -138,13 +145,22 @@ class RestockService
                 'target_qty' => $target,
                 'current_qty' => $current,
                 'counted' => $current !== null,
-                'shortfall' => ($target !== null && $type !== VehicleStockService::TYPE_ELECTRIC)
-                    ? round(max(0.0, $target - (float)($current ?? 0)), 2) : 0.0,
+                'stock' => $stock,
+                'requires_expiry' => VehicleStockService::requiresExpiry($item),
+                'shortfall' => $target !== null ? round(max(0.0, $target - $usable), 2) : 0.0,
+                'not_ready' => $notReady,
+                'has_battery' => VehicleStockService::hasBattery($item),
+                'has_pressure' => VehicleStockService::hasPressure($item),
+                'over_target' => ($target !== null && $counted && (float)($current ?? 0) > $target),
                 'requested' => round((float)($outstanding[$id]['outstanding'] ?? 0), 2),
                 'request_no' => $outstanding[$id]['no'] ?? null,
                 'lots' => $lots,
                 'expiry' => VehicleStockService::expirySummary($lots),
-                'units' => $details['units'][$id] ?? [],
+                'units' => $units,
+                'battery_max_bars' => VehicleStockService::batteryMax($item),
+                'battery_low_bars' => $item['battery_low_bars'] !== null ? (int)$item['battery_low_bars'] : null,
+                'o2_low_psi' => $item['o2_low_psi'] !== null ? (int)$item['o2_low_psi'] : null,
+                'expiry_warn_days' => VehicleStockService::warnDays($item),
             ];
         }
 
@@ -158,7 +174,7 @@ class RestockService
             'items' => $rows,
             'open_requests' => $open,
             'today' => VehicleStockService::today(),
-            'expiry_warn_days' => VehicleStockService::EXPIRY_WARN_DAYS,
+            'is_admin' => false,
         ];
     }
 
@@ -245,20 +261,35 @@ class RestockService
                 $type = VehicleStockService::itemType($item);
                 $before = Item::countedQty($item);
 
-                if ($type === VehicleStockService::TYPE_ELECTRIC) {
+                if (VehicleStockService::usesUnits($item)) {
                     $unitsBefore = (float)$this->unitModel->countActive($itemId);
                     $added = 0;
                     foreach (array_slice((array)($line['units'] ?? []), 0, self::MAX_LOTS_PER_LINE) as $u) {
-                        $this->stock->addUnit($item, VehicleStockService::parseUnitInput((array)$u, $name), $ctx);
+                        $this->stock->addUnit($item, VehicleStockService::parseUnitInput((array)$u, $item, (string)($u['label'] ?? '')), $ctx);
                         $added++;
+                    }
+                    $active = [];
+                    foreach ($this->unitModel->lockActiveByItem($itemId) as $u) {
+                        $active[(string)$u['id']] = $u;
+                    }
+                    // อัปเดตสถานะ/แบต/แรงดันของเครื่องเดิม (เช่น ชาร์จแบตแล้ว, ซ่อมแล้วพร้อมใช้)
+                    $updated = 0;
+                    foreach (array_slice(array_values(array_filter((array)($line['unit_updates'] ?? []), 'is_array')), 0, self::MAX_LOTS_PER_LINE) as $u) {
+                        $uid = (string)($u['id'] ?? '');
+                        if (!isset($active[$uid])) {
+                            throw new ApiException($name . ': ไม่พบเครื่องที่ต้องการอัปเดต', 422);
+                        }
+                        $parsed = VehicleStockService::parseUnitInput($u, $item, (string)$active[$uid]['label']);
+                        $this->unitModel->update($uid, [
+                            'status' => $parsed['status'], 'battery_level' => $parsed['battery_level'],
+                            'pressure_psi' => $parsed['pressure_psi'], 'note' => $parsed['note'],
+                            'updated_at' => $now, 'updated_by' => $userName,
+                        ]);
+                        $updated++;
                     }
                     $retired = 0;
                     $retireIds = array_map('strval', (array)($line['retire_unit_ids'] ?? []));
                     if ($retireIds) {
-                        $active = [];
-                        foreach ($this->unitModel->lockActiveByItem($itemId) as $u) {
-                            $active[(string)$u['id']] = $u;
-                        }
                         foreach ($retireIds as $rid) {
                             if (!isset($active[$rid])) {
                                 throw new ApiException($name . ': ไม่พบเครื่องที่ต้องการปลดออก', 422);
@@ -269,28 +300,58 @@ class RestockService
                         }
                         $this->stock->syncItemTotal($item, $now);
                     }
-                    if ($added === 0 && $retired === 0) {
-                        throw new ApiException($name . ': ยังไม่ได้เพิ่มหรือปลดเครื่อง', 422);
+                    if ($updated > 0) {
+                        $this->stock->syncItemTotal($item, $now);
+                    }
+                    if ($added === 0 && $retired === 0 && $updated === 0) {
+                        throw new ApiException($name . ': ยังไม่ได้เพิ่ม ปลด หรืออัปเดตเครื่อง', 422);
+                    }
+                    $notReady = 0;
+                    foreach ($this->unitModel->lockActiveByItem($itemId) as $u) {
+                        $notReady += (string)$u['status'] !== ItemUnit::STATUS_READY ? 1 : 0;
                     }
                     $applied[] = [
                         'item_id' => $itemId, 'name' => $name, 'item_type' => $type,
-                        'before' => $unitsBefore, 'added' => (float)$added, 'retired' => $retired,
+                        'before' => $unitsBefore, 'added' => (float)$added, 'retired' => $retired, 'updated' => $updated,
+                        'not_ready' => $notReady,
                         'after' => (float)$this->unitModel->countActive($itemId), 'lots' => [],
                     ];
                     continue;
                 }
 
                 $lots = array_values(array_filter((array)($line['lots'] ?? []), 'is_array'));
+                $isPiece = $type === VehicleStockService::TYPE_INDIVIDUAL;
+                if ($isPiece) {
+                    // ของแบบชิ้น: pieces = วันหมดอายุทีละชิ้น (1 รายการ = 1 ชิ้น) — แปลงเป็นล็อตจำนวน 1
+                    foreach ((array)($line['pieces'] ?? []) as $p) {
+                        $lots[] = is_array($p) ? ['qty' => 1] + $p : ['qty' => 1, 'expiry_date' => (string)$p];
+                    }
+                    $pieceCount = 0;
+                    foreach ($lots as $l) {
+                        if (!empty($l['lot_id'])) {
+                            throw new ApiException($name . ': ของแบบชิ้นเติมเข้าชิ้นเดิมไม่ได้ — เพิ่มเป็นชิ้นใหม่พร้อมวันหมดอายุ', 422);
+                        }
+                        $q = $l['qty'] ?? null;
+                        if (!is_numeric($q) || (float)$q <= 0 || floor((float)$q) != (float)$q) {
+                            throw new ApiException($name . ': จำนวนชิ้นต้องเป็นจำนวนเต็มมากกว่า 0', 422);
+                        }
+                        $pieceCount += (int)$q;
+                    }
+                    if (isset($line['qty']) && (int)$line['qty'] !== $pieceCount) {
+                        throw new ApiException(sprintf('%s: เติม %d ชิ้น แต่ระบุวันหมดอายุ %d ชิ้น — จำนวนต้องตรงกัน', $name, (int)$line['qty'], $pieceCount), 422);
+                    }
+                }
                 if (empty($lots)) {
-                    throw new ApiException($name . ': ระบุจำนวนและวันหมดอายุอย่างน้อย 1 รายการ', 422);
+                    throw new ApiException($name . ': ระบุจำนวน' . (VehicleStockService::requiresExpiry($item) ? 'และวันหมดอายุ' : '') . 'อย่างน้อย 1 รายการ', 422);
                 }
                 if (count($lots) > self::MAX_LOTS_PER_LINE) {
-                    throw new ApiException($name . ': แยกได้ไม่เกิน ' . self::MAX_LOTS_PER_LINE . ' วันหมดอายุต่อครั้ง', 422);
+                    throw new ApiException($name . ': แยกได้ไม่เกิน ' . self::MAX_LOTS_PER_LINE . ' ล็อตต่อครั้ง', 422);
                 }
                 $addedLots = [];
                 $total = 0.0;
+                $reason = trim('เติมของเข้ารถ ' . (string)($input['note'] ?? ''));
                 foreach ($lots as $i => $lot) {
-                    $label = sprintf('%s (รายการที่ %d)', $name, $i + 1);
+                    $label = sprintf('%s (ล็อตที่ %d)', $name, $i + 1);
                     $qtyRaw = $lot['qty'] ?? null;
                     if (!is_numeric($qtyRaw) || (float)$qtyRaw <= 0) {
                         throw new ApiException($label . ': จำนวนที่เติมต้องมากกว่า 0', 422);
@@ -299,22 +360,39 @@ class RestockService
                     if ($qty > InspectionService::MAX_QTY) {
                         throw new ApiException($label . ': จำนวนสูงเกินกำหนด', 422);
                     }
-                    $expiry = trim((string)($lot['expiry_date'] ?? ''));
-                    if ($expiry === '' || !VehicleStockService::validDate($expiry)) {
-                        throw new ApiException($label . ': กรุณาระบุวันหมดอายุให้ถูกต้อง (วว/ดด/ปปปป)', 422);
+
+                    // เติมเข้าล็อตเดิม (ล็อตเดียวกัน วันหมดอายุเดียวกัน) — ไม่สร้างล็อตซ้ำ
+                    $targetLot = trim((string)($lot['lot_id'] ?? ''));
+                    if ($targetLot !== '') {
+                        $addedLots[] = $this->stock->topUpLot($item, $targetLot, $qty, $ctx + ['reason' => $reason . ' (เติมเข้าล็อตเดิม)']);
+                        $total = round($total + $qty, 2);
+                        continue;
                     }
-                    if ($expiry < $today) {
+
+                    $expiry = trim((string)($lot['expiry_date'] ?? ''));
+                    if ($expiry === '' && VehicleStockService::requiresExpiry($item)) {
+                        throw new ApiException($label . ': กรุณาระบุวันหมดอายุ (ของสิ้นเปลืองต้องมีวันหมดอายุ)', 422);
+                    }
+                    if ($expiry !== '' && !VehicleStockService::validDate($expiry)) {
+                        throw new ApiException($label . ': วันหมดอายุไม่ถูกต้อง', 422);
+                    }
+                    if ($expiry !== '' && $expiry < $today) {
                         throw new ApiException(sprintf('%s: วันหมดอายุ %s ผ่านไปแล้ว — ไม่อนุญาตให้เติมของหมดอายุ', $label, $expiry), 422);
                     }
-                    if (VehicleStockService::expiryState($expiry, $today) === 'soon') {
-                        $warnings[] = sprintf('%s: Lot หมดอายุ %s (ภายใน %d วัน)', $name, $expiry, VehicleStockService::EXPIRY_WARN_DAYS);
+                    if ($expiry !== '' && VehicleStockService::expiryState($expiry, $today, VehicleStockService::warnDays($item)) === 'soon') {
+                        $warnings[] = sprintf('%s: ล็อตหมดอายุ %s (ภายใน %d วัน)', $name, $expiry, VehicleStockService::warnDays($item));
                     }
-                    $addedLots[] = $this->stock->addLot($item, $qty, $expiry, 'REFILL', StockMovement::TYPE_REFILL,
-                        $ctx + ['reason' => trim('เติมของเข้ารถ ' . (string)($input['note'] ?? ''))]);
+                    $received = VehicleStockService::optionalPastDate($lot['received_date'] ?? '', $label . ': วันที่รับเข้า') ?? $today;
+                    $meta = ['lot_number' => $lot['lot_number'] ?? '', 'received_date' => $received, 'note' => $lot['note'] ?? ''];
+                    if ($isPiece) {
+                        // 1 แถวต่อ 1 ชิ้น — รหัสชิ้น = id ของแถว ใช้ตามรอยตอนตัด FEFO
+                        array_push($addedLots, ...$this->stock->addPieces($item, array_fill(0, (int)$qty, $expiry), 'REFILL',
+                            StockMovement::TYPE_REFILL, $ctx + ['reason' => $reason], $meta));
+                    } else {
+                        $addedLots[] = $this->stock->addLot($item, $qty, $expiry === '' ? null : $expiry, 'REFILL', StockMovement::TYPE_REFILL,
+                            $ctx + ['reason' => $reason], $meta);
+                    }
                     $total = round($total + $qty, 2);
-                }
-                if ($before === null) {
-                    $warnings[] = $name . ': รายการนี้ยังไม่เคยตรวจนับ ยอดคงเหลือจึงเท่ากับจำนวนที่เติมครั้งนี้ — ควรตรวจนับในเวรถัดไป';
                 }
                 $applied[] = [
                     'item_id' => $itemId, 'name' => $name, 'item_type' => $type,
@@ -348,6 +426,86 @@ class RestockService
         }
     }
 
+    /**
+     * จัดการล็อต 1 ล็อต — ทุกการเปลี่ยนยอดเป็น movement ที่ย้อนดูได้ ไม่มีการลบแถวล็อต
+     *  edit   (admin): เลขล็อต / วันรับเข้า / หมายเหตุ / วันหมดอายุ (ต้องมีเหตุผล)
+     *  adjust (admin): ปรับยอดล็อตเป็นจำนวนที่นับได้จริง (ต้องมีเหตุผล)
+     *  void   (admin): ยกเลิกล็อต — ตัดยอดที่เหลือออก สถานะ void (ใช้แทนการลบ)
+     *  expire (ทุกบทบาท): จำหน่ายล็อตที่หมดอายุแล้วออกจากรถ
+     */
+    public function manageLot(string $lotId, string $action, array $input, ?array $user): array
+    {
+        $isAdmin = ($user['role'] ?? '') === 'admin';
+        if (in_array($action, ['edit', 'adjust', 'void'], true) && !$isAdmin) {
+            throw new ApiException('เฉพาะผู้ดูแลระบบเท่านั้นที่แก้ไข/ปรับยอด/ยกเลิกล็อตได้', 403);
+        }
+        if (!in_array($action, ['edit', 'adjust', 'void', 'expire'], true)) {
+            throw new ApiException('ไม่รู้จักคำสั่ง', 400);
+        }
+        $ctx = [
+            'by_user_id' => isset($user['id']) ? (string)$user['id'] : null,
+            'by_name' => (string)($user['full_name'] ?? ''),
+            'at' => VehicleStockService::now(),
+        ];
+
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $lot = (new \App\Models\ItemLot())->find($lotId);
+            if (!$lot) {
+                throw new ApiException('ไม่พบล็อต', 404);
+            }
+            $item = $this->itemModel->lockById((string)$lot['item_id']);
+            if (!$item || !VehicleStockService::isConsumable($item)) {
+                throw new ApiException('ล็อตนี้ไม่อยู่ในรายการที่นับเป็นจำนวน', 422);
+            }
+            $reason = trim((string)($input['reason'] ?? ''));
+            $result = ['action' => $action, 'lot_id' => $lotId, 'item_id' => (string)$item['id']];
+            switch ($action) {
+                case 'edit':
+                    $result['changed'] = $this->stock->editLot($item, $lotId, $input, $ctx);
+                    break;
+                case 'adjust':
+                    if (!isset($input['qty']) || !is_numeric($input['qty'])) {
+                        throw new ApiException('กรุณาระบุจำนวนที่นับได้จริงของล็อต', 422);
+                    }
+                    $result['delta'] = $this->stock->setLotQty($item, $lotId, round((float)$input['qty'], 2), $reason, $ctx);
+                    break;
+                case 'void':
+                    $this->stock->voidLot($item, $lotId, $reason, $ctx);
+                    break;
+                case 'expire':
+                    $result['removed'] = $this->stock->expireLot($item, $lotId, $ctx);
+                    break;
+            }
+            $issues = $this->stock->reconcile((string)$item['car_id']);
+            if ($issues) {
+                error_log('reconcile failed after lot ' . $action . ' ' . $lotId . ': ' . json_encode($issues, JSON_UNESCAPED_UNICODE));
+                throw new \RuntimeException('ยอดคงเหลือไม่สอดคล้องกันหลังคำนวณ ระบบยกเลิกการบันทึกเพื่อป้องกันข้อมูลผิด');
+            }
+            $db->commit();
+            $result['current_qty'] = (float)($this->itemModel->find((string)$item['id'])['current_qty'] ?? 0);
+            return $result;
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /** ประวัติการเคลื่อนไหวของอุปกรณ์ 1 รายการ (ล่าสุดก่อน) */
+    public function getItemMovements(string $itemId, int $limit = 100): array
+    {
+        $stmt = Database::getConnection()->prepare(
+            "SELECT m.*, l.lot_number, l.expiry_date FROM refer_stock_movements m
+               LEFT JOIN refer_item_lots l ON l.id = m.lot_id
+              WHERE m.item_id = ? ORDER BY m.at DESC, m.id DESC LIMIT " . max(1, min($limit, 500))
+        );
+        $stmt->execute([$itemId]);
+        return $stmt->fetchAll();
+    }
+
     /** ผลของ batch ที่บันทึกไปแล้ว (คืนให้คำขอที่ส่งซ้ำ — ไม่เติมซ้ำ) */
     private function batchResult(array $batch, bool $duplicate): array
     {
@@ -367,9 +525,10 @@ class RestockService
      */
     private function applyToOpenRequests(string $carId, array $applied, string $userId, string $userName, string $now): array
     {
+        // ทุกประเภท: จำนวนที่เพิ่มจริงไปปิดบรรทัด "เติม" | ไม่มีวันหมดอายุ: ไม่มีเครื่องไม่พร้อมใช้เหลือ → ปิดบรรทัด "ตรวจสอบ/เปลี่ยน"
         $addedByItem = [];
         foreach ($applied as $a) {
-            if ($a['item_type'] !== VehicleStockService::TYPE_ELECTRIC && $a['added'] > 0) {
+            if ($a['added'] > 0 || (isset($a['not_ready']) && $a['not_ready'] === 0)) {
                 $addedByItem[$a['item_id']] = $a;
             }
         }
@@ -393,7 +552,11 @@ class RestockService
             $actionLines = [];
             foreach ($this->itemModel2->getByRequest((string)$request['id']) as $line) {
                 $itemId = (string)$line['item_id'];
-                if (($left[$itemId] ?? 0) <= 0) {
+                if (!isset($addedByItem[$itemId])) {
+                    continue;
+                }
+                $isReplace = ($line['line_type'] ?? 'refill') === 'replace';
+                if ($isReplace ? ($addedByItem[$itemId]['not_ready'] ?? 1) !== 0 : ($left[$itemId] ?? 0) <= 0) {
                     continue;
                 }
                 $locked = $this->itemModel2->lockLine((string)$request['id'], $itemId);
@@ -403,8 +566,12 @@ class RestockService
                 if ($need <= 0) {
                     continue;
                 }
-                $take = round(min($need, $left[$itemId]), 2);
-                $left[$itemId] = round($left[$itemId] - $take, 2);
+                if ($isReplace) {
+                    $take = $need;   // ตรวจสอบ/เปลี่ยนเสร็จ (ทุกเครื่องพร้อมใช้) — ไม่ใช้จำนวนที่เพิ่ม
+                } else {
+                    $take = round(min($need, $left[$itemId]), 2);
+                    $left[$itemId] = round($left[$itemId] - $take, 2);
+                }
                 $newFilled = round($filled + $take, 2);
                 $a = $addedByItem[$itemId];
                 $this->itemModel2->writeQuantities((string)$request['id'], $itemId, $newFilled, $newFilled, $a['before'], $a['after']);

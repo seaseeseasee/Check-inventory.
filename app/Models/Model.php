@@ -98,8 +98,12 @@ abstract class Model
 
     protected function filterFillable(array $data): array
     {
-        if (empty($this->fillable)) return $data;
-        return array_intersect_key($data, array_flip($this->fillable));
+        if (!empty($this->fillable)) {
+            $data = array_intersect_key($data, array_flip($this->fillable));
+        }
+        // PDO (emulate_prepares=false) ส่ง false เป็น '' ซึ่ง MariaDB strict ปฏิเสธสำหรับคอลัมน์ TINYINT
+        // (เดิมทำให้ ลบผู้ใช้ / พักพยาบาล / พักวอร์ด / พักอุปกรณ์ ได้ 500) → แปลง bool เป็น 0/1 ที่จุดเดียว
+        return array_map(fn($v) => is_bool($v) ? (int)$v : $v, $data);
     }
 
     protected function cast(array $row): array

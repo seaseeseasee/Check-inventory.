@@ -39,7 +39,7 @@
   vertical-align: middle;
 }
 .type-badge.type-box { background: var(--teal-50); color: var(--teal-800); }
-.type-badge.type-electric { background: var(--warn-soft); color: var(--warn); }
+.type-badge.type-non_expiring { background: var(--warn-soft); color: var(--warn); }
 .readonly-field {
   min-height: 44px;
   display: flex;
@@ -148,7 +148,45 @@
 .status-CANCELLED { background: var(--bg); color: var(--muted); }
 #refillNote { margin: 0; flex: 1 1 200px; }
 
+/* ---------- ล็อตย่อย (กดขยาย) / จัดการล็อต / ครุภัณฑ์ / ถัง O2 ---------- */
+.txt-bad { color: var(--bad); font-weight: 700; }
+.txt-warn { color: var(--warn); font-weight: 700; }
+.txt-info { color: var(--info); font-weight: 700; }
+.card-head-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.card-head-actions .small-btn { margin: 0; }
+.lot-details { margin: 8px 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px; background: var(--bg); }
+.lot-details summary { cursor: pointer; font-weight: 700; color: var(--teal-700); font-size: 0.85rem; }
+.lot-row { padding: 8px 0; border-top: 1px dashed var(--line); font-size: 0.85rem; }
+.lot-row:first-of-type { border-top: 0; }
+.lot-main { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.lot-state { font-weight: 700; }
+.lot-row.lot-expired .lot-state, .lot-row.lot-expired .lot-main span:nth-child(2) { color: var(--bad); }
+.lot-row.lot-soon .lot-state { color: var(--warn); }
+.lot-row.lot-unknown .lot-state { color: var(--muted); }
+.lot-meta { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+.lot-actions, .lot-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.lot-actions .small-btn, .lot-tools .small-btn { margin: 0; }
+.lot-inputs { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 6px; align-items: center; }
+.lot-inputs label { margin: 0; font-size: 0.8rem; display: flex; gap: 6px; align-items: center; }
+.lot-inputs input { margin: 0; width: 90px; min-height: 36px; }
+.lot-input-card { border: 1px dashed var(--teal-300); border-radius: var(--radius-sm); padding: 8px; margin: 8px 0; background: var(--teal-50); }
+.lot-input-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.lot-input-grid label { margin: 0; font-size: 0.8rem; }
+.lot-input-grid input, .lot-input-grid select { margin: 4px 0 0; }
+.lot-input-card > .small-btn { margin: 6px 0 0; }
+.lot-form label { display: block; margin: 8px 0 0; font-size: 0.85rem; }
+.condition-seg { margin: 8px 0; }
+.note-inline { display: block; margin-top: 8px; font-size: 0.8rem; }
+.psi-input { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 0.85rem; }
+.psi-input input { margin: 0; max-width: 140px; }
+.bat-btn.low:not(.on) { border-color: var(--bad-soft); color: var(--bad); }
+.table-scroll { overflow-x: auto; max-height: 60vh; }
+.mv-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.mv-table th, .mv-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.mv-table td.num { text-align: right; white-space: nowrap; }
+
 @media (max-width: 480px) {
   .lot-input { grid-template-columns: 1fr 1fr; }
   .lot-input .small-btn { grid-column: 1 / -1; }
+  .lot-input-grid { grid-template-columns: 1fr 1fr; }
 }

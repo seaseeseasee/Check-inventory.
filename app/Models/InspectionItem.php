@@ -7,7 +7,7 @@ class InspectionItem extends Model
 {
     protected string $table = 'refer_check_items';
     protected string $primaryKey = 'check_id';
-    protected array $fillable = ['check_id', 'item_id', 'sort_order', 'name', 'standard', 'expiry_text', 'is_battery', 'status', 'detail', 'battery_level', 'qty_before', 'actual_qty', 'used_qty', 'qty_target', 'unit', 'check_status', 'item_type', 'expected_qty', 'discrepancy', 'note', 'lots_snapshot', 'units_snapshot'];
+    protected array $fillable = ['check_id', 'item_id', 'sort_order', 'name', 'standard', 'expiry_text', 'is_battery', 'status', 'detail', 'battery_level', 'qty_before', 'actual_qty', 'used_qty', 'qty_target', 'unit', 'check_status', 'condition_status', 'item_type', 'expected_qty', 'discrepancy', 'note', 'lots_snapshot', 'lot_detail', 'units_snapshot'];
     protected array $casts = [
         'is_battery' => 'boolean',
         'sort_order' => 'integer',

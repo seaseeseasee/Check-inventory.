@@ -1,6 +1,10 @@
 // ========================================
-// PAGE: USERS (Admin only)
+// PAGE: USERS — ส่วน "บัญชีผู้ใช้อื่น" ของหน้าจัดการผู้ใช้ (Admin only)
 // ========================================
+// หน้าจัดการผู้ใช้รวมเป็นหน้าเดียวกับทะเบียนพยาบาล (tabContentNurses):
+//  - บัญชีที่ผูกกับพยาบาล แสดง/จัดการในการ์ดพยาบาล (nurses.js) — ไม่แสดงซ้ำที่นี่
+//  - ส่วนนี้จัดการเฉพาะบัญชีที่ไม่ได้ผูกกับรายชื่อพยาบาล เช่น ผู้ดูแลระบบ
+// ใช้ API เดิม /api/admin/users ทั้งหมด (server ตรวจสิทธิ์ admin, กันชื่อซ้ำ, กันพยาบาลมี 2 บัญชี)
 
 class UsersPage {
   constructor() {
@@ -31,23 +35,14 @@ class UsersPage {
   }
 
   bindEvents() {
-    // Form submit
-    const form = document.getElementById('userForm');
-    if (form) {
-      form.addEventListener('submit', (e) => this.handleSubmit(e));
-    }
-    
-    // Reset button
-    const resetBtn = document.querySelector('#userForm button[type="button"]');
-    if (resetBtn) {
-      resetBtn.addEventListener('click', () => this.resetForm());
-    }
-    
-    // Search
-    const search = document.getElementById('userSearch');
-    if (search) {
-      search.addEventListener('input', UI.debounce(() => this.filterTable(), 300));
-    }
+    document.getElementById('userForm')?.addEventListener('submit', (e) => this.handleSubmit(e));
+    document.querySelector('#userForm button[type="button"]')?.addEventListener('click', () => this.resetForm());
+  }
+
+  /** บัญชีที่ไม่ได้ผูกกับพยาบาลที่มีอยู่ในทะเบียน */
+  otherUsers() {
+    const nurseIds = new Set(this.nurses.map(n => String(n.id)));
+    return this.users.filter(u => !u.nurse_id || !nurseIds.has(String(u.nurse_id)));
   }
 
   render() {
@@ -56,78 +51,82 @@ class UsersPage {
     this.updateFormTitle();
   }
 
+  // ผูกได้เฉพาะพยาบาลที่ยังไม่มีบัญชี (+ พยาบาลที่ผูกกับบัญชีที่กำลังแก้อยู่)
   renderNurseOptions() {
     const select = document.getElementById('uNurse');
     if (!select) return;
-    
-    select.innerHTML = '<option value="">-- ไม่เชื่อมโยง --</option>' +
-      this.nurses.filter(n => n.active).map(nurse => `
-        <option value="${nurse.id}">${UI.escape(nurse.name)} (${UI.escape(nurse.department)})</option>
+    const linked = new Set(this.users.filter(u => u.nurse_id && u.id !== this.editingId).map(u => String(u.nurse_id)));
+    select.innerHTML = '<option value="">-- ไม่ผูก --</option>' +
+      this.nurses.filter(n => n.active && !linked.has(String(n.id))).map(nurse => `
+        <option value="${UI.escape(nurse.id)}">${UI.escape(nurse.name)} (${UI.escape(nurse.department)})</option>
       `).join('');
   }
 
   renderTable() {
     const container = document.getElementById('userDirectoryTable');
     if (!container) return;
-    
-    container.innerHTML = this.users.map((user, index) => `
-      <article class="nurse-card" data-id="${user.id}">
+    const rows = this.otherUsers();
+    container.innerHTML = rows.map((user) => `
+      <article class="nurse-card user-card" data-id="${UI.escape(user.id)}" data-role="${UI.escape(user.role)}" data-status="${user.active ? 'active' : 'inactive'}">
         <div class="nurse-top">
           <div style="flex:1;min-width:0">
             <div class="nurse-name">${UI.escape(user.full_name)}</div>
-            <div class="nurse-sub">Username: ${UI.escape(user.username)} • ${user.role === 'admin' ? '👑 Admin' : '👨‍⚕️ Staff'}</div>
+            <div class="nurse-sub">🔑 ${UI.escape(user.username)} • รหัสบัญชี ${UI.escape(user.id)}</div>
           </div>
-          <span class="chip ${user.active ? 'chip-ok' : 'chip-off'}">
-            ${user.active ? 'ใช้งาน' : 'ปิดใช้งาน'}
-          </span>
+          <div class="nurse-badges">
+            <span class="chip ${user.role === 'admin' ? 'chip-warn' : 'chip-info'}">${user.role === 'admin' ? '👑 Admin' : '👨‍⚕️ Staff'}</span>
+            <span class="chip ${user.active ? 'chip-ok' : 'chip-off'}">${user.active ? 'ใช้งาน' : 'ปิดใช้งาน'}</span>
+          </div>
         </div>
         <div class="nurse-meta">
-          ${user.nurse_id ? `<span>พยาบาล: ${UI.escape(this.getNurseName(user.nurse_id))}</span>` : ''}
-          ${user.last_login_at ? `<span>เข้าสู่ระบบล่าสุด: ${UI.formatDateTimeThai(user.last_login_at)}</span>` : ''}
+          <span>${user.last_login_at ? 'เข้าสู่ระบบล่าสุด ' + UI.escape(UI.formatDateTimeThai(user.last_login_at)) : 'ยังไม่เคยเข้าสู่ระบบ'}</span>
         </div>
-        <div style="display: flex; gap: 8px;">
-          <button class="small-btn" data-action="edit" data-index="${index}">แก้ไข</button>
-          <button class="small-btn ${user.active ? 'danger' : 'ok'}" data-action="toggle" data-index="${index}">
-            ${user.active ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}
-          </button>
+        <div class="nurse-actions">
+          <button class="small-btn" data-action="edit">แก้ไข</button>
+          <button class="small-btn ${user.active ? 'danger' : 'ok'}" data-action="toggle">${user.active ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}</button>
         </div>
       </article>
-    `).join('') || '<p class="empty">ยังไม่มีผู้ใช้ในระบบ</p>';
-    
-    // Bind buttons
-    container.querySelectorAll('[data-action="edit"]').forEach(btn => {
-      btn.addEventListener('click', () => this.editUser(this.users[btn.dataset.index]));
+    `).join('') || '<p class="empty">ไม่มีบัญชีอื่นนอกจากบัญชีของพยาบาล</p>';
+
+    container.querySelectorAll('.user-card').forEach(card => {
+      const user = this.users.find(u => u.id === card.dataset.id);
+      card.querySelector('[data-action="edit"]')?.addEventListener('click', () => this.editUser(user));
+      card.querySelector('[data-action="toggle"]')?.addEventListener('click', () => this.toggleUser(user));
     });
-    
-    container.querySelectorAll('[data-action="toggle"]').forEach(btn => {
-      btn.addEventListener('click', () => this.toggleUser(this.users[btn.dataset.index]));
-    });
+    this.filterTable();
   }
 
-  getNurseName(nurseId) {
-    const nurse = this.nurses.find(n => n.id === nurseId);
-    return nurse ? nurse.name : nurseId;
-  }
-
+  /** ตัวกรองชุดเดียวกับรายการพยาบาล (ค้นหา / ประเภท-บทบาท / สถานะ) — คืนจำนวนที่แสดง */
   filterTable() {
-    const query = document.getElementById('userSearch')?.value?.toLowerCase() || '';
-    document.querySelectorAll('#userDirectoryTable .nurse-card').forEach(card => {
-      const text = card.textContent.toLowerCase();
-      card.classList.toggle('hidden', !text.includes(query));
+    const query = document.getElementById('nurseSearch')?.value?.toLowerCase().trim() || '';
+    const role = document.getElementById('userRoleFilter')?.value || '';
+    const status = document.getElementById('userStatusFilter')?.value || '';
+    const dept = document.getElementById('nurseDeptFilter')?.value || '';
+    let shown = 0;
+    document.querySelectorAll('#userDirectoryTable .user-card').forEach(card => {
+      const matchRole = !role || role === 'other' || card.dataset.role === role;
+      const hide = Boolean(dept)   // บัญชีอื่นไม่มีวอร์ด
+        || (query && !card.textContent.toLowerCase().includes(query))
+        || !matchRole || role === 'nurse' || role === 'nurse-noaccount'
+        || (status && card.dataset.status !== status);
+      card.classList.toggle('hidden', hide);
+      if (!hide) shown++;
     });
+    return shown;
   }
 
   editUser(user) {
+    if (!user) return;
     this.editingId = user.id;
-    
+    document.getElementById('userFormWrap')?.setAttribute('open', '');
     document.getElementById('uUsername').value = user.username;
     document.getElementById('uUsername').readOnly = true;
     document.getElementById('uPassword').value = '';
     document.getElementById('uPassword').placeholder = 'เว้นว่างไว้หากไม่ต้องการเปลี่ยนรหัสผ่าน';
     document.getElementById('uFullName').value = user.full_name;
     document.getElementById('uRole').value = user.role;
+    this.renderNurseOptions();
     document.getElementById('uNurse').value = user.nurse_id || '';
-    
     this.updateFormTitle();
     document.getElementById('userEditor')?.scrollIntoView({ block: 'start' });
   }
@@ -140,24 +139,20 @@ class UsersPage {
     document.getElementById('uPassword').placeholder = 'รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)';
     document.getElementById('uFullName').value = '';
     document.getElementById('uRole').value = 'staff';
+    this.renderNurseOptions();
     document.getElementById('uNurse').value = '';
     this.updateFormTitle();
   }
 
   updateFormTitle() {
     const title = document.getElementById('userFormTitle');
-    if (title) {
-      title.textContent = this.editingId ? 'แก้ไขผู้ใช้' : 'เพิ่มผู้ใช้ใหม่';
-    }
+    if (title) title.textContent = this.editingId ? 'แก้ไขบัญชีผู้ใช้' : 'เพิ่มบัญชีผู้ใช้ใหม่';
     const submitBtn = document.querySelector('#userForm button[type="submit"]');
-    if (submitBtn) {
-      submitBtn.textContent = this.editingId ? 'บันทึกการแก้ไข' : 'เพิ่มผู้ใช้';
-    }
+    if (submitBtn) submitBtn.textContent = this.editingId ? 'บันทึกการแก้ไข' : 'เพิ่มผู้ใช้';
   }
 
   async handleSubmit(event) {
     event.preventDefault();
-    
     const data = {
       username: document.getElementById('uUsername').value?.trim(),
       password: document.getElementById('uPassword').value,
@@ -165,36 +160,38 @@ class UsersPage {
       role: document.getElementById('uRole').value,
       nurse_id: document.getElementById('uNurse').value || null,
     };
-    
     if (!data.username || !data.full_name) {
       window.toast.error('กรอกชื่อผู้ใช้และชื่อ-นามสกุล');
       return;
     }
-    
     if (!this.editingId && (!data.password || data.password.length < 6)) {
       window.toast.error('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
       return;
     }
-    
+    const original = this.editingId ? this.users.find(u => u.id === this.editingId) : null;
+    if (original && original.role !== data.role) {
+      const ok = await window.confirmDialog(
+        `เปลี่ยนบทบาทของ ${original.username} จาก ${original.role === 'admin' ? 'Admin' : 'Staff'} เป็น ${data.role === 'admin' ? 'Admin' : 'Staff'}?`,
+        { confirmText: 'เปลี่ยนบทบาท' }
+      );
+      if (!ok) return;
+    }
+
     const submitBtn = document.querySelector('#userForm button[type="submit"]');
     UI.setLoading(submitBtn, true);
-    
     try {
       if (this.editingId) {
-        // For update, don't send password if empty
-        if (!data.password) {
-          delete data.password;
-        }
+        if (!data.password) delete data.password;   // ไม่ส่งรหัสว่าง = ใช้รหัสเดิม
+        delete data.username;                        // ชื่อผู้ใช้แก้ไม่ได้ (เป็นตัวตนตอน login)
         await window.adminApi.updateUser(this.editingId, data);
-        window.toast.success('แก้ไขผู้ใช้เรียบร้อย');
+        window.toast.success('แก้ไขบัญชีเรียบร้อย');
       } else {
         await window.adminApi.createUser(data);
-        window.toast.success('เพิ่มผู้ใช้เรียบร้อย');
+        window.toast.success('เพิ่มบัญชีเรียบร้อย');
       }
-      
+      UI.setLoading(submitBtn, false);
       this.resetForm();
-      await this.loadData();
-      this.render();
+      await this.reloadAll();
     } catch (error) {
       window.toast.error('บันทึกไม่สำเร็จ: ' + error.message);
     } finally {
@@ -203,38 +200,40 @@ class UsersPage {
   }
 
   async toggleUser(user) {
+    if (!user) return;
     const action = user.active ? 'ปิดใช้งาน' : 'เปิดใช้งาน';
-    
-    // Block self-deactivation early (server enforces this too, as a safety net)
+    // กันปิดบัญชีตัวเองตั้งแต่หน้าจอ (server ตรวจซ้ำ)
     const me = window.auth.getUser();
     if (user.active && me && me.id === user.id) {
       window.toast.error('ไม่สามารถปิดใช้งานบัญชีของตัวเองได้');
       return;
     }
-    
-    if (!confirm(`ยืนยัน${action}ผู้ใช้ ${user.full_name}?`)) return;
-    
+    const ok = await window.confirmDialog(
+      `${action}บัญชี ${user.username} (${user.full_name})?` + (user.active ? '\nประวัติการทำงานเดิมยังอยู่ครบ' : ''),
+      { confirmText: action }
+    );
+    if (!ok) return;
     try {
       await window.adminApi.updateUser(user.id, { active: !user.active });
       window.toast.success(`${action}เรียบร้อย`);
-      await this.loadData();
-      this.render();
+      await this.reloadAll();
     } catch (error) {
       window.toast.error(`${action}ไม่สำเร็จ: ` + error.message);
     }
   }
+
+  // การผูกบัญชีกับพยาบาลเปลี่ยนการ์ดพยาบาลด้วย — โหลดใหม่ทั้งสองส่วนของหน้า
+  async reloadAll() {
+    await this.loadData();
+    this.render();
+    if (window.nursesPage) {
+      await window.nursesPage.loadNurses();
+      window.nursesPage.render();
+    }
+  }
 }
 
-// Initialize
 let usersPage;
-document.addEventListener('DOMContentLoaded', () => {
-  if (document.getElementById('tabContentUsers') && !document.getElementById('tabContentUsers').classList.contains('hidden')) {
-    usersPage = new UsersPage();
-    window.usersPage = usersPage;
-  }
-});
-
-// Export for tab switching
 window.initUsers = () => {
   if (!usersPage) {
     usersPage = new UsersPage();

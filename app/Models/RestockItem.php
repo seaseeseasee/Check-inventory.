@@ -7,7 +7,7 @@ class RestockItem extends Model
 {
     protected string $table = 'refer_restock_items';
     protected string $primaryKey = 'request_id';
-    protected array $fillable = ['request_id', 'item_id', 'sort_order', 'name', 'standard', 'actual_qty', 'qty_requested', 'qty_issued', 'qty_filled', 'vehicle_stock_before', 'vehicle_stock_after'];
+    protected array $fillable = ['request_id', 'item_id', 'sort_order', 'name', 'standard', 'actual_qty', 'qty_requested', 'qty_issued', 'qty_filled', 'vehicle_stock_before', 'vehicle_stock_after', 'line_type', 'note'];
     protected array $casts = [
         'sort_order' => 'integer',
         // NULL-safe: NULL vehicle balance means "ยังไม่เคยตรวจนับยอดบนรถ"

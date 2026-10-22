@@ -267,7 +267,23 @@ class StaffController extends Controller
     public function getRefillSheet(string $carId): void
     {
         $this->roleMiddleware->requireStaff();
-        $this->success($this->restockService->getRefillSheet($carId));
+        $sheet = $this->restockService->getRefillSheet($carId);
+        $sheet['is_admin'] = ($this->roleMiddleware->getCurrentUser()['role'] ?? '') === 'admin';
+        $this->success($sheet);
+    }
+
+    /** จัดการล็อต: PUT แก้ข้อมูล / POST .../adjust | void | expire (สิทธิ์ตรวจใน RestockService::manageLot) */
+    public function manageLot(string $lotId, string $action = 'edit'): void
+    {
+        $this->roleMiddleware->requireStaff();
+        $this->success($this->restockService->manageLot($lotId, $action, $this->getInput(), $this->roleMiddleware->getCurrentUser()));
+    }
+
+    /** ประวัติการเคลื่อนไหว (รับเข้า/ใช้/ปรับ/หมดอายุ/ยกเลิก) ของอุปกรณ์ 1 รายการ */
+    public function getItemMovements(string $itemId): void
+    {
+        $this->roleMiddleware->requireStaff();
+        $this->success($this->restockService->getItemMovements($itemId));
     }
 
     /** เติมของเข้ารถโดยตรง (ไม่มีคลังกลาง/ไม่ต้องมอบหมาย) — client_token กันกดซ้ำ */

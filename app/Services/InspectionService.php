@@ -6,6 +6,7 @@ namespace App\Services;
 use App\Models\Vehicle;
 use App\Models\Item;
 use App\Models\ItemUnit;
+use App\Models\ItemLot;
 use App\Models\Nurse;
 use App\Models\Inspection;
 use App\Models\InspectionItem;
@@ -301,6 +302,9 @@ class InspectionService
                 'actual' => $line['actual'] ?? null,
                 'note' => mb_substr((string)($line['note'] ?? ''), 0, 500),
                 'units' => is_array($line['units'] ?? null) ? array_slice($line['units'], 0, 50) : [],
+                'condition' => (string)($line['condition'] ?? ''),
+                'lot_usage' => is_array($line['lot_usage'] ?? null) ? array_slice($line['lot_usage'], 0, 50, true) : null,
+                'lot_counts' => is_array($line['lot_counts'] ?? null) ? array_slice($line['lot_counts'], 0, 50, true) : null,
             ];
         }
         $this->draftModel->update((string)$draft['id'], ['payload' => json_encode($clean, JSON_UNESCAPED_UNICODE)]);
@@ -338,27 +342,32 @@ class InspectionService
     public function buildForm(string $carId, ?array $payload, ?string $checkId): array
     {
         $items = $this->itemModel->getActiveByVehicle($carId);
-        $ids = array_map(fn($i) => (string)$i['id'], $items);
-        $details = $this->stock->detailsForItems($ids);
+        $details = $this->stock->detailsForItems($items);
 
         $state = [];
         foreach ($payload ?? [] as $line) {
             $state[(string)($line['id'] ?? '')] = $line;
         }
         $netByItem = [];
+        $netByLot = [];
         if ($checkId !== null) {
             foreach ($this->inspectionItemModel->where('check_id', $checkId) as $row) {
                 $snapshotUnits = json_decode((string)($row['units_snapshot'] ?? ''), true);
+                $lotDetail = json_decode((string)($row['lot_detail'] ?? ''), true);
                 $state[(string)$row['item_id']] = [
                     'used' => $row['used_qty'] !== null ? (float)$row['used_qty'] : null,
                     'confirmed' => $row['discrepancy'] !== null && (float)$row['discrepancy'] == 0.0 && $row['used_qty'] !== null,
                     'actual' => $row['actual_qty'] !== null ? (float)$row['actual_qty'] : null,
                     'note' => (string)($row['note'] ?? ''),
                     'units' => is_array($snapshotUnits) ? $snapshotUnits : [],
+                    'condition' => (string)($row['condition_status'] ?? ''),
+                    'lot_usage' => $lotDetail['usage'] ?? null,
+                    'lot_counts' => $lotDetail['counts'] ?? null,
                 ];
             }
             foreach ((new StockMovement())->netByLotForCheck($checkId) as $mv) {
                 $netByItem[(string)$mv['item_id']] = ($netByItem[(string)$mv['item_id']] ?? 0.0) + (float)$mv['net'];
+                $netByLot[(string)$mv['lot_id']] = (float)$mv['net'];
             }
         }
 
@@ -367,6 +376,13 @@ class InspectionService
             $itemId = (string)$item['id'];
             $type = VehicleStockService::itemType($item);
             $lots = $details['lots'][$itemId] ?? [];
+            if ($netByLot) {
+                // โหมดแก้ไข: แสดงยอดล็อต "ก่อนรอบนี้" (ย้อนผลของรอบนี้ออก)
+                foreach ($lots as &$lot) {
+                    $lot['qty'] = round($lot['qty'] - ($netByLot[$lot['id']] ?? 0.0), 2);
+                }
+                unset($lot);
+            }
             $units = $details['units'][$itemId] ?? [];
             $before = Item::countedQty($item);
             if ($before !== null && isset($netByItem[$itemId])) {
@@ -387,25 +403,43 @@ class InspectionService
                 'unit' => self::itemUnit($item),
                 'item_type' => $type,
                 'target_qty' => self::itemTargetQty($item),
-                'before' => $type === VehicleStockService::TYPE_ELECTRIC ? (float)count($units) : $before,
+                'before' => VehicleStockService::usesUnits($item) ? (float)count($units) : $before,
                 'counted' => Item::countedQty($item) !== null,
                 'lots' => $lots,
+                'stock' => $details['stock'][$itemId],
                 'expiry' => VehicleStockService::expirySummary($lots),
-                'units' => array_map(fn($u) => [
-                    'id' => (string)$u['id'],
-                    'label' => (string)$u['label'],
-                    'status' => (string)($unitState[(string)$u['id']]['status'] ?? $u['status']),
-                    'battery_level' => isset($unitState[(string)$u['id']]['battery_level'])
-                        ? (int)$unitState[(string)$u['id']]['battery_level']
-                        : ($u['battery_level'] !== null ? (int)$u['battery_level'] : null),
-                    'note' => (string)($unitState[(string)$u['id']]['note'] ?? $u['note']),
-                    // true = ค่าเป็นผลตรวจของรอบนี้ (จากร่าง/รอบที่บันทึก) ไม่ใช่สถานะค้างจากรอบก่อน
-                    'checked' => isset($unitState[(string)$u['id']]),
-                ], $units),
+                'has_battery' => VehicleStockService::hasBattery($item),
+                'has_pressure' => VehicleStockService::hasPressure($item),
+                'battery_max_bars' => VehicleStockService::batteryMax($item),
+                'battery_low_bars' => $item['battery_low_bars'] !== null ? (int)$item['battery_low_bars'] : null,
+                'o2_low_psi' => $item['o2_low_psi'] !== null ? (int)$item['o2_low_psi'] : null,
+                'units' => array_map(function ($u) use ($unitState) {
+                    $st = $unitState[(string)$u['id']] ?? null;
+                    return [
+                        'id' => (string)$u['id'],
+                        'label' => (string)$u['label'],
+                        'status' => (string)($st['status'] ?? $u['status']),
+                        'battery_level' => array_key_exists('battery_level', $st ?? [])
+                            ? ($st['battery_level'] === null ? null : (int)$st['battery_level'])
+                            : ($u['battery_level'] !== null ? (int)$u['battery_level'] : null),
+                        'pressure_psi' => array_key_exists('pressure_psi', $st ?? [])
+                            ? ($st['pressure_psi'] === null ? null : (int)$st['pressure_psi'])
+                            : (isset($u['pressure_psi']) && $u['pressure_psi'] !== null ? (int)$u['pressure_psi'] : null),
+                        'note' => (string)($st['note'] ?? $u['note']),
+                        // ค่าที่บันทึกล่าสุด (ใคร/เมื่อไร) — แสดงเป็นข้อมูลอ้างอิง
+                        'updated_at' => (string)($u['updated_at'] ?? ''),
+                        'updated_by' => (string)($u['updated_by'] ?? ''),
+                        // true = ค่าเป็นผลตรวจของรอบนี้ (จากร่าง/รอบที่บันทึก) ไม่ใช่สถานะค้างจากรอบก่อน
+                        'checked' => $st !== null,
+                    ];
+                }, $units),
                 'used' => $s['used'] ?? null,
                 'confirmed' => !empty($s['confirmed']),
                 'actual' => $s['actual'] ?? null,
                 'note' => (string)($s['note'] ?? ''),
+                'condition' => (string)($s['condition'] ?? ''),
+                'lot_usage' => $s['lot_usage'] ?? null,
+                'lot_counts' => $s['lot_counts'] ?? null,
             ];
         }
         return $out;
@@ -433,7 +467,11 @@ class InspectionService
         if (preg_match('/^[^0-9]*\d+(?:[.]\d+)?\s+(\S.*)$/u', (string)($item['standard'] ?? ''), $m)) {
             return trim($m[1]);
         }
-        return VehicleStockService::itemType($item) === VehicleStockService::TYPE_BOX ? 'กล่อง' : '';
+        return match (VehicleStockService::itemType($item)) {
+            VehicleStockService::TYPE_BOX => 'กล่อง',
+            VehicleStockService::TYPE_INDIVIDUAL => 'ชิ้น',
+            default => !empty($item['has_pressure']) ? 'ถัง' : 'เครื่อง',
+        };
     }
 
     /** ตัวเลขไม่ติดลบจาก client; '' / null = ไม่ได้กรอก */
@@ -456,100 +494,83 @@ class InspectionService
      * คำนวณผลของ 1 รายการจากค่าที่ผู้ตรวจกรอก (ใช้ทั้งตอนบันทึก — กติกาเดียวกับหน้าจอ)
      * @return array ผลลัพธ์ + 'result' (complete/needs_refill/anomaly/pending)
      */
-    public static function evaluateLine(array $form, array $raw): array
+    public static function evaluateLine(array $form, array $raw, array $item = []): array
     {
         $name = (string)$form['name'];
         $target = $form['target_qty'];
+        $type = $form['item_type'];
+        $note = mb_substr(trim((string)($raw['note'] ?? '')), 0, 500);
 
-        if ($form['item_type'] === VehicleStockService::TYPE_ELECTRIC) {
-            $units = [];
+        // ---------- ไม่มีวันหมดอายุ: ตรวจรายเครื่อง (สถานะ + แบต/แรงดันถ้ามี) — ไม่ตัดสต็อก ----------
+        if (in_array($type, VehicleStockService::UNIT_TYPES, true)) {
             $byId = [];
             foreach ((array)($raw['units'] ?? []) as $u) {
                 if (is_array($u) && isset($u['id'])) {
                     $byId[(string)$u['id']] = $u;
                 }
             }
-            $anyNotReady = false;
+            $flags = $item ?: ['name' => $name, 'is_battery' => $form['has_battery'], 'has_pressure' => $form['has_pressure'], 'battery_max_bars' => $form['battery_max_bars']];
+            $units = [];
+            $notReady = [];
+            $low = 0;
             foreach ($form['units'] as $unit) {
                 $input = $byId[$unit['id']] ?? null;
                 if ($input === null) {
-                    return ['result' => self::RESULT_PENDING, 'error' => $name . ': ยังไม่ได้ระบุสถานะเครื่อง ' . ($unit['label'] ?: '')];
+                    return ['result' => self::RESULT_PENDING, 'error' => trim($name . ': ยังไม่ได้ตรวจ ' . $unit['label'])];
                 }
-                $parsed = VehicleStockService::parseUnitInput($input, trim($name . ' ' . $unit['label']));
+                $parsed = VehicleStockService::parseUnitInput($input, $flags, $unit['label']);
                 $units[] = ['id' => $unit['id'], 'label' => $unit['label']] + $parsed;
-                $anyNotReady = $anyNotReady || $parsed['status'] === ItemUnit::STATUS_NOT_READY;
-            }
-            $note = trim((string)($raw['note'] ?? ''));
-            if (empty($form['units'])) {
-                if ($note === '') {
-                    return ['result' => self::RESULT_PENDING, 'error' => $name . ': ยังไม่มีเครื่องลงทะเบียนบนรถ — ระบุหมายเหตุ หรือเพิ่มเครื่องที่หน้าเติมของ'];
+                if ($parsed['status'] !== ItemUnit::STATUS_READY) {
+                    $notReady[] = trim(($unit['label'] ?: 'เครื่อง') . ': ' . $parsed['note']);
+                } elseif ($form['has_battery'] && $form['battery_low_bars'] !== null && $parsed['battery_level'] <= $form['battery_low_bars']) {
+                    $low++;
+                } elseif ($form['has_pressure'] && $form['o2_low_psi'] !== null && $parsed['pressure_psi'] < $form['o2_low_psi']) {
+                    $low++;
                 }
-                return ['result' => self::RESULT_ANOMALY, 'units' => [], 'note' => $note, 'before' => 0.0, 'used' => null, 'expected' => null, 'actual' => 0.0, 'discrepancy' => null, 'refill' => 0.0];
+            }
+            $count = (float)count($form['units']);
+            // จำนวนเครื่องน้อยกว่าที่รถต้องมี = ขาดจริง → เติม/เพิ่มเครื่อง
+            $short = $target !== null ? round(max(0.0, $target - $count), 2) : 0.0;
+            if (!$form['units'] && $short <= 0 && $note === '') {
+                return ['result' => self::RESULT_PENDING, 'error' => $name . ': ยังไม่มีเครื่องบนรถ — ระบุหมายเหตุ'];
             }
             return [
-                'result' => $anyNotReady ? self::RESULT_ANOMALY : self::RESULT_COMPLETE,
-                'units' => $units,
-                'note' => mb_substr($note, 0, 500),
-                'before' => (float)count($form['units']),
-                'used' => null,
-                'expected' => null,
-                'actual' => (float)count($form['units']),
-                'discrepancy' => null,
-                'refill' => 0.0,
+                // ไม่พร้อมใช้ = ผิดปกติ (สร้างรายการ "ตรวจสอบ/เปลี่ยน" ไม่มีจำนวนเติม) | ขาดจำนวน/แบตหรือแรงดันต่ำ = ต้องดำเนินการ
+                'result' => $notReady ? self::RESULT_ANOMALY : (($short > 0 || $low) ? self::RESULT_REFILL : self::RESULT_COMPLETE),
+                'units' => $units, 'note' => $note, 'replace' => $notReady,
+                'before' => $count, 'used' => null, 'expected' => null, 'actual' => $count, 'discrepancy' => null,
+                'refill' => $short,
             ];
         }
 
-        $note = mb_substr(trim((string)($raw['note'] ?? '')), 0, 500);
+        // ---------- กล่อง / รายชิ้น: กรอกเฉพาะจำนวนที่ใช้ไปหรือหายไป ----------
         $before = $form['before'];
-
-        // ยังไม่เคยตรวจนับ → ต้องนับจริงเพื่อตั้งยอดครั้งแรก (ไม่มี "ใช้ไป" ให้คำนวณ)
         if ($before === null) {
-            $actual = self::parseQty($raw['actual'] ?? null, $name . ': จำนวนนับได้จริง');
-            if ($actual === null) {
-                return ['result' => self::RESULT_PENDING, 'error' => $name . ': ยังไม่เคยตรวจนับ กรุณากรอกจำนวนที่นับได้จริงเพื่อตั้งยอดครั้งแรก'];
-            }
+            // ยังไม่ได้จัดขึ้นรถ — ไม่มีอะไรให้ตัด; ทั้งจำนวนมาตรฐานถือว่าขาดและส่งไปหน้าเติมของ
             return [
-                'result' => ($target !== null && $actual < $target) ? self::RESULT_REFILL : self::RESULT_COMPLETE,
-                'initial' => true, 'note' => $note,
-                'before' => null, 'used' => null, 'expected' => null, 'actual' => $actual, 'discrepancy' => null,
-                'refill' => $target !== null ? round(max(0.0, $target - $actual), 2) : 0.0,
+                'result' => ($target !== null && $target > 0) ? self::RESULT_REFILL : self::RESULT_COMPLETE,
+                'not_stocked' => true, 'note' => $note,
+                'before' => null, 'used' => null, 'expected' => null, 'actual' => null, 'discrepancy' => null,
+                'refill' => $target !== null ? round($target, 2) : 0.0,
             ];
         }
 
-        $used = self::parseQty($raw['used'] ?? 0, $name . ': จำนวนที่ใช้ไป') ?? 0.0;
+        $used = self::parseQty($raw['used'] ?? 0, $name . ': จำนวนที่ใช้ไป/หายไป') ?? 0.0;
+        if ($type === VehicleStockService::TYPE_INDIVIDUAL && floor($used) != $used) {
+            throw new ApiException($name . ': ของแบบชิ้นต้องกรอกเป็นจำนวนเต็ม', 422);
+        }
         if ($used > $before) {
-            throw new ApiException(sprintf(
-                '%s: ใช้ไป %s มากกว่ายอดบนรถ %s — ถ้านับของจริงได้ไม่ตรง ให้กรอก "นับได้จริง" พร้อมหมายเหตุแทน',
-                $name, VehicleStockService::fmt($used), VehicleStockService::fmt($before)
-            ), 422);
+            throw new ApiException(sprintf('%s: ใช้ไป/หายไป %s มากกว่าที่มีบนรถ %s — กรุณาตรวจสอบจำนวนอีกครั้ง',
+                $name, VehicleStockService::fmt($used), VehicleStockService::fmt($before)), 422);
         }
-        $expected = round($before - $used, 2);
-
-        $actual = null;
-        if (!empty($raw['confirmed'])) {
-            $actual = $expected;
-        } else {
-            $actual = self::parseQty($raw['actual'] ?? null, $name . ': จำนวนนับได้จริง');
-        }
-        if ($actual === null) {
-            return ['result' => self::RESULT_PENDING, 'error' => $name . ': ยังไม่ยืนยันผลตรวจนับ (กด "ครบถ้วน" หรือกรอกจำนวนนับได้จริง)'];
-        }
-        $discrepancy = round($actual - $expected, 2);
-        if ($discrepancy != 0.0 && $note === '') {
-            throw new ApiException(sprintf(
-                '%s: นับได้ %s ไม่ตรงกับที่ระบบคาดการณ์ %s — กรุณาระบุหมายเหตุ',
-                $name, VehicleStockService::fmt($actual), VehicleStockService::fmt($expected)
-            ), 422);
-        }
-
-        $result = $discrepancy != 0.0
-            ? self::RESULT_ANOMALY
-            : (($target !== null && $actual < $target) ? self::RESULT_REFILL : self::RESULT_COMPLETE);
-
+        $actual = round($before - $used, 2);
+        // ยอดพร้อมใช้ไม่นับของหมดอายุที่ยังอยู่บนรถ
+        $usable = round(max(0.0, $actual - (float)($form['stock']['expired'] ?? 0.0)), 2);
         return [
-            'result' => $result, 'note' => $note,
-            'before' => $before, 'used' => $used, 'expected' => $expected, 'actual' => $actual, 'discrepancy' => $discrepancy,
-            'refill' => $target !== null ? round(max(0.0, $target - $actual), 2) : 0.0,
+            'result' => ($target !== null && $usable < $target) ? self::RESULT_REFILL : self::RESULT_COMPLETE,
+            'note' => $note,
+            'before' => $before, 'used' => $used, 'expected' => $actual, 'actual' => $actual, 'discrepancy' => 0.0,
+            'refill' => $target !== null ? round(max(0.0, $target - $usable), 2) : 0.0,
         ];
     }
 
@@ -668,7 +689,7 @@ class InspectionService
                     $errors[] = $form['name'] . ': ไม่มีผลตรวจ (กรุณาโหลดหน้าใหม่)';
                     continue;
                 }
-                $eval = self::evaluateLine($form, $raw);
+                $eval = self::evaluateLine($form, $raw, $locked[$form['id']]);
                 if ($eval['result'] === self::RESULT_PENDING) {
                     $errors[] = $eval['error'];
                     continue;
@@ -679,45 +700,34 @@ class InspectionService
                 throw new ApiException('ยังตรวจไม่ครบ ' . count($errors) . ' รายการ', 422, ['errors' => array_slice($errors, 0, 20)]);
             }
 
-            // ปรับยอดบนรถ (ของสิ้นเปลืองเท่านั้น) + บันทึกสถานะเครื่องไฟฟ้า
+            // ปรับยอดบนรถ: กล่อง/รายชิ้น ตัดเฉพาะ "ใช้ไป/หายไป" แบบ FEFO (บันทึกชิ้น/ล็อตที่ถูกตัดใน ledger)
+            // ไม่มีวันหมดอายุ: บันทึกสถานะ/แบต/แรงดันรายเครื่อง แยกจากจำนวน (ไม่ตัดสต็อก)
             $adjustments = [];
             foreach ($lines as $line) {
                 $item = $line['item'];
-                if ($line['form']['item_type'] === VehicleStockService::TYPE_ELECTRIC) {
+                if (in_array($line['form']['item_type'], VehicleStockService::UNIT_TYPES, true)) {
                     foreach ($line['units'] as $u) {
                         $this->unitModel->update($u['id'], [
                             'status' => $u['status'],
                             'battery_level' => $u['battery_level'],
+                            'pressure_psi' => $u['pressure_psi'],
                             'note' => $u['note'],
                             'updated_at' => $now,
                             'updated_by' => $userName,
                         ]);
                     }
-                    $this->stock->syncItemTotal($item, $now);
-                    continue;
-                }
-                if (!empty($line['initial'])) {
-                    if ($line['actual'] > 0) {
-                        $this->stock->addLot($item, $line['actual'], null, 'ADJUST', StockMovement::TYPE_INIT,
-                            $ctx + ['reason' => 'ตั้งยอดครั้งแรกจากการตรวจนับ (ยังไม่ทราบวันหมดอายุ)']);
-                    } else {
+                    if ($line['units']) {
                         $this->stock->syncItemTotal($item, $now);
                     }
                     continue;
                 }
+                if (!empty($line['not_stocked'])) {
+                    continue;   // ยังไม่ได้จัดขึ้นรถ — ไม่มีสต็อกให้ตัด (ไปเติมที่หน้าเติมของ)
+                }
                 if ($line['used'] > 0) {
-                    $this->stock->consume($item, $line['used'], StockMovement::TYPE_USE, $ctx + ['reason' => 'ใช้ไประหว่างเวร']);
-                }
-                if ($line['discrepancy'] < 0) {
-                    $this->stock->consume($item, -$line['discrepancy'], StockMovement::TYPE_ADJUST, $ctx + ['reason' => 'นับได้น้อยกว่าที่คาด: ' . $line['note']]);
-                } elseif ($line['discrepancy'] > 0) {
-                    $this->stock->addLot($item, $line['discrepancy'], null, 'ADJUST', StockMovement::TYPE_ADJUST,
-                        $ctx + ['reason' => 'นับได้มากกว่าที่คาด: ' . $line['note']]);
-                } elseif ($line['used'] <= 0) {
-                    $this->stock->syncItemTotal($item, $now);   // ประทับเวลาตรวจนับล่าสุด
-                }
-                if ($line['discrepancy'] != 0.0) {
-                    $adjustments[] = ['item_id' => $item['id'], 'name' => $item['name'], 'expected' => $line['expected'], 'actual' => $line['actual'], 'note' => $line['note']];
+                    $this->stock->consume($item, $line['used'], StockMovement::TYPE_USE, $ctx + ['reason' => 'ใช้ไป/หายไประหว่างเวร']);
+                } else {
+                    $this->stock->syncItemTotal($item, $now);   // ประทับเวลาตรวจล่าสุด
                 }
             }
 
@@ -727,7 +737,8 @@ class InspectionService
                     self::RESULT_COMPLETE => self::STATUS_ENOUGH,
                     default => ($line['used'] ?? 0) > 0 ? self::STATUS_USED : self::STATUS_MISSING,
                 };
-                $batteries = array_column($line['units'] ?? [], 'battery_level');
+                $batteries = array_filter(array_column($line['units'] ?? [], 'battery_level'), fn($b) => $b !== null);
+                $lotDetail = null;
                 $this->inspectionItemModel->create([
                     'check_id' => $checkId,
                     'item_id' => $form['id'],
@@ -735,9 +746,11 @@ class InspectionService
                     'name' => $form['name'],
                     'standard' => $form['standard'],
                     'expiry_text' => (string)($form['expiry']['nearest'] ?? ''),
-                    'is_battery' => $form['item_type'] === VehicleStockService::TYPE_ELECTRIC ? 1 : 0,
+                    'is_battery' => $form['has_battery'] ? 1 : 0,
                     'status' => $legacy,
                     'check_status' => $line['result'],
+                    'condition_status' => $line['condition'] ?? null,
+                    'lot_detail' => $lotDetail,
                     'item_type' => $form['item_type'],
                     'detail' => self::detailText($line, $form),
                     'note' => $line['note'] ?? '',
@@ -759,12 +772,29 @@ class InspectionService
                 $this->draftModel->delete($checkId);
             }
 
-            // รายการรอเติม: เฉพาะของสิ้นเปลืองที่คงเหลือต่ำกว่าเป้าหมาย (ไม่รวมเครื่องไฟฟ้า)
+            // ส่งรายการที่ขาดไปหน้าเติมของทันที (ไม่มีขั้นขอเบิก/อนุมัติ):
+            //   refill  = จำนวนที่ขาดจริง (ทุกประเภท — รวมเครื่องที่จำนวนไม่ครบ)
+            //   replace = อุปกรณ์ไม่พร้อมใช้ที่ไม่มีจำนวนขาด → "ตรวจสอบ/เปลี่ยน" (ไม่สร้างจำนวนเติม)
             $refillLines = [];
             foreach ($lines as $line) {
-                if ($line['form']['item_type'] !== VehicleStockService::TYPE_ELECTRIC && $line['refill'] > 0) {
-                    $refillLines[] = ['item' => $line['item'], 'refill' => $line['refill'], 'actual' => $line['actual'], 'before' => $line['before']];
+                $why = !empty($line['replace']) ? 'ไม่พร้อมใช้: ' . implode(' • ', $line['replace']) : '';
+                if ($line['refill'] > 0) {
+                    // 1 บรรทัดต่ออุปกรณ์ (PK request+item) — ถ้ามีเครื่องไม่พร้อมใช้ด้วย แนบเหตุผลไว้ในบรรทัดเติม
+                    $refillLines[] = ['item' => $line['item'], 'refill' => $line['refill'], 'actual' => $line['actual'], 'before' => $line['before'],
+                        'line_type' => 'refill', 'note' => $why];
+                } elseif ($why !== '') {
+                    $refillLines[] = ['item' => $line['item'], 'refill' => 1.0, 'actual' => $line['actual'], 'before' => $line['before'],
+                        'line_type' => 'replace', 'note' => $why];
                 }
+            }
+            // แก้รอบตรวจ: คำนวณรายการรอเติมของรอบนี้ใหม่จากผลที่แก้ (ยอดที่เติมไปแล้วคงไว้ ไม่นับซ้ำ)
+            $editRequest = $mode === 'edit' ? $this->restockRequestModel->getActiveByCheck($checkId) : null;
+            if ($editRequest) {
+                $this->restockItemModel->query(
+                    "UPDATE " . $this->restockItemModel->getTable()
+                    . " SET qty_requested = IF(qty_filled = '', '0', qty_filled) WHERE request_id = ?",
+                    [(string)$editRequest['id']]
+                );
             }
             $refill = $this->createRestockRequestsFromInspection([
                 'id' => $checkId,
@@ -773,6 +803,9 @@ class InspectionService
                 'nurse_id' => (string)$draftLike['nurse_id'],
                 'nurse_name' => (string)$draftLike['nurse_name'],
             ], $refillLines, $userId, $now);
+            if ($editRequest) {
+                $this->refreshRequestStatus((string)$editRequest['id']);
+            }
 
             $issues = $this->stock->reconcile($carId);
             if ($issues) {
@@ -796,22 +829,37 @@ class InspectionService
 
     private static function detailText(array $line, array $form): string
     {
-        if ($form['item_type'] === VehicleStockService::TYPE_ELECTRIC) {
+        if (in_array($form['item_type'], VehicleStockService::UNIT_TYPES, true)) {
+            $statusText = [ItemUnit::STATUS_READY => 'พร้อมใช้', ItemUnit::STATUS_NOT_READY => 'ไม่พร้อมใช้', 'no_power' => 'เปิดไม่ติด'];
             $parts = [];
             foreach ($line['units'] ?? [] as $u) {
-                $parts[] = trim(($u['label'] ?: 'เครื่อง') . ' ' . ($u['status'] === ItemUnit::STATUS_READY ? 'พร้อมใช้' : 'ไม่พร้อมใช้') . ' แบต ' . $u['battery_level'] . '/4');
+                $reading = $u['pressure_psi'] !== null
+                    ? ' ' . $u['pressure_psi'] . ' PSI'
+                    : ($u['battery_level'] !== null ? ' แบต ' . $u['battery_level'] . '/' . $form['battery_max_bars'] : '');
+                $parts[] = trim(($u['label'] ?: 'เครื่อง') . ' ' . ($statusText[$u['status']] ?? $u['status']) . $reading);
             }
             return implode(' • ', $parts) ?: (string)($line['note'] ?? '');
         }
         $unit = $form['unit'] !== '' ? ' ' . $form['unit'] : '';
-        if (!empty($line['initial'])) {
-            return 'ตั้งยอดครั้งแรก ' . VehicleStockService::fmt((float)$line['actual']) . $unit;
+        if (!empty($line['not_stocked'])) {
+            return 'ยังไม่ได้จัดขึ้นรถ — ต้องเติม ' . VehicleStockService::fmt((float)$line['refill']) . $unit;
         }
-        $text = 'ใช้ไป ' . VehicleStockService::fmt((float)$line['used']) . ' • คงเหลือ ' . VehicleStockService::fmt((float)$line['actual']) . $unit;
-        if ($line['discrepancy'] != 0.0) {
-            $text .= ' (คาด ' . VehicleStockService::fmt((float)$line['expected']) . ')';
+        return 'ใช้ไป/หายไป ' . VehicleStockService::fmt((float)$line['used']) . ' • คงเหลือ ' . VehicleStockService::fmt((float)$line['actual']) . $unit;
+    }
+
+    /** สถานะรายการรอเติมตามยอดเติมจริง: ครบทุกบรรทัด = เสร็จ | เติมบางส่วน = เติมไม่ครบ | ยังไม่เติม = รอเติม */
+    private function refreshRequestStatus(string $requestId): void
+    {
+        $all = true;
+        $any = false;
+        foreach ($this->restockItemModel->getByRequest($requestId) as $row) {
+            $requested = (float)($row['qty_requested'] ?? 0);
+            $filled = (float)($row['qty_filled'] ?? 0);
+            $any = $any || $filled > 0;
+            $all = $all && !($requested > 0 && $filled < $requested);
         }
-        return $text;
+        $status = $all ? RestockRequest::STATUS_COMPLETED : ($any ? RestockRequest::STATUS_PARTIAL : RestockRequest::STATUS_PENDING);
+        $this->restockRequestModel->updateStatus($requestId, $status);
     }
 
     private static function fmtQty(float $qty): string
@@ -925,6 +973,8 @@ class InspectionService
                 // รอยเท้ายอดบนรถ ณ ตอนสร้างคำขอ (ข้อ 3.2 / ข้อ 6)
                 'vehicle_stock_before' => $line['before'],
                 'vehicle_stock_after' => $line['actual'],
+                'line_type' => $line['line_type'] ?? 'refill',
+                'note' => mb_substr((string)($line['note'] ?? ''), 0, 500),
             ]);
         }
 
@@ -965,12 +1015,13 @@ class InspectionService
             $row = $byItem[$itemId] ?? null;
 
             if ($row) {
-                // ขยายยอดที่ต้องเติม ไม่เคยลด และ ไม่แตะจำนวนที่เติมจริงไปแล้ว (ข้อ 6.5)
+                // ขยายยอดที่ต้องเติม ไม่แตะจำนวนที่เติมจริงไปแล้ว (แก้รอบตรวจ: ยอดถูกรีเซ็ตเป็นที่เติมแล้วก่อนเรียก)
                 $newRequested = round((float)($row['qty_requested'] ?? 0) + $add, 2);
                 $this->restockItemModel->query(
                     "UPDATE " . $this->restockItemModel->getTable()
-                    . " SET qty_requested = ?, actual_qty = ? WHERE request_id = ? AND item_id = ?",
-                    [self::fmtQty($newRequested), $line['actual'] !== null ? self::fmtQty((float)$line['actual']) : '', $requestId, $itemId]
+                    . " SET qty_requested = ?, actual_qty = ?, line_type = ?, note = ? WHERE request_id = ? AND item_id = ?",
+                    [self::fmtQty($newRequested), $line['actual'] !== null ? self::fmtQty((float)$line['actual']) : '',
+                        $line['line_type'] ?? 'refill', mb_substr((string)($line['note'] ?? ''), 0, 500), $requestId, $itemId]
                 );
             } else {
                 $item = $line['item'];
@@ -986,6 +1037,8 @@ class InspectionService
                     'qty_filled' => '',
                     'vehicle_stock_before' => $line['before'],
                     'vehicle_stock_after' => $line['actual'],
+                    'line_type' => $line['line_type'] ?? 'refill',
+                    'note' => mb_substr((string)($line['note'] ?? ''), 0, 500),
                 ]);
             }
 

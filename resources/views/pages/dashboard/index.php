@@ -11,48 +11,49 @@
 <div id="tabContentCheck" class="hidden">
   <!-- Step 1: Car & Nurse Selection View -->
   <div class="card" id="inspectionLoginPage">
-    <h2>เริ่มตรวจเช็ครถ</h2>
+    <h2>ตรวจเช็กรถ</h2>
     <form id="inspectionStartForm">
-      <div class="car-grid" aria-label="เลือกรถรีเฟอร์" id="inspectionCarGrid"></div>
+      <p class="step-label">1. เลือกรถ</p>
+      <div class="car-grid" aria-label="เลือกรถ" id="inspectionCarGrid"></div>
 
-      <label for="inspectionNurse">ชื่อผู้ตรวจ (พยาบาล)</label>
+      <label for="inspectionNurse">2. ผู้ตรวจ</label>
       <select id="inspectionNurse">
-        <option value="">-- เลือกรายชื่อพยาบาล --</option>
+        <option value="">-- เลือกผู้ตรวจ --</option>
       </select>
       <p id="inspectionNurseLock" class="mt-1 hidden text-xs font-semibold" role="status"></p>
 
       <div class="shift-row">
         <div>
-          <label for="inspectionDate">วันที่ตรวจ</label>
+          <label for="inspectionDate">3. วันที่</label>
           <input type="date" id="inspectionDate" required>
         </div>
         <div>
-          <label for="inspectionShift">เวร</label>
+          <label for="inspectionShift">4. เวร</label>
           <select id="inspectionShift" required>
             <option value="">-- เลือกเวร --</option>
-            <option value="morning">เวรเช้า (08:00 - 16:00)</option>
-            <option value="afternoon">เวรบ่าย (16:00 - 24:00)</option>
-            <option value="night">เวรดึก (00:00 - 08:00)</option>
+            <option value="morning">เช้า 08-16 น.</option>
+            <option value="afternoon">บ่าย 16-24 น.</option>
+            <option value="night">ดึก 00-08 น.</option>
           </select>
         </div>
       </div>
       <p id="inspectionShiftHint" class="shift-hint" role="status" aria-live="polite"></p>
 
-      <button type="submit" id="inspectionStartBtn">เริ่มตรวจเช็ค</button>
+      <button type="submit" id="inspectionStartBtn">เริ่มตรวจ</button>
     </form>
   </div>
 
   <!-- Step 2: The Active Inspection Form -->
   <div class="card hidden" id="inspectionCheckPage">
-    <h2>แบบฟอร์มตรวจสอบอุปกรณ์</h2>
+    <h2>ตรวจนับอุปกรณ์</h2>
     <div class="top-info" id="inspectionLoginInfo"></div>
     <p id="inspectionModeNote" class="mode-note hidden" role="status"></p>
     <details class="check-help">
       <summary>วิธีตรวจ</summary>
       <ol>
-        <li>กรอก <b>ใช้ไป</b> ในเวรนี้ (ไม่ได้ใช้ = 0) ระบบคำนวณ <b>คงเหลือที่ควรมี</b> ให้</li>
-        <li>นับของจริงแล้วกด <b>✓ ครบถ้วน</b> ถ้าตรง — ถ้าไม่ตรงให้กรอก <b>นับได้จริง</b> พร้อมหมายเหตุ (= พบความผิดปกติ)</li>
-        <li>เครื่องใช้ไฟฟ้า: เลือก พร้อม/ไม่พร้อมใช้งาน และแบต 1-4 ขีด ทีละเครื่อง (ไม่พร้อมใช้ต้องระบุสาเหตุ)</li>
+        <li>ใส่ <b>ใช้ไป</b> (ไม่ได้ใช้ = 0)</li>
+        <li>นับของ ถ้าตรงกด <b>✓ ครบ</b> ถ้าไม่ตรงกด <b>✗ ไม่ตรง</b></li>
+        <li>เครื่อง/ถัง: เลือกสถานะ แบต หรือแรงดัน</li>
       </ol>
     </details>
 
@@ -65,20 +66,20 @@
       <div class="filter-chips" role="group" aria-label="กรองรายการตรวจ">
         <button type="button" class="chip-btn on" id="inspectionChipAll" onclick="setInspectionFilter('all')">ทั้งหมด <b id="inspectionCntAll"></b></button>
         <button type="button" class="chip-btn" id="inspectionChipPending" onclick="setInspectionFilter('pending')">ยังไม่ตรวจ <b id="inspectionCntPending"></b></button>
-        <button type="button" class="chip-btn" id="inspectionChipAttn" onclick="setInspectionFilter('attn')">ต้องเติม/ผิดปกติ <b id="inspectionCntAttn"></b></button>
+        <button type="button" class="chip-btn" id="inspectionChipAttn" onclick="setInspectionFilter('attn')">ขาด/ผิดปกติ <b id="inspectionCntAttn"></b></button>
       </div>
     </div>
 
     <div class="btn-row">
-      <button type="button" onclick="checkAllInspection()" title="ยืนยันเฉพาะรายการที่ยังไม่ตรวจ ว่าใช้ไป 0 และนับได้ครบตามยอด">✅ ยืนยันครบถ้วนรายการที่เหลือ (ใช้ไป 0)</button>
-      <button type="button" class="gray" onclick="cancelInspection()">ยกเลิก</button>
+      <button type="button" onclick="checkAllInspection()">✅ ที่เหลือ ไม่ได้ใช้</button>
+      <button type="button" class="gray" onclick="cancelInspection()">← กลับ</button>
     </div>
 
     <div id="inspectionItemTable" class="list"></div>
 
     <div class="save-bar">
       <p id="inspectionSaveHint" class="save-hint"></p>
-      <button id="inspectionSubmitBtn" type="button" class="secondary" onclick="submitInspection()">💾 บันทึกผลตรวจ</button>
+      <button id="inspectionSubmitBtn" type="button" class="secondary" onclick="submitInspection()">💾 บันทึก</button>
     </div>
   </div>
 </div>
@@ -86,27 +87,28 @@
 <!-- Restock Tab -->
 <div id="tabContentRestock" class="hidden">
   <div class="card">
-    <h2>เติมอุปกรณ์เข้ารถ</h2>
-    <p class="text-sm text-slate-500">เติมเข้ารถที่เลือกโดยตรง (ไม่มีคลังกลาง) — ของสิ้นเปลืองต้องระบุวันหมดอายุทุก Lot, เติมหลายวันหมดอายุได้ในครั้งเดียว</p>
+    <h2>เติมของ</h2>
+    <p class="step-label">เลือกรถ</p>
     <div class="car-grid" aria-label="เลือกรถที่จะเติมของ" id="refillCarGrid"></div>
     <div id="refillSheet" class="hidden">
       <div class="refill-head" id="refillHead"></div>
       <div class="filter-chips" role="group" aria-label="กรองรายการ">
         <button type="button" class="chip-btn on" id="refillFilterNeed" onclick="setRefillFilter('need')">ต้องเติม <b id="refillCntNeed"></b></button>
         <button type="button" class="chip-btn" id="refillFilterAll" onclick="setRefillFilter('all')">ทั้งหมด <b id="refillCntAll"></b></button>
-        <button type="button" class="chip-btn" id="refillFilterExp" onclick="setRefillFilter('expiry')">หมดอายุ/ใกล้หมด <b id="refillCntExp"></b></button>
+        <button type="button" class="chip-btn" id="refillFilterExp" onclick="setRefillFilter('expiry')">หมดอายุ <b id="refillCntExp"></b></button>
       </div>
       <div id="refillItems" class="list"></div>
+      <label for="refillNote">หมายเหตุ (ถ้ามี)</label>
+      <input type="text" id="refillNote" maxlength="200">
       <div class="save-bar">
-        <input type="text" id="refillNote" maxlength="200" placeholder="หมายเหตุการเติม (ถ้ามี)" aria-label="หมายเหตุการเติม">
         <p id="refillSummary" class="save-hint" role="status" aria-live="polite"></p>
-        <button id="refillSubmitBtn" type="button" class="secondary" onclick="submitRefill()">💾 บันทึกการเติม</button>
+        <button id="refillSubmitBtn" type="button" class="secondary" onclick="submitRefill()">💾 บันทึก</button>
       </div>
     </div>
   </div>
 
   <div class="card">
-    <h3>รายการรอเติม (สร้างจากผลตรวจเช็ค)</h3>
+    <h3>รายการรอเติม</h3>
     <div class="filter-chips" role="group" aria-label="กรองสถานะ" style="margin-bottom: 12px;">
       <button type="button" class="chip-btn on" id="restockFilterOpen" onclick="setRestockFilter('open')">ยังไม่ครบ</button>
       <button type="button" class="chip-btn" id="restockFilterCompleted" onclick="setRestockFilter('COMPLETED')">เติมครบ</button>
@@ -168,9 +170,9 @@
           <div>
             <label for="stockItemType">ประเภทอุปกรณ์</label>
             <select id="stockItemType">
-              <option value="piece">แบบชิ้น — แต่ละชิ้นวันหมดอายุอาจต่างกัน</option>
-              <option value="box">แบบกล่อง — ทั้งกล่อง/Lot วันหมดอายุเดียวกัน</option>
-              <option value="electric">เครื่องใช้ไฟฟ้า — สถานะ/แบตรายเครื่อง</option>
+              <option value="individual">รายชิ้น — แต่ละชิ้นมีวันหมดอายุของตัวเอง</option>
+              <option value="box">กล่อง/ล็อต — ทั้งกล่องวันหมดอายุเดียวกัน</option>
+              <option value="non_expiring">ไม่มีวันหมดอายุ — รายเครื่อง สถานะ/แบต/แรงดัน</option>
             </select>
           </div>
           <button type="submit">เพิ่มอุปกรณ์</button>
@@ -217,8 +219,8 @@
   <div class="card">
     <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
       <div>
-        <h2>จัดการพยาบาลเวร Refer</h2>
-        <p>ทะเบียนนี้จัดเก็บในฐานข้อมูลของระบบ เพิ่มหรือแก้ไขได้โดยไม่ต้องแก้โค้ด</p>
+        <h2>จัดการผู้ใช้</h2>
+        <p>พยาบาลเวร Refer และบัญชีเข้าใช้งานระบบทั้งหมดในหน้าเดียว — เพิ่ม/แก้ไขพยาบาล บัญชี บทบาท และสถานะ</p>
       </div>
       <button type="button" id="wardManagerBtn" class="m-0 inline-flex w-auto min-h-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-200 hover:bg-slate-100 focus:outline-none focus:ring-4 focus:ring-slate-200">
         🏥 จัดการวอร์ด <span id="wardManagerCount" class="rounded-full bg-slate-100 px-1.5 text-[11px] font-bold text-slate-600"></span>
@@ -351,38 +353,46 @@
     </div>
     
     <div class="search-box flex flex-wrap items-center gap-2">
-      <input type="text" id="nurseSearch" placeholder="🔍 ค้นหาด้วย ชื่อ, สกุล หรือหน่วยงาน..." class="min-w-0 flex-1">
+      <input type="text" id="nurseSearch" placeholder="🔍 ค้นหาด้วย ชื่อ, สกุล, ชื่อบัญชี หรือหน่วยงาน..." class="min-w-0 flex-1">
       <select id="nurseDeptFilter" aria-label="กรองรายชื่อตามวอร์ด" class="w-auto min-w-0 shrink-0 whitespace-nowrap"></select>
+      <select id="userRoleFilter" aria-label="กรองตามประเภท/บทบาท" class="w-auto min-w-0 shrink-0 whitespace-nowrap">
+        <option value="">ทุกประเภท</option>
+        <option value="nurse">พยาบาลทั้งหมด</option>
+        <option value="nurse-noaccount">พยาบาลที่ยังไม่มีบัญชี</option>
+        <option value="admin">ผู้ดูแลระบบ (Admin)</option>
+        <option value="staff">เจ้าหน้าที่ (Staff)</option>
+        <option value="other">บัญชีที่ไม่ใช่พยาบาล</option>
+      </select>
+      <select id="userStatusFilter" aria-label="กรองตามสถานะ" class="w-auto min-w-0 shrink-0 whitespace-nowrap">
+        <option value="">ทุกสถานะ</option>
+        <option value="active">ใช้งาน / ปฏิบัติงาน</option>
+        <option value="inactive">ปิดใช้งาน / พักใช้งาน</option>
+      </select>
     </div>
     <p id="nurseFilterNote" class="hidden mb-2 text-xs font-semibold text-teal-700"></p>
-    
-    <div id="nurseDirectoryTable" class="list"></div>
-  </div>
-</div>
 
-<!-- Users Tab (Admin only) -->
-<div id="tabContentUsers" class="hidden">
-  <div class="card">
-    <h2>จัดการผู้ใช้ระบบ</h2>
-    <p>สร้างบัญชีผู้ใช้สำหรับเข้าสู่ระบบ กำหนดบทบาท Admin หรือ Staff</p>
-    
-    <form id="userForm">
-      <h3 id="userFormTitle">เพิ่มผู้ใช้ใหม่</h3>
-      <div class="editor" id="userEditor">
-        <div><label for="uUsername">ชื่อผู้ใช้ (Username)</label><input id="uUsername" placeholder="เช่น staff01"></div>
-        <div><label for="uPassword">รหัสผ่าน</label><input id="uPassword" type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)"></div>
-        <div><label for="uFullName">ชื่อ–นามสกุล</label><input id="uFullName" placeholder="ชื่อ–นามสกุล"></div>
-        <div><label for="uRole">บทบาท</label><select id="uRole"><option value="staff">Staff (เจ้าหน้าที่ปฏิบัติงาน)</option><option value="admin">Admin (ผู้ดูแลระบบ)</option></select></div>
-        <div><label for="uNurse">พยาบาลที่เชื่อมโยง (ถ้ามี)</label><select id="uNurse"><option value="">-- ไม่เชื่อมโยง --</option></select></div>
-        <button type="submit">เพิ่มผู้ใช้</button>
-        <button type="button" class="gray">ล้างช่องกรอก</button>
-      </div>
-    </form>
-    
-    <div class="search-box">
-      <input type="text" id="userSearch" placeholder="🔍 ค้นหาผู้ใช้...">
-    </div>
-    
+    <h3 class="user-section-title">👩‍⚕️ พยาบาลและบัญชีเข้าใช้งาน</h3>
+    <div id="nurseDirectoryTable" class="list"></div>
+
+    <h3 class="user-section-title">👥 บัญชีผู้ใช้อื่น (ไม่ได้ผูกกับรายชื่อพยาบาล)</h3>
+    <p class="text-xs text-slate-500">เช่น ผู้ดูแลระบบ หรือเจ้าหน้าที่ที่ไม่อยู่ในทะเบียนพยาบาล — บัญชีของพยาบาลแสดงในการ์ดของพยาบาลด้านบน</p>
     <div id="userDirectoryTable" class="list"></div>
+
+    <details id="userFormWrap" class="user-form-wrap">
+      <summary>+ เพิ่ม / แก้ไขบัญชีผู้ใช้ที่ไม่ใช่พยาบาล</summary>
+      <form id="userForm">
+        <h3 id="userFormTitle">เพิ่มผู้ใช้ใหม่</h3>
+        <div class="editor" id="userEditor">
+          <div><label for="uUsername">ชื่อผู้ใช้ (Username)</label><input id="uUsername" placeholder="เช่น staff01" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+          <div><label for="uPassword">รหัสผ่าน</label><input id="uPassword" type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)" autocomplete="new-password"></div>
+          <div><label for="uFullName">ชื่อ–นามสกุล</label><input id="uFullName" placeholder="ชื่อ–นามสกุล"></div>
+          <div><label for="uRole">บทบาท</label><select id="uRole"><option value="staff">Staff (เจ้าหน้าที่ปฏิบัติงาน)</option><option value="admin">Admin (ผู้ดูแลระบบ)</option></select></div>
+          <div><label for="uNurse">ผูกกับรายชื่อพยาบาล (ถ้ามี)</label><select id="uNurse"><option value="">-- ไม่ผูก --</option></select></div>
+          <button type="submit">เพิ่มผู้ใช้</button>
+          <button type="button" class="gray">ล้างช่องกรอก</button>
+        </div>
+        <p class="text-xs text-slate-500">บัญชีของพยาบาลสร้าง/แก้ได้ในฟอร์มพยาบาลด้านบน (ส่วน "บัญชีเข้าใช้งานระบบ") — พยาบาล 1 คนมีได้ 1 บัญชี</p>
+      </form>
+    </details>
   </div>
 </div>

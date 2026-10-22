@@ -2,16 +2,16 @@
 // PAGE: INSPECTION (ตรวจเช็คอุปกรณ์ประจำรถตามเวร)
 // ========================================
 // กติกาเดียวกับ InspectionService::evaluateLine ฝั่ง server (server ตรวจซ้ำทุกครั้ง):
-//  ของสิ้นเปลือง: ใช้ไป (0 ได้) → คงเหลือที่ควรมี = ก่อนตรวจ − ใช้ไป → ✓ ครบถ้วน หรือ กรอกนับได้จริง (+หมายเหตุ)
-//  เครื่องไฟฟ้า: พร้อม/ไม่พร้อมใช้ + แบต 1-4 ขีด รายเครื่อง (ไม่ตัดสต๊อค)
+//  กล่อง/รายชิ้น: กรอกเฉพาะ "ใช้ไป/หายไป" (ไม่กรอกวันหมดอายุ) → ระบบตัดแบบ FEFO → ขาดจากมาตรฐาน = ส่งไปหน้าเติมของ
+//  ไม่มีวันหมดอายุ: พร้อม/ไม่พร้อมใช้ รายเครื่อง + แบต (ถ้ามีแบต) / แรงดัน PSI (ถ้าวัดแรงดัน) — ไม่ตัดสต็อก
 
 const SHIFT_LABEL = { morning: 'เวรเช้า', afternoon: 'เวรบ่าย', night: 'เวรดึก' };
-const ITEM_TYPE_LABEL = { box: '📦 กล่อง', piece: '🧩 ชิ้น', electric: '🔌 ไฟฟ้า' };
+const ITEM_TYPE_LABEL = { box: '📦 กล่อง', individual: '🧩 รายชิ้น', non_expiring: '🩺 ไม่มีวันหมดอายุ' };
 const RESULT_LABEL = {
-  pending: 'ยังไม่ได้ตรวจสอบ',
-  complete: 'ตรวจสอบแล้ว ครบถ้วน',
-  needs_refill: 'ตรวจสอบแล้ว ต้องเติม',
-  anomaly: 'ตรวจสอบแล้ว พบความผิดปกติ',
+  pending: '⏳ ยังไม่ตรวจ',
+  complete: '✅ ตรวจแล้ว',
+  needs_refill: '⚠️ ของขาด',
+  anomaly: '⛔ ผิดปกติ',
 };
 const EXPIRY_LABEL = { expired: 'หมดอายุแล้ว', soon: 'ใกล้หมดอายุ', ok: '', unknown: 'ไม่ทราบวันหมดอายุ' };
 
@@ -160,18 +160,18 @@ class InspectionPage {
     const shift = document.getElementById('inspectionShift')?.value;
     if (!this.selectedCarId || !shift) {
       hint.textContent = '';
-      if (btn) btn.textContent = 'เริ่มตรวจเช็ค';
+      if (btn) btn.textContent = 'เริ่มตรวจ';
       return;
     }
     const done = this.doneFor(this.selectedCarId)[shift];
     if (done) {
-      hint.textContent = `ℹ️ ${SHIFT_LABEL[shift]}ของรถคันนี้ตรวจแล้วโดย ${done.nurse_name} — กดเพื่อเปิดรายการเดิมมาแก้ไข (ไม่สร้างรายการซ้ำ)`;
+      hint.textContent = `✅ ${SHIFT_LABEL[shift]}ตรวจแล้ว (${done.nurse_name}) — กดเพื่อแก้ไข`;
       hint.className = 'shift-hint is-done';
-      if (btn) btn.textContent = '✏️ เปิดแก้ไขรายการเดิม';
+      if (btn) btn.textContent = '✏️ แก้ไขรายการเดิม';
     } else {
-      hint.textContent = `${SHIFT_LABEL[shift]}ของรถคันนี้ยังไม่ได้ตรวจ`;
+      hint.textContent = `${SHIFT_LABEL[shift]} ยังไม่ตรวจ`;
       hint.className = 'shift-hint';
-      if (btn) btn.textContent = 'เริ่มตรวจเช็ค';
+      if (btn) btn.textContent = 'เริ่มตรวจ';
     }
   }
 
@@ -241,7 +241,7 @@ class InspectionPage {
     const shift = document.getElementById('inspectionShift')?.value;
     const date = document.getElementById('inspectionDate')?.value;
     if (!this.selectedCarId || !nurseId || !shift || !date) {
-      window.toast.warning('กรุณาเลือกรถ ผู้ตรวจ วันที่ และเวรให้ครบ');
+      window.toast.warning('เลือกรถ ผู้ตรวจ วันที่ และเวร');
       return;
     }
 
@@ -303,9 +303,8 @@ class InspectionPage {
     const units = (item.units || []).map(u => ({ ...u }));
     return {
       ...item,
-      used: item.used === null || item.used === undefined ? '' : String(item.used),
-      actual: item.actual === null || item.actual === undefined ? '' : String(item.actual),
-      confirmed: !!item.confirmed,
+      // ใช้ไป/หายไป: '' = ยังไม่ได้ตรวจรายการนี้ (กด "ไม่ได้ใช้" = 0)
+      used: item.used === null || item.used === undefined || (!item.confirmed && Number(item.used) === 0) ? '' : String(item.used),
       note: item.note || '',
       units,
       // เครื่องที่ยังไม่ได้ตรวจในรอบนี้ = ยังไม่ตรวจ (ค่าที่โหลดมาเป็นสถานะล่าสุด ไม่ใช่ผลรอบนี้)
@@ -313,7 +312,7 @@ class InspectionPage {
     };
   }
 
-  // ---------------- คำนวณผลรายรายการ (ตรงกับ server) ----------------
+  // ---------------- คำนวณผลรายรายการ (ตรงกับ InspectionService::evaluateLine) ----------------
 
   num(value) {
     if (value === '' || value === null || value === undefined) return null;
@@ -326,56 +325,80 @@ class InspectionPage {
     return String(Math.round(Number(value) * 100) / 100);
   }
 
+  isUnitType(item) {
+    return item.item_type === 'non_expiring';
+  }
+
+  notStocked(item) {
+    return !this.isUnitType(item) && (item.before === null || item.before === undefined);
+  }
+
+  unitWord(item) {
+    return item.has_pressure ? 'ถัง' : 'เครื่อง';
+  }
+
   evaluate(item) {
     const target = item.target_qty === null || item.target_qty === undefined ? null : Number(item.target_qty);
+    const unit = item.unit ? ' ' + item.unit : '';
 
-    if (item.item_type === 'electric') {
+    if (this.isUnitType(item)) {
+      const word = this.unitWord(item);
+      const short = target !== null ? Math.max(0, target - item.units.length) : 0;
       if (!item.units.length) {
+        if (short > 0) return { result: 'needs_refill', short, text: `ยังไม่มี${word}บนรถ — ต้องเติม ${this.fmt(short)} ${word}` };
         return item.note.trim()
-          ? { result: 'anomaly', text: 'ไม่มีเครื่องลงทะเบียนบนรถ' }
-          : { result: 'pending', text: 'ยังไม่มีเครื่องลงทะเบียน — ระบุหมายเหตุ หรือเพิ่มเครื่องที่หน้าเติมอุปกรณ์' };
+          ? { result: 'complete', text: `ไม่มี${word}บนรถ` }
+          : { result: 'pending', text: `ยังไม่มี${word}บนรถ — ระบุหมายเหตุ` };
       }
+      const notReady = [];
+      let low = 0;
       for (const u of item.units) {
-        if (!item.unitTouched[u.id]) return { result: 'pending', text: `ยังไม่ได้ตรวจ ${u.label || 'เครื่อง'}` };
-        if (!(u.battery_level >= 1 && u.battery_level <= 4)) return { result: 'pending', text: 'เลือกระดับแบต 1-4 ขีด' };
-        if (u.status === 'not_ready' && !String(u.note || '').trim()) return { result: 'error', text: 'เครื่องไม่พร้อมใช้งาน ต้องระบุสาเหตุ' };
+        const name = u.label || word;
+        if (!item.unitTouched[u.id] || !['ready', 'not_ready', 'no_power'].includes(u.status)) {
+          return { result: 'pending', text: `ยังไม่ได้ตรวจ ${name}` };
+        }
+        if (item.has_battery && u.status !== 'no_power' && !(u.battery_level >= 0 && u.battery_level <= item.battery_max_bars)) {
+          return { result: 'pending', text: `เลือกระดับแบตของ ${name} (0-${item.battery_max_bars} ขีด)` };
+        }
+        if (item.has_pressure && (u.pressure_psi === '' || u.pressure_psi === null || u.pressure_psi === undefined || !(Number(u.pressure_psi) >= 0))) {
+          return { result: 'pending', text: `กรอกแรงดัน (PSI) ของ ${name}` };
+        }
+        if (u.status !== 'ready') {
+          if (!String(u.note || '').trim()) return { result: 'error', text: `${name}: ไม่พร้อมใช้ ต้องระบุสาเหตุ` };
+          notReady.push(name);
+        } else if (item.has_battery && item.battery_low_bars !== null && u.battery_level <= item.battery_low_bars) {
+          low++;
+        } else if (item.has_pressure && item.o2_low_psi !== null && Number(u.pressure_psi) < item.o2_low_psi) {
+          low++;
+        }
       }
-      const notReady = item.units.filter(u => u.status === 'not_ready').length;
-      const low = item.units.filter(u => u.battery_level <= 1).length;
-      return notReady
-        ? { result: 'anomaly', text: `ไม่พร้อมใช้งาน ${notReady} เครื่อง` }
-        : { result: 'complete', text: low ? `พร้อมใช้งาน (แบตต่ำ ${low} เครื่อง)` : 'พร้อมใช้งานทุกเครื่อง' };
+      if (notReady.length) return { result: 'anomaly', short, notReady, text: `ไม่พร้อมใช้ ${notReady.length} ${word} → ตรวจสอบ/เปลี่ยน` };
+      if (short > 0) return { result: 'needs_refill', short, text: `${word}ไม่ครบ ขาด ${this.fmt(short)}` };
+      if (low) return { result: 'needs_refill', low, text: item.has_pressure ? `แรงดันต่ำ ${low} ถัง` : `แบตเตอรี่ต่ำ ${low} เครื่อง` };
+      return { result: 'complete', text: 'พร้อมใช้' };
     }
 
-    // ยังไม่เคยตรวจนับ → ตั้งยอดครั้งแรกด้วยจำนวนนับจริง
-    if (item.before === null || item.before === undefined) {
-      const actual = this.num(item.actual);
-      if (actual === null) return { result: 'pending', text: 'ยังไม่เคยตรวจนับ — กรอกจำนวนที่นับได้จริง' };
-      if (Number.isNaN(actual) || actual < 0) return { result: 'error', text: 'จำนวนต้องเป็นตัวเลขไม่ติดลบ' };
-      return { result: target !== null && actual < target ? 'needs_refill' : 'complete', actual, text: 'ตั้งยอดครั้งแรก' };
+    // ยังไม่ได้จัดขึ้นรถ — ไม่มีอะไรให้ตัด ส่งไปเติมทั้งจำนวนมาตรฐาน
+    if (this.notStocked(item)) {
+      return target !== null && target > 0
+        ? { result: 'needs_refill', short: target, text: `ยังไม่ได้จัดขึ้นรถ — ต้องเติม ${this.fmt(target)}${unit}` }
+        : { result: 'complete', text: 'ยังไม่ได้จัดขึ้นรถ' };
     }
 
     const before = Number(item.before);
-    const used = item.used === '' ? 0 : this.num(item.used);
-    if (Number.isNaN(used) || used < 0) return { result: 'error', text: 'ใช้ไปต้องเป็นตัวเลขไม่ติดลบ' };
-    if (used > before) return { result: 'error', text: `ใช้ไปมากกว่ายอดบนรถ (${this.fmt(before)}) — ถ้านับได้ไม่ตรงให้กรอก "นับได้จริง" แทน` };
-    const expected = Math.round((before - used) * 100) / 100;
-
-    let actual = null;
-    if (item.confirmed) actual = expected;
-    else if (item.actual !== '') actual = this.num(item.actual);
-    if (actual === null) return { result: 'pending', expected, used, text: 'กด ✓ ครบถ้วน หรือกรอกจำนวนนับได้จริง' };
-    if (Number.isNaN(actual) || actual < 0) return { result: 'error', expected, used, text: 'จำนวนนับได้จริงต้องเป็นตัวเลขไม่ติดลบ' };
-
-    const diff = Math.round((actual - expected) * 100) / 100;
-    if (diff !== 0) {
-      if (!item.note.trim()) return { result: 'error', expected, used, actual, diff, text: `นับได้ ${this.fmt(actual)} ไม่ตรงกับที่คาด ${this.fmt(expected)} — ต้องระบุหมายเหตุ` };
-      return { result: 'anomaly', expected, used, actual, diff, text: `คลาดเคลื่อน ${diff > 0 ? '+' : ''}${this.fmt(diff)}` };
+    if (item.used === '') return { result: 'pending', text: 'กรอกจำนวนที่ใช้ไป/หายไป หรือกด "ไม่ได้ใช้"' };
+    const used = this.num(item.used);
+    if (Number.isNaN(used) || used < 0) return { result: 'error', text: 'ต้องเป็นตัวเลขไม่ติดลบ' };
+    if (item.item_type === 'individual' && !Number.isInteger(used)) return { result: 'error', text: 'ของแบบชิ้นต้องเป็นจำนวนเต็ม' };
+    if (used > before) return { result: 'error', text: `ใช้ไป/หายไปมากกว่าที่มีบนรถ (${this.fmt(before)}${unit})` };
+    const left = Math.round((before - used) * 100) / 100;
+    const expiredLeft = Number((item.stock && item.stock.expired) || 0);
+    const usable = Math.max(0, left - expiredLeft);
+    if (target !== null && usable < target) {
+      const short = Math.round((target - usable) * 100) / 100;
+      return { result: 'needs_refill', used, left, short, text: `คงเหลือ ${this.fmt(left)} • ต้องเติม ${this.fmt(short)}${unit}${expiredLeft ? ` (หมดอายุ ${this.fmt(expiredLeft)})` : ''}` };
     }
-    if (target !== null && actual < target) {
-      return { result: 'needs_refill', expected, used, actual, diff, text: `ต้องเติม ${this.fmt(target - actual)}` };
-    }
-    return { result: 'complete', expected, used, actual, diff, text: used > 0 ? `ใช้ไป ${this.fmt(used)} ยังครบตามเกณฑ์` : 'ครบตามเกณฑ์' };
+    return { result: 'complete', used, left, text: `คงเหลือ ${this.fmt(left)}${unit}` };
   }
 
   // ---------------- แสดงผล ----------------
@@ -394,83 +417,95 @@ class InspectionPage {
     this.updateProgress();
   }
 
+  typeBadge(item) {
+    if (item.item_type === 'non_expiring') {
+      return item.has_pressure ? '🫧 ไม่มีวันหมดอายุ · PSI' : (item.has_battery ? '🔋 ไม่มีวันหมดอายุ · แบต' : '🩺 ไม่มีวันหมดอายุ');
+    }
+    return ITEM_TYPE_LABEL[item.item_type] || '';
+  }
+
   renderCard(item, index) {
     const ev = this.evaluate(item);
     const unit = item.unit ? ' ' + UI.escape(item.unit) : '';
+    const std = item.target_qty === null ? UI.escape(item.standard || '-') : this.fmt(item.target_qty) + unit;
+    const onHand = this.isUnitType(item)
+      ? `${item.units.length} ${this.unitWord(item)}`
+      : (this.notStocked(item) ? 'ยังไม่ได้จัดขึ้นรถ' : this.fmt(item.before) + unit);
     const head = `
       <div class="check-card-head">
         <div>
           <strong>${UI.escape(item.name)}</strong>
-          <span class="type-badge type-${UI.escape(item.item_type)}">${ITEM_TYPE_LABEL[item.item_type] || ''}</span>
-          <div class="check-sub">เป้าหมาย ${item.target_qty === null ? UI.escape(item.standard || '-') : this.fmt(item.target_qty) + unit}</div>
+          <span class="type-badge type-${UI.escape(item.item_type)}">${this.typeBadge(item)}</span>
         </div>
-        <span class="result-chip result-${ev.result}" data-role="chip">${RESULT_LABEL[ev.result] || '⚠️ กรอกไม่ถูกต้อง'}</span>
-      </div>`;
-    const body = item.item_type === 'electric' ? this.renderElectric(item, index) : this.renderConsumable(item, index, ev, unit);
+        <span class="result-chip result-${ev.result}" data-role="chip">${RESULT_LABEL[ev.result] || '⚠️ แก้ไข'}</span>
+      </div>
+      <p class="qty-big">มาตรฐาน <b>${std}</b> · บนรถ <b>${onHand}</b></p>`;
+    const body = this.isUnitType(item) ? this.renderUnits(item) : this.renderCounted(item, index);
     return head + body + `<p class="check-msg msg-${ev.result}" data-role="msg">${UI.escape(ev.text || '')}</p>`;
   }
 
-  renderLots(item) {
-    if (!item.lots || !item.lots.length) {
-      return item.before ? '<div class="lot-list"><span class="lot lot-unknown">ไม่มีข้อมูล Lot</span></div>' : '';
-    }
-    return '<div class="lot-list" aria-label="วันหมดอายุแต่ละ Lot">' + item.lots.map(lot => `
-      <span class="lot lot-${UI.escape(lot.state)}">
-        ${lot.expiry_date ? 'หมดอายุ ' + UI.escape(UI.formatDateThai(lot.expiry_date)) : 'ไม่ทราบวันหมดอายุ'}
-        · ${this.fmt(lot.qty)}${item.unit ? ' ' + UI.escape(item.unit) : ''}
-        ${EXPIRY_LABEL[lot.state] && lot.expiry_date ? `<b>${EXPIRY_LABEL[lot.state]}</b>` : ''}
-      </span>`).join('') + '</div>';
+  // คำเตือนเรื่องความปลอดภัย (หมดอายุ/ใกล้หมดอายุ) แสดงบนการ์ดเสมอ — ผู้ตรวจไม่ต้องกรอกวันหมดอายุ
+  stockSummary(item) {
+    const s = item.stock || {};
+    const parts = [];
+    if (Number(s.expired) > 0) parts.push(`<span class="txt-bad">⛔ หมดอายุแล้ว ${this.fmt(s.expired)}</span>`);
+    const soon = (item.lots || []).filter(l => l.state === 'soon');
+    if (soon.length) parts.push(`<span class="txt-warn">⚠️ ใกล้หมดอายุ ${this.fmt(soon.reduce((n, l) => n + Number(l.qty), 0))} (${UI.escape(UI.formatDateThai(soon[0].expiry_date))})</span>`);
+    return parts.length ? `<div class="qty-line">${parts.join(' ')}</div>` : '';
   }
 
-  renderConsumable(item, index, ev, unit) {
-    if (item.before === null || item.before === undefined) {
-      return `
-        ${this.renderLots(item)}
-        <div class="check-grid">
-          <label>นับได้จริง (ตั้งยอดครั้งแรก)
-            <input type="number" min="0" step="any" inputmode="decimal" data-field="actual" value="${UI.escape(item.actual)}" placeholder="จำนวน">
-          </label>
-          <label>หมายเหตุ <input type="text" maxlength="200" data-field="note" value="${UI.escape(item.note)}"></label>
-        </div>`;
+  renderCounted(item, index) {
+    const id = (f) => `chk-${index}-${f}`;
+    if (this.notStocked(item)) {
+      return '<p class="text-sm text-amber-700">ยังไม่มีของนี้บนรถ — จัดขึ้นรถที่ “เติมของ” (ไม่ต้องกรอก)</p>';
     }
-    const mismatchOpen = !item.confirmed && (item.actual !== '' || item.note !== '');
     return `
-      <div class="qty-line">ก่อนตรวจ <b>${this.fmt(item.before)}</b>${unit}</div>
-      ${this.renderLots(item)}
+      ${this.stockSummary(item)}
       <div class="check-grid">
-        <label>ใช้ไปในเวรนี้
-          <input type="number" min="0" step="any" inputmode="decimal" data-field="used" value="${UI.escape(item.used)}" placeholder="0">
-        </label>
-        <div class="expected-box">คงเหลือที่ควรมี <b data-role="expected">${this.fmt(ev.expected)}</b>${unit}</div>
+        <div>
+          <label for="${id('used')}">ใช้ไป / หายไป</label>
+          ${UI.stepper(`id="${id('used')}" min="0" max="${UI.escape(String(item.before))}" data-field="used" value="${UI.escape(item.used)}" placeholder="0"`, 'ใช้ไปหรือหายไป')}
+        </div>
+        <button type="button" class="confirm-btn ${item.used !== '' && Number(item.used) === 0 ? 'on' : ''}" data-action="none-used"
+          aria-pressed="${item.used !== '' && Number(item.used) === 0}">✓ ไม่ได้ใช้</button>
       </div>
-      <div class="confirm-row">
-        <button type="button" class="confirm-btn ${item.confirmed ? 'on' : ''}" data-action="confirm" aria-pressed="${item.confirmed}">✓ ครบถ้วน (นับได้ตรง)</button>
-        <button type="button" class="mismatch-btn ${mismatchOpen ? 'on' : ''}" data-action="mismatch">นับได้ไม่ตรง</button>
-      </div>
-      <div class="mismatch-box ${mismatchOpen ? '' : 'hidden'}" data-role="mismatch">
-        <label>นับได้จริง <input type="number" min="0" step="any" inputmode="decimal" data-field="actual" value="${UI.escape(item.actual)}"></label>
-        <label>หมายเหตุ (จำเป็นเมื่อไม่ตรง) <input type="text" maxlength="200" data-field="note" value="${UI.escape(item.note)}" placeholder="เช่น ชำรุดทิ้ง / หาไม่พบ"></label>
-      </div>`;
+      <label for="${id('note')}">หมายเหตุ</label>
+      <input id="${id('note')}" type="text" maxlength="200" data-field="note" value="${UI.escape(item.note.trim())}">`;
   }
 
-  renderElectric(item, index) {
+  renderUnits(item) {
+    const word = this.unitWord(item);
     if (!item.units.length) {
-      return `<p class="text-sm text-amber-700">ยังไม่มีเครื่องลงทะเบียนบนรถ — เพิ่มที่เมนู “เติมอุปกรณ์”</p>
-        <label>หมายเหตุ <input type="text" maxlength="200" data-field="note" value="${UI.escape(item.note)}" placeholder="เช่น ส่งซ่อมทั้งหมด / ไม่มีเครื่อง"></label>`;
+      return `<p class="text-sm text-amber-700">ยังไม่มี${word}บนรถ — เพิ่มที่ “เติมของ”</p>
+        <label for="unote-${UI.escape(item.id)}">หมายเหตุ</label>
+        <input id="unote-${UI.escape(item.id)}" type="text" maxlength="200" data-field="note" value="${UI.escape(item.note)}">`;
     }
+    const statuses = item.has_battery
+      ? [['ready', '✓ พร้อมใช้'], ['not_ready', '✗ ไม่พร้อม'], ['no_power', '⏻ เปิดไม่ติด']]
+      : [['ready', '✓ พร้อมใช้'], ['not_ready', '✗ ไม่พร้อม']];
     return '<div class="unit-list">' + item.units.map((u, ui) => {
       const touched = item.unitTouched[u.id];
+      const uid = `u-${UI.escape(u.id)}`;
+      const last = u.updated_at ? `<small class="unit-last">ล่าสุด ${u.battery_level !== null && u.battery_level !== undefined ? `แบต ${u.battery_level}/${item.battery_max_bars} ` : ''}${u.pressure_psi !== null && u.pressure_psi !== undefined ? `${u.pressure_psi} PSI ` : ''}• ${UI.escape(UI.formatDateThai(String(u.updated_at).slice(0, 10)))}${u.updated_by ? ' ' + UI.escape(u.updated_by) : ''}</small>` : '';
+      const psi = item.has_pressure
+        ? `<label for="${uid}-psi">แรงดัน</label>
+           <div class="psi-input"><input id="${uid}-psi" type="number" min="0" max="10000" step="1" inputmode="numeric" data-field="unit-psi" value="${touched && u.pressure_psi !== null && u.pressure_psi !== undefined && u.pressure_psi !== '' ? UI.escape(String(u.pressure_psi)) : ''}"><span class="psi-unit">PSI</span></div>
+           ${item.o2_low_psi !== null ? `<small>ต่ำเมื่อ &lt; ${item.o2_low_psi} PSI</small>` : ''}`
+        : '';
+      const bat = item.has_battery && !(u.status === 'no_power' && touched)
+        ? `<div class="unit-name">แบตเตอรี่ (ขีด)</div><div class="battery-row" role="group" aria-label="ระดับแบตเตอรี่">
+            ${Array.from({ length: item.battery_max_bars + 1 }, (_, k) => k).map(level => `<button type="button" class="bat-btn ${touched && u.battery_level === level ? 'on' : ''} ${item.battery_low_bars !== null && level <= item.battery_low_bars ? 'low' : ''}" data-action="unit-battery" data-value="${level}" aria-pressed="${touched && u.battery_level === level}" aria-label="แบต ${level} จาก ${item.battery_max_bars} ขีด">${level}</button>`).join('')}
+          </div>`
+        : '';
       return `
       <div class="unit-row ${touched ? '' : 'untouched'}" data-unit="${ui}">
-        <div class="unit-name">${UI.escape(u.label || `เครื่องที่ ${ui + 1}`)}</div>
+        <div class="unit-name">${UI.escape(u.label || `${word}ที่ ${ui + 1}`)} ${last}</div>
         <div class="seg" role="group" aria-label="สถานะ">
-          <button type="button" class="seg-btn ${touched && u.status === 'ready' ? 'on' : ''}" data-action="unit-status" data-value="ready">พร้อมใช้งาน</button>
-          <button type="button" class="seg-btn danger ${touched && u.status === 'not_ready' ? 'on' : ''}" data-action="unit-status" data-value="not_ready">ไม่พร้อมใช้งาน</button>
+          ${statuses.map(([v, l]) => `<button type="button" class="seg-btn ${v !== 'ready' ? 'danger' : ''} ${touched && u.status === v ? 'on' : ''}" data-action="unit-status" data-value="${v}" aria-pressed="${touched && u.status === v}">${l}</button>`).join('')}
         </div>
-        <div class="battery-row" role="group" aria-label="ระดับแบตเตอรี่">
-          ${[1, 2, 3, 4].map(level => `<button type="button" class="bat-btn ${touched && u.battery_level === level ? 'on' : ''}" data-action="unit-battery" data-value="${level}" aria-label="แบต ${level} ขีด">${'▮'.repeat(level)}${'▯'.repeat(4 - level)}</button>`).join('')}
-        </div>
-        <input type="text" maxlength="200" class="unit-note ${u.status === 'not_ready' ? '' : 'hidden'}" data-field="unit-note" value="${UI.escape(u.note || '')}" placeholder="สาเหตุ เช่น แบตเสื่อม / ชำรุด / ส่งซ่อม">
+        ${bat}${psi}
+        <label for="${uid}-note" class="${touched && u.status !== 'ready' ? '' : 'hidden'}">สาเหตุ *</label>
+        <input id="${uid}-note" type="text" maxlength="200" class="unit-note ${touched && u.status !== 'ready' ? '' : 'hidden'}" data-field="unit-note" value="${UI.escape(u.note || '')}">
       </div>`;
     }).join('') + '</div>';
   }
@@ -478,8 +513,7 @@ class InspectionPage {
   refreshCard(index) {
     const card = document.querySelector(`#inspectionItemTable .check-card[data-index="${index}"]`);
     if (!card) return;
-    const item = this.items[index];
-    const ev = this.evaluate(item);
+    const ev = this.evaluate(this.items[index]);
     const chip = card.querySelector('[data-role="chip"]');
     if (chip) {
       chip.className = `result-chip result-${ev.result}`;
@@ -490,8 +524,12 @@ class InspectionPage {
       msg.className = `check-msg msg-${ev.result}`;
       msg.textContent = ev.text || '';
     }
-    const expected = card.querySelector('[data-role="expected"]');
-    if (expected) expected.textContent = this.fmt(ev.expected);
+    const none = card.querySelector('[data-action="none-used"]');
+    if (none) {
+      const on = this.items[index].used !== '' && Number(this.items[index].used) === 0;
+      none.classList.toggle('on', on);
+      none.setAttribute('aria-pressed', String(on));
+    }
     this.updateProgress();
   }
 
@@ -522,20 +560,18 @@ class InspectionPage {
     if (!field || !card) return;
     const index = Number(card.dataset.index);
     const item = this.items[index];
-    if (field === 'unit-note') {
-      const ui = Number(el.closest('.unit-row').dataset.unit);
-      item.units[ui].note = el.value;
+    if (field === 'unit-note' || field === 'unit-psi') {
+      const unit = item.units[Number(el.closest('.unit-row').dataset.unit)];
+      if (field === 'unit-note') unit.note = el.value;
+      else {
+        unit.pressure_psi = el.value === '' ? '' : Number(el.value);
+        if (!item.unitTouched[unit.id]) {
+          item.unitTouched[unit.id] = true;
+          if (!['ready', 'not_ready'].includes(unit.status)) unit.status = '';
+        }
+      }
     } else {
       item[field] = el.value;
-      // แก้ "ใช้ไป" หลังกดครบถ้วน → ต้องยืนยันใหม่กับยอดคาดการณ์ตัวใหม่ (ห้ามถือว่าครบโดยอัตโนมัติ)
-      if (field === 'used' && item.confirmed) {
-        item.confirmed = false;
-        card.querySelector('[data-action="confirm"]')?.classList.remove('on');
-      }
-      if (field === 'actual' && el.value !== '') {
-        item.confirmed = false;
-        card.querySelector('[data-action="confirm"]')?.classList.remove('on');
-      }
     }
     this.refreshCard(index);
     this.scheduleDraft();
@@ -549,32 +585,21 @@ class InspectionPage {
     const item = this.items[index];
     const action = btn.dataset.action;
 
-    if (action === 'confirm') {
-      item.confirmed = !item.confirmed;
-      if (item.confirmed) {
-        item.actual = '';
-        item.note = '';
-      }
-      card.innerHTML = this.renderCard(item, index);
-    } else if (action === 'mismatch') {
-      item.confirmed = false;
-      card.innerHTML = this.renderCard(item, index);
-      card.querySelector('.mismatch-box')?.classList.remove('hidden');
-      card.querySelector('.mismatch-btn')?.classList.add('on');
-      card.querySelector('[data-field="actual"]')?.focus();
+    if (action === 'none-used') {
+      item.used = '0';
     } else if (action === 'unit-status' || action === 'unit-battery') {
-      const ui = Number(btn.closest('.unit-row').dataset.unit);
-      const unit = item.units[ui];
+      const unit = item.units[Number(btn.closest('.unit-row').dataset.unit)];
+      if (!item.unitTouched[unit.id]) {
+        // แตะครั้งแรก: ค่าที่ยังไม่ได้เลือกในรอบนี้ต้องเลือกเอง (ไม่ใช้ค่าค้างจากรอบก่อนโดยไม่รู้ตัว)
+        item.unitTouched[unit.id] = true;
+        if (action === 'unit-status') { unit.battery_level = null; unit.pressure_psi = ''; } else unit.status = '';
+      }
       if (action === 'unit-status') unit.status = btn.dataset.value;
       else unit.battery_level = Number(btn.dataset.value);
-      if (!item.unitTouched[unit.id]) {
-        // แตะครั้งแรก: ค่าที่ยังไม่ได้เลือกในรอบนี้ต้องเลือกเองอีกค่า (ไม่ใช้ค่าค้างจากรอบก่อนโดยไม่รู้ตัว)
-        item.unitTouched[unit.id] = true;
-        if (action === 'unit-status') unit.battery_level = null;
-      }
-      card.innerHTML = this.renderCard(item, index);
-      if (unit.status === 'not_ready') card.querySelector(`.unit-row[data-unit="${ui}"] .unit-note`)?.focus();
+    } else {
+      return;
     }
+    card.innerHTML = this.renderCard(item, index);
     this.updateProgress();
     this.scheduleDraft();
   }
@@ -588,24 +613,17 @@ class InspectionPage {
   }
 
   async checkAll() {
-    const pending = this.items.filter(item => item.item_type !== 'electric'
-      && item.before !== null && item.before !== undefined
-      && this.evaluate(item).result === 'pending');
+    const pending = this.items.filter(item => !this.isUnitType(item) && !this.notStocked(item) && item.used === '');
     if (!pending.length) {
-      window.toast.info('ไม่มีรายการของสิ้นเปลืองที่รอยืนยัน (เครื่องไฟฟ้าและรายการที่ยังไม่เคยนับต้องตรวจทีละรายการ)');
+      window.toast.info('ไม่มีรายการที่ตั้งเป็น "ไม่ได้ใช้" ได้ (อุปกรณ์ไม่มีวันหมดอายุต้องตรวจทีละเครื่อง)');
       return;
     }
     const ok = await window.confirmDialog(
-      `ยืนยันว่าได้ตรวจนับแล้ว: ${pending.length} รายการที่เหลือ "ไม่ได้ใช้ในเวรนี้ และนับได้ครบตามยอด"?\n` +
-      'รายการที่ใช้ไปหรือนับได้ไม่ตรง ให้กรอกทีละรายการก่อนกดปุ่มนี้',
-      { confirmText: 'ยืนยันครบถ้วน' }
+      `${pending.length} รายการที่ยังไม่กรอก: ไม่ได้ใช้ ไม่มีหาย?\nถ้ามีรายการที่ใช้ไปให้กรอกก่อน`,
+      { confirmText: 'ไม่ได้ใช้ทั้งหมด' }
     );
     if (!ok) return;
-    pending.forEach(item => {
-      if (item.used === '') item.used = '0';
-      item.confirmed = true;
-      item.actual = '';
-    });
+    pending.forEach(item => { item.used = '0'; });
     this.renderList();
     this.scheduleDraft();
   }
@@ -616,12 +634,14 @@ class InspectionPage {
     return this.items.map(item => ({
       id: item.id,
       used: item.used === '' ? 0 : item.used,
-      confirmed: item.confirmed,
-      actual: item.confirmed ? null : (item.actual === '' ? null : item.actual),
-      note: item.note,
+      confirmed: item.used !== '',   // ร่าง: แยก "ยังไม่ตรวจ" กับ "ไม่ได้ใช้ (0)"
+      note: item.note.trim(),
       units: item.units
         .filter(u => item.unitTouched[u.id])
-        .map(u => ({ id: u.id, status: u.status, battery_level: u.battery_level, note: u.note || '' })),
+        .map(u => ({
+          id: u.id, status: u.status, note: u.note || '',
+          battery_level: u.battery_level, pressure_psi: u.pressure_psi === '' ? null : u.pressure_psi,
+        })),
     }));
   }
 
@@ -644,22 +664,33 @@ class InspectionPage {
     }
   }
 
+  // สรุปก่อนบันทึก: ใช้ไป / ต้องเติม / ไม่พร้อมใช้ / แบตหรือแรงดันต่ำ
+  summaryText(evs) {
+    const unitOf = (item) => (item.unit ? ' ' + item.unit : '');
+    const used = evs.filter(({ ev }) => ev.used > 0).map(({ item, ev }) => `${item.name} ${this.fmt(ev.used)}${unitOf(item)}`);
+    const refill = evs.filter(({ ev }) => ev.short > 0).map(({ item, ev }) => `${item.name} ${this.fmt(ev.short)}${unitOf(item)}`);
+    const broken = evs.filter(({ ev }) => ev.notReady).map(({ item, ev }) => `${item.name} (${ev.notReady.join(', ')})`);
+    const low = evs.filter(({ ev }) => ev.low).map(({ item }) => item.name);
+    const block = (title, list) => (list.length ? `\n${title} ${list.length} รายการ\n• ${list.slice(0, 8).join('\n• ')}${list.length > 8 ? `\n• … อีก ${list.length - 8}` : ''}` : '');
+    return `ตรวจครบ ${evs.length} รายการ`
+      + block('📉 ใช้ไป/หายไป', used)
+      + block('🧰 ต้องเติม', refill)
+      + block('⛔ ไม่พร้อมใช้ (ตรวจสอบ/เปลี่ยน)', broken)
+      + block('🔋 แบต/แรงดันต่ำ', low)
+      + (used.length + refill.length + broken.length + low.length === 0 ? '\n✅ ไม่มีของใช้ไปหรือขาด' : '');
+  }
+
   async submitInspection() {
     if (!this.session || this.submitting) return;   // กันกดซ้ำระหว่างส่ง
     const evs = this.items.map(item => ({ item, ev: this.evaluate(item) }));
     const notReady = evs.filter(({ ev }) => ev.result === 'pending' || ev.result === 'error');
     if (notReady.length) {
-      window.toast.warning(`ยังตรวจไม่ครบ/กรอกไม่ถูกต้อง ${notReady.length} รายการ เช่น ${notReady[0].item.name}: ${notReady[0].ev.text}`);
+      window.toast.warning(`ยังไม่ครบ ${notReady.length} รายการ — ${notReady[0].item.name}: ${notReady[0].ev.text}`);
       this.setFilter('pending');
       return;
     }
 
-    const attn = evs.filter(({ ev }) => ev.result === 'needs_refill' || ev.result === 'anomaly').length;
-    const ok = await window.confirmDialog(
-      (this.session.mode === 'edit' ? 'บันทึกการแก้ไขรายการตรวจเดิม?' : 'บันทึกผลตรวจเวรนี้?') +
-      `\nครบถ้วน ${evs.length - attn} • ต้องเติม/ผิดปกติ ${attn} รายการ`,
-      { confirmText: 'บันทึก' }
-    );
+    const ok = await window.confirmDialog(this.summaryText(evs) + '\n\nบันทึกผลตรวจนี้?', { confirmText: 'บันทึก' });
     if (!ok) return;
 
     clearTimeout(this.draftTimer);
@@ -674,17 +705,13 @@ class InspectionPage {
         revision: this.session.revision,
         results: this.payloadLines(),
       });
-      const data = res.data || {};
-      const refill = data.refill || {};
-      let msg = this.session.mode === 'edit' ? 'บันทึกการแก้ไขเรียบร้อย' : 'บันทึกผลตรวจเรียบร้อย';
-      if (refill.created) msg += ` • สร้างรายการรอเติม ${refill.request_no || ''} (${refill.line_count} รายการ)`;
-      if ((data.adjustments || []).length) msg += ` • พบความคลาดเคลื่อน ${data.adjustments.length} รายการ (บันทึกไว้แล้ว)`;
-      window.toast.success(msg, 7000);
+      const refill = (res.data || {}).refill || {};
+      window.toast.success('บันทึกสำเร็จ' + (refill.created ? ` • ส่งไปหน้าเติมของ ${refill.line_count} รายการ` : ''), 7000);
       this.closeSession();
       await this.refreshShiftStatus();
     } catch (error) {
       const list = error.data && Array.isArray(error.data.errors) ? '\n• ' + error.data.errors.slice(0, 5).join('\n• ') : '';
-      window.toast.error(error.message + list, 9000);
+      window.toast.error('บันทึกไม่สำเร็จ — ' + error.message + list, 9000);
       if (error.data && error.data.code === 'STALE_REVISION') this.closeSession();
     } finally {
       this.submitting = false;
@@ -701,8 +728,8 @@ class InspectionPage {
 
   async cancelInspection() {
     const text = this.session && this.session.mode === 'edit'
-      ? 'ปิดหน้าแก้ไขโดยไม่บันทึก? รายการเดิมจะไม่เปลี่ยนแปลง'
-      : 'ออกจากหน้าตรวจ? ร่างจะถูกเก็บไว้ให้ทำต่อได้ภายหลัง';
+      ? 'ออกโดยไม่บันทึก? (รายการเดิมไม่เปลี่ยน)'
+      : 'ออกจากหน้าตรวจ? (บันทึกร่างไว้แล้ว)';
     if (!(await window.confirmDialog(text, { confirmText: 'ออก' }))) return;
     if (this.session && this.session.mode !== 'edit') await this.saveDraft();
     this.closeSession();

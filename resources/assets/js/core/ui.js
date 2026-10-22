@@ -186,6 +186,35 @@ const UI = {
   },
 };
 
+/**
+ * ช่องตัวเลขพร้อมปุ่ม − / + ขนาดใหญ่ (กดง่ายบนมือถือ/ผู้สูงอายุ)
+ * @param {string} inputAttrs attribute ของ <input type="number"> (ต้อง escape มาแล้ว) — ค่า min ใช้เป็นขั้นต่ำของปุ่ม −
+ * @param {string} label ชื่อช่อง (ใช้กับ aria-label ของปุ่ม)
+ */
+UI.stepper = (inputAttrs, label = 'จำนวน') => `
+  <div class="stepper">
+    <button type="button" data-step="-1" aria-label="ลด${UI.escape(label)}">−</button>
+    <input type="number" inputmode="decimal" step="any" ${inputAttrs}>
+    <button type="button" data-step="1" aria-label="เพิ่ม${UI.escape(label)}">+</button>
+  </div>`;
+
+// ปุ่ม − / + ทุกตัวในระบบ: ปรับค่าแล้วยิง input + change ให้ handler เดิมของหน้าทำงานเหมือนผู้ใช้พิมพ์เอง
+document.addEventListener('click', (event) => {
+  const btn = event.target.closest('.stepper [data-step]');
+  if (!btn) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const input = btn.parentElement.querySelector('input');
+  if (!input || input.disabled || input.readOnly) return;
+  const min = input.min !== '' ? Number(input.min) : 0;
+  const max = input.max !== '' ? Number(input.max) : Infinity;
+  const current = input.value === '' ? (Number(btn.dataset.step) > 0 ? min - 1 : min) : Number(input.value);
+  const next = Math.min(max, Math.max(min, Math.round((current + Number(btn.dataset.step)) * 100) / 100));
+  input.value = String(next);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}, true);
+
 // Export
 window.UI = UI;
 

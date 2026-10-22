@@ -11,6 +11,8 @@ class StockMovement extends Model
     public const TYPE_REFILL = 'REFILL';
     public const TYPE_ADJUST = 'ADJUST';
     public const TYPE_REVERSAL = 'REVERSAL';
+    /** ล้างสต็อกทั้งระบบ (migration 012b) */
+    public const TYPE_RESET = 'RESET';
 
     protected string $table = 'refer_stock_movements';
     protected string $primaryKey = 'id';

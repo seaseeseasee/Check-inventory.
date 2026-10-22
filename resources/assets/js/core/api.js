@@ -235,6 +235,10 @@ window.staffApi = {
   // เติมของเข้ารถโดยตรง (ไม่มีคลังกลาง)
   getRefillSheet: (carId) => api.get(`/staff/refill/${encodeURIComponent(carId)}`),
   refill: (carId, data) => api.post(`/staff/refill/${encodeURIComponent(carId)}`, data),
+  // จัดการล็อต (ไม่มีการลบ — ยกเลิก/จำหน่ายหมดอายุเป็น movement)
+  editLot: (lotId, data) => api.put(`/staff/lots/${encodeURIComponent(lotId)}`, data),
+  lotAction: (lotId, action, data) => api.post(`/staff/lots/${encodeURIComponent(lotId)}/${action}`, data || {}),
+  itemMovements: (itemId) => api.get(`/staff/items/${encodeURIComponent(itemId)}/movements`),
   
   getInspections: (params = {}) => {
     const searchParams = new URLSearchParams(params);

@@ -11,7 +11,7 @@ class ItemUnit extends Model
 
     protected string $table = 'refer_item_units';
     protected string $primaryKey = 'id';
-    protected array $fillable = ['id', 'item_id', 'label', 'status', 'battery_level', 'note', 'active', 'created_at', 'updated_at', 'updated_by'];
+    protected array $fillable = ['id', 'item_id', 'label', 'status', 'battery_level', 'pressure_psi', 'note', 'active', 'created_at', 'updated_at', 'updated_by'];
     protected array $casts = [
         'active' => 'boolean',
         'battery_level' => 'integer',

@@ -108,15 +108,18 @@ class AdminController extends Controller
         // Check duplicate username
         $existing = $this->userModel->findByUsername($input['username']);
         if ($existing) {
-            $this->error('Username already exists', 409);
+            $this->error('ชื่อผู้ใช้นี้มีอยู่แล้ว', 409);
         }
+        $this->assertNurseNotLinked((string)$input['nurse_id'], null);
 
         try {
             $user = $this->userModel->createUser($input);
             unset($user['password_hash']);
             $this->success($user, 201);
         } catch (\Throwable $e) {
-            $this->error('Failed to create user: ' . $e->getMessage());
+            // ไม่ส่งข้อความของ exception (อาจมี SQL) กลับไปที่หน้าจอ
+            error_log('createUser failed: ' . $e->getMessage());
+            $this->error('สร้างบัญชีไม่สำเร็จ กรุณาลองใหม่', 500);
         }
     }
 
@@ -159,11 +162,44 @@ class AdminController extends Controller
             $this->validationError($validator->errors());
         }
 
+        if (array_key_exists('nurse_id', $input)) {
+            $this->assertNurseNotLinked((string)$input['nurse_id'], $id);
+        }
+
+        // กันระบบไม่มีผู้ดูแลเหลือ: ห้ามลดสิทธิ์/ปิดใช้งาน admin คนสุดท้าย และห้ามลดสิทธิ์ตัวเอง
+        $demote = isset($input['role']) && $input['role'] !== 'admin' && $existing['role'] === 'admin';
+        $deactivate = in_array($activeRaw, [false, 0, '0', 'false'], true) && !empty($existing['active']);
+        if ($demote && ($this->roleMiddleware->getCurrentUser()['id'] ?? null) === $id) {
+            $this->error('ไม่สามารถลดสิทธิ์ผู้ดูแลระบบของบัญชีตัวเองได้', 400);
+        }
+        if (($demote || $deactivate) && $existing['role'] === 'admin' && !empty($existing['active']) && $this->userModel->countActiveAdmins() <= 1) {
+            $this->error('ต้องมีผู้ดูแลระบบที่ใช้งานอยู่อย่างน้อย 1 บัญชี', 409);
+        }
+
         try {
             $this->userModel->updateUser($id, $input);
+            if (isset($input['role']) && $input['role'] !== $existing['role']) {
+                // ไม่มีตาราง audit log ในระบบ — บันทึกการเปลี่ยนบทบาทลง log ของเซิร์ฟเวอร์อย่างน้อย
+                error_log(sprintf('AUDIT role change: user %s (%s) %s -> %s by %s',
+                    $id, $existing['username'], $existing['role'], $input['role'],
+                    $this->roleMiddleware->getCurrentUser()['username'] ?? '?'));
+            }
             $this->success(['id' => $id]);
         } catch (\Throwable $e) {
-            $this->error('Failed to update user: ' . $e->getMessage());
+            error_log('updateUser failed: ' . $e->getMessage());
+            $this->error('บันทึกบัญชีไม่สำเร็จ กรุณาลองใหม่', 500);
+        }
+    }
+
+    /** พยาบาล 1 คนมีบัญชีได้ 1 บัญชี — กันผูกพยาบาลที่มีบัญชีอยู่แล้วกับบัญชีที่สอง */
+    private function assertNurseNotLinked(string $nurseId, ?string $exceptUserId): void
+    {
+        if ($nurseId === '') {
+            return;
+        }
+        $linked = $this->userModel->findByNurseId($nurseId);
+        if ($linked && (string)$linked['id'] !== (string)$exceptUserId) {
+            $this->error('พยาบาลรายนี้มีบัญชีเข้าใช้งานอยู่แล้ว (' . $linked['username'] . ') — แก้ไขที่บัญชีเดิมแทนการสร้างใหม่', 409);
         }
     }
 
