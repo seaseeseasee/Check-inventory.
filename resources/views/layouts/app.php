@@ -35,13 +35,39 @@
     <form id="authForm" class="auth-card" method="post">
       <img class="auth-logo" src="<?= asset('images/logo.png') ?>" width="88" height="88" alt="โลโก้ระบบ" loading="lazy">
       <h2>ระบบตรวจเช็ครถ Refer / Ambulance</h2>
-      <p class="auth-sub">กรอกชื่อผู้ใช้และรหัสผ่านเพื่อเข้าสู่ระบบ</p>
-      <label for="systemUsername">ชื่อผู้ใช้</label>
-      <input type="text" id="systemUsername" name="username" autocomplete="username" autofocus required>
+      <p class="auth-sub">ชื่อผู้ใช้คือเบอร์โทรศัพท์ของคุณ — เข้าครั้งแรกใช้เบอร์โทรศัพท์เป็นรหัสผ่าน</p>
+      <label for="systemUsername">ชื่อผู้ใช้ (เบอร์โทรศัพท์)</label>
+      <input type="text" id="systemUsername" name="username" autocomplete="username" placeholder="เช่น 0812345678" autofocus required>
       <label for="systemPassword">รหัสผ่าน</label>
       <input type="password" id="systemPassword" name="password" autocomplete="current-password" required>
       <div class="auth-error" id="authError" role="alert" aria-live="polite"></div>
       <button type="submit" class="auth-submit">เข้าสู่ระบบ</button>
+    </form>
+  </div>
+
+  <!-- บังคับเปลี่ยนรหัสผ่าน: แสดงแทนทั้งแอปจนกว่าจะเปลี่ยนสำเร็จ (server ก็ปฏิเสธ API อื่นด้วย PASSWORD_CHANGE_REQUIRED) -->
+  <div id="pwGate" class="auth-gate-pw" hidden>
+    <form id="pwForm" class="auth-card" method="post" novalidate>
+      <img class="auth-logo" src="<?= asset('images/logo.png') ?>" width="88" height="88" alt="โลโก้ระบบ" loading="lazy">
+      <h2>ตั้งรหัสผ่านใหม่</h2>
+      <p class="auth-sub" id="pwIntro">คุณเข้าสู่ระบบด้วยรหัสผ่านเริ่มต้น — เพื่อความปลอดภัย กรุณาตั้งรหัสผ่านใหม่ก่อนเริ่มใช้งาน</p>
+      <input type="text" id="pwUsername" name="username" autocomplete="username" hidden readonly>
+      <label for="pwCurrent">รหัสผ่านปัจจุบัน (รหัสเริ่มต้น = เบอร์โทรศัพท์)</label>
+      <input type="password" id="pwCurrent" name="current_password" autocomplete="current-password" required>
+      <label for="pwNew">รหัสผ่านใหม่</label>
+      <input type="password" id="pwNew" name="new_password" autocomplete="new-password" aria-describedby="pwRules" required>
+      <ul class="pw-rules" id="pwRules" aria-live="polite">
+        <li data-rule="len">อย่างน้อย 8 ตัวอักษร</li>
+        <li data-rule="letter">มีตัวอักษรภาษาอังกฤษ (a-z หรือ A-Z)</li>
+        <li data-rule="digit">มีตัวเลข (0-9)</li>
+        <li data-rule="phone">ไม่ใช่เบอร์โทรศัพท์ / ชื่อผู้ใช้ และไม่มีช่องว่าง</li>
+      </ul>
+      <label for="pwConfirm">ยืนยันรหัสผ่านใหม่</label>
+      <input type="password" id="pwConfirm" name="confirm_password" autocomplete="new-password" required>
+      <label class="pw-show"><input type="checkbox" id="pwShow"> แสดงรหัสผ่าน</label>
+      <div class="auth-error" id="pwError" role="alert" aria-live="polite"></div>
+      <button type="submit" class="auth-submit">บันทึกรหัสผ่านใหม่</button>
+      <button type="button" class="small-btn gray pw-logout" onclick="signOut()">ออกจากระบบ</button>
     </form>
   </div>
 

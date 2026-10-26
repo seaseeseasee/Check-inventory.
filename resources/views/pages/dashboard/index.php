@@ -303,16 +303,16 @@
           <legend class="px-2 text-sm font-bold text-slate-700">บัญชีเข้าใช้งานระบบ (ถ้ามี)</legend>
 
           <div>
-            <label class="!mt-0" for="nUsername">ชื่อผู้ใช้สำหรับเข้าสู่ระบบ</label>
-            <input id="nUsername" type="text" placeholder="เช่น somsee.j" autocomplete="off" autocapitalize="none" spellcheck="false">
-            <p class="mt-1 text-xs leading-relaxed text-slate-500">ใช้ a-z A-Z 0-9 . _ - เท่านั้น — เว้นว่างได้ถ้ายังไม่เปิดบัญชีให้พยาบาลรายนี้</p>
+            <label class="!mt-0" for="nUsername">ชื่อผู้ใช้สำหรับเข้าสู่ระบบ (เบอร์โทรศัพท์)</label>
+            <input id="nUsername" type="text" inputmode="tel" placeholder="เช่น 0812345678" autocomplete="off" autocapitalize="none" spellcheck="false">
+            <p class="mt-1 text-xs leading-relaxed text-slate-500">ใช้เบอร์โทรศัพท์ของพยาบาล (กรอกเบอร์โทรด้านบนแล้วระบบใส่ให้เอง) — เว้นว่างได้ถ้ายังไม่เปิดบัญชีให้พยาบาลรายนี้</p>
             <p class="mt-1 hidden text-xs font-semibold text-red-600" id="nUsernameError" role="alert"></p>
           </div>
 
           <div>
             <label class="!mt-0" for="nPassword">รหัสผ่าน</label>
-            <input id="nPassword" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password">
-            <p class="mt-1 text-xs leading-relaxed text-slate-500">กรอกเมื่อสร้างบัญชีใหม่หรือต้องการเปลี่ยนรหัส — ตอนแก้ไข: เว้นว่าง = ใช้รหัสผ่านเดิม</p>
+            <input id="nPassword" type="password" placeholder="เว้นว่าง = ใช้เบอร์โทรเป็นรหัสเริ่มต้น" autocomplete="new-password">
+            <p class="mt-1 text-xs leading-relaxed text-slate-500">บัญชีใหม่: เว้นว่าง = รหัสผ่านเริ่มต้นคือเบอร์โทรศัพท์ • ตอนแก้ไข: เว้นว่าง = ใช้รหัสเดิม, กรอก = รีเซ็ตรหัส — ผู้ใช้จะถูกบังคับตั้งรหัสใหม่ตอนเข้าสู่ระบบครั้งแรก</p>
             <p class="mt-1 hidden text-xs font-semibold text-red-600" id="nPasswordError" role="alert"></p>
           </div>
 

@@ -47,6 +47,21 @@ class AuthController extends Controller
         $this->success(['ok' => true]);
     }
 
+    public function changePassword(): void
+    {
+        $input = $this->getInput();
+        $str = fn(string $key) => is_string($input[$key] ?? null) ? $input[$key] : '';
+        if ($str('current_password') === '' || $str('new_password') === '') {
+            Response::validationError(array_filter([
+                'current_password' => $str('current_password') === '' ? 'กรุณากรอกรหัสผ่านปัจจุบัน' : null,
+                'new_password' => $str('new_password') === '' ? 'กรุณากรอกรหัสผ่านใหม่' : null,
+            ]));
+        }
+
+        $result = $this->authService->changePassword($str('current_password'), $str('new_password'), $str('confirm_password'));
+        $this->success($result);
+    }
+
     public function me(): void
     {
         // Session probe must not 401: the login gate calls this before sign-in,

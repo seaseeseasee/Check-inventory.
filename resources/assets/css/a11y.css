@@ -216,6 +216,16 @@ html, body { overflow-x: hidden; }
 .lot-view .lv-expired .lot-state { color: var(--bad); }
 .lot-view .lv-soon .lot-state { color: #b45309; }
 .refill-card.is-focus { border: 2px solid var(--teal-600); box-shadow: 0 0 0 4px var(--teal-100); }
+/* หน้าบังคับเปลี่ยนรหัสผ่าน: เลื่อนได้บนจอเล็ก + รายการเงื่อนไขรหัสผ่านติ๊กถูกเมื่อผ่าน */
+#pwGate { overflow-y: auto; }
+.pw-rules { list-style: none; margin: 4px 0 10px; padding: 0; display: grid; gap: 4px; font-size: 15px; }
+.pw-rules li { color: #b91c1c; font-weight: 600; }
+.pw-rules li::before { content: '✗ '; }
+.pw-rules li.ok { color: #047857; }
+.pw-rules li.ok::before { content: '✓ '; }
+.pw-show { display: inline-flex !important; align-items: center; gap: 8px; margin: 8px 0 4px; font-weight: 600; }
+.pw-logout { width: 100%; margin-top: 8px; }
+
 /* หน้าเติมของ: การ์ดย่อ/ขยาย — แถวสรุปกดได้ทั้งแถว (แบบเดียวกับการ์ดอุปกรณ์หน้ารถ) */
 .refill-summary { display: block; list-style: none; position: relative; padding-right: 32px; }
 .refill-summary::-webkit-details-marker { display: none; }

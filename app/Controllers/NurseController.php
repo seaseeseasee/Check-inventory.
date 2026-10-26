@@ -64,15 +64,7 @@ class NurseController extends Controller
             $this->validationError($validator->errors());
         }
 
-        $username = trim((string)($input['username'] ?? ''));
-        $password = (string)($input['password'] ?? '');
-
-        if ($username !== '' && !preg_match('/^[A-Za-z0-9._-]{3,100}$/', $username)) {
-            $this->validationError(['username' => 'ชื่อผู้ใช้ใช้ได้เฉพาะ a-z A-Z 0-9 . _ - (3-100 ตัวอักษร)']);
-        }
-        if ($username !== '' && strlen($password) < 6) {
-            $this->validationError(['password' => 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร']);
-        }
+        [$username, $password] = $this->accountCredentials($input, true);
 
         $nurseModel = new Nurse();
 
@@ -166,24 +158,12 @@ class NurseController extends Controller
             'active' => $input['active'] ?? $existing['active'],
         ];
 
-        $username = trim((string)($input['username'] ?? ''));
-        $password = (string)($input['password'] ?? '');
-
-        if ($username !== '' && !preg_match('/^[A-Za-z0-9._-]{3,100}$/', $username)) {
-            $this->validationError(['username' => 'ชื่อผู้ใช้ใช้ได้เฉพาะ a-z A-Z 0-9 . _ - (3-100 ตัวอักษร)']);
-        }
-        if ($password !== '' && strlen($password) < 6) {
-            $this->validationError(['password' => 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร']);
-        }
-
         $userModel = new User();
         $linked = $userModel->findByNurseId($id);
+        [$username, $password] = $this->accountCredentials($input, $linked === null);
 
         // All credential checks must pass before touching the nurse record
         if ($username !== '') {
-            if ($linked === null && strlen($password) < 6) {
-                $this->validationError(['password' => 'บัญชีใหม่ต้องมีรหัสผ่านอย่างน้อย 6 ตัวอักษร']);
-            }
             $dup = $userModel->findByUsername($username);
             if ($dup && ($linked === null || $dup['id'] !== $linked['id'])) {
                 $this->error('ชื่อผู้ใช้นี้ถูกใช้แล้ว', 409, ['code' => 'USERNAME_EXISTS']);
@@ -242,6 +222,38 @@ class NurseController extends Controller
         }
 
         $this->success(['id' => $id]);
+    }
+
+    /**
+     * ชื่อผู้ใช้/รหัสผ่านของบัญชีพยาบาลจากฟอร์ม
+     *  ชื่อผู้ใช้ที่เป็นเบอร์โทร → เก็บเป็นตัวเลขล้วน (081-234-5678 → 0812345678)
+     *  บัญชีใหม่ที่ไม่กรอกรหัสผ่าน → รหัสเริ่มต้น = เบอร์โทร (ใช้ได้เฉพาะชื่อผู้ใช้ที่เป็นเบอร์โทร)
+     *  ทุกรหัสที่ตั้งจากที่นี่เป็นรหัสชั่วคราว — ผู้ใช้ถูกบังคับเปลี่ยนตอนเข้าสู่ระบบครั้งแรก (User::createUser/updateUser)
+     * @return array{0: string, 1: string} [username, password] — password '' = ไม่เปลี่ยน
+     */
+    private function accountCredentials(array $input, bool $isNewAccount): array
+    {
+        $username = trim((string)($input['username'] ?? ''));
+        $password = (string)($input['password'] ?? '');
+        if ($username === '') {
+            return ['', $password];
+        }
+        $phone = User::normalizePhone($username);
+        if ($phone !== null) {
+            $username = $phone;
+        } elseif (!preg_match('/^[A-Za-z0-9._-]{3,100}$/', $username)) {
+            $this->validationError(['username' => 'ชื่อผู้ใช้ต้องเป็นเบอร์โทรศัพท์ (เช่น 0812345678) หรือ a-z A-Z 0-9 . _ - (3-100 ตัวอักษร)']);
+        }
+        if ($isNewAccount && $password === '') {
+            if ($phone === null) {
+                $this->validationError(['password' => 'ชื่อผู้ใช้ไม่ใช่เบอร์โทรศัพท์ — ต้องตั้งรหัสผ่านเริ่มต้นเอง (อย่างน้อย 6 ตัวอักษร)']);
+            }
+            $password = $phone;
+        }
+        if ($password !== '' && strlen($password) < 6) {
+            $this->validationError(['password' => 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร']);
+        }
+        return [$username, $password];
     }
 
     public function destroy(string $id): void

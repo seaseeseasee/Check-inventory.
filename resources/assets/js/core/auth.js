@@ -5,6 +5,7 @@
 class AuthManager {
   constructor() {
     this.isAuthenticated = false;
+    this.mustChangePassword = false;   // login แล้วแต่ยังใช้รหัสเริ่มต้น → ใช้งานได้แค่หน้าเปลี่ยนรหัสผ่าน
     this.user = null;
     this.sessionExpires = 0;
     this.checkInterval = null;
@@ -22,6 +23,12 @@ class AuthManager {
   async performInit() {
     try {
       const result = await window.authApi.me();
+      if (result.ok && result.data.authenticated && result.data.user?.must_change_password) {
+        // ยังไม่นับว่า "เข้าใช้งานได้" — ทุกหน้ารอ init() === true ก่อนโหลดข้อมูล จึงไม่มีหน้าไหนเริ่มทำงาน
+        this.mustChangePassword = true;
+        this.user = result.data.user;
+        return false;
+      }
       if (result.ok && result.data.authenticated) {
         this.isAuthenticated = true;
         this.user = result.data.user;
@@ -155,12 +162,97 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize role-based UI
     initializeRoleUI();
+  } else if (window.auth.mustChangePassword) {
+    // เข้าสู่ระบบครั้งแรก (รหัสเริ่มต้น) → บังคับอยู่หน้าเปลี่ยนรหัสผ่านอย่างเดียว
+    const authGate = document.getElementById('authGate');
+    if (authGate) authGate.style.display = 'none';
+    showPasswordGate(window.auth.getUser());
   } else {
     // Show login gate
     const authGate = document.getElementById('authGate');
     if (authGate) authGate.style.display = 'grid';
   }
 });
+
+// ---------- หน้าบังคับเปลี่ยนรหัสผ่าน ----------
+// กติกาเดียวกับ User::passwordProblems() ฝั่ง server (server ตรวจซ้ำเสมอ)
+function passwordChecks(pw, username) {
+  const digits = pw.replace(/\D/g, '');
+  const userDigits = String(username || '').replace(/\D/g, '');
+  return {
+    len: pw.length >= 8 && pw.length <= 72,
+    letter: /[A-Za-z]/.test(pw),
+    digit: /\d/.test(pw),
+    phone: pw !== '' && !/\s/.test(pw) && pw.toLowerCase() !== String(username || '').toLowerCase()
+      && !(digits.length >= 9 && digits === userDigits),
+  };
+}
+
+function showPasswordGate(user) {
+  const gate = document.getElementById('pwGate');
+  const form = document.getElementById('pwForm');
+  if (!gate || !form) return;
+  document.querySelector('.app-top')?.setAttribute('hidden', '');
+  document.querySelector('.container')?.setAttribute('hidden', '');
+  gate.hidden = false;
+  const username = user?.username || '';
+  document.getElementById('pwUsername').value = username;   // ให้ตัวจัดการรหัสผ่านของเบราว์เซอร์จับคู่บัญชีถูก
+  const intro = document.getElementById('pwIntro');
+  if (intro && user?.full_name) intro.textContent = `สวัสดี ${user.full_name} — คุณเข้าสู่ระบบด้วยรหัสผ่านเริ่มต้น เพื่อความปลอดภัย กรุณาตั้งรหัสผ่านใหม่ก่อนเริ่มใช้งาน`;
+
+  const fields = ['pwCurrent', 'pwNew', 'pwConfirm'].map(id => document.getElementById(id));
+  const [current, next, confirm] = fields;
+  const errorEl = document.getElementById('pwError');
+  const renderRules = () => {
+    const checks = passwordChecks(next.value, username);
+    document.querySelectorAll('#pwRules [data-rule]').forEach(li => {
+      const ok = checks[li.dataset.rule];
+      li.classList.toggle('ok', ok);
+      li.setAttribute('aria-label', `${ok ? 'ผ่าน' : 'ยังไม่ผ่าน'}: ${li.textContent}`);
+    });
+    return Object.values(checks).every(Boolean);
+  };
+  next.addEventListener('input', renderRules);
+  renderRules();
+  document.getElementById('pwShow')?.addEventListener('change', (e) => {
+    fields.forEach(f => { f.type = e.target.checked ? 'text' : 'password'; });
+  });
+  current.focus();
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorEl.textContent = '';
+    fields.forEach(f => f.removeAttribute('aria-invalid'));
+    const fail = (field, message) => {
+      errorEl.textContent = message;
+      field.setAttribute('aria-invalid', 'true');
+      field.focus();
+    };
+    if (!current.value) return fail(current, 'กรุณากรอกรหัสผ่านปัจจุบัน');
+    if (!renderRules()) return fail(next, 'รหัสผ่านใหม่ยังไม่ผ่านเงื่อนไขด้านบน');
+    if (next.value === current.value) return fail(next, 'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม');
+    if (next.value !== confirm.value) return fail(confirm, 'ยืนยันรหัสผ่านไม่ตรงกับรหัสผ่านใหม่');
+
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'กำลังบันทึก...';
+    try {
+      await window.authApi.changePassword({
+        current_password: current.value, new_password: next.value, confirm_password: confirm.value,
+      });
+      btn.textContent = 'เปลี่ยนรหัสผ่านสำเร็จ ✓';
+      window.location.reload();   // โหลดแอปใหม่ — คราวนี้ init() ผ่าน เข้าใช้งานได้ตามปกติ
+    } catch (error) {
+      const errs = error.data?.errors || {};
+      const field = errs.current_password ? current : (errs.new_password ? next : (errs.confirm_password ? confirm : null));
+      const msg = [errs.current_password, errs.new_password, errs.confirm_password].flat().filter(Boolean)[0];
+      if (error.status === 401) { window.location.reload(); return; }   // session หมดอายุ → กลับหน้า login
+      if (field) fail(field, msg); else errorEl.textContent = error.message || 'เปลี่ยนรหัสผ่านไม่สำเร็จ';
+      btn.disabled = false;
+      btn.textContent = 'บันทึกรหัสผ่านใหม่';
+    }
+  });
+}
 
 function initializeRoleUI() {
   const user = window.auth.getUser();

@@ -8,17 +8,64 @@ class User extends Model
     protected string $table = 'refer_users';
     protected string $primaryKey = 'id';
     protected array $fillable = [
-        'id', 'username', 'password_hash', 'full_name', 
-        'role', 'nurse_id', 'active', 'last_login_at', 
+        'id', 'username', 'password_hash', 'must_change_password', 'password_changed_at',
+        'full_name', 'role', 'nurse_id', 'active', 'last_login_at',
         'created_at', 'updated_at'
     ];
     protected array $casts = [
         'active' => 'boolean',
+        'must_change_password' => 'boolean',
     ];
 
     public const ROLE_ADMIN = 'admin';
     public const ROLE_STAFF = 'staff';
     public const VALID_ROLES = [self::ROLE_ADMIN, self::ROLE_STAFF];
+
+    public const PASSWORD_MIN = 8;
+    public const PASSWORD_MAX = 72;   // bcrypt ใช้แค่ 72 ไบต์แรก — ยาวกว่านี้ส่วนเกินไม่มีผล จึงไม่รับ
+
+    /**
+     * เบอร์โทรศัพท์ → ชื่อผู้ใช้ (ตัวเลขล้วน) เช่น "081-234-5678" → "0812345678"
+     * คืน null ถ้าไม่ใช่เบอร์ไทย (ขึ้นต้น 0, 9–10 หลัก)
+     */
+    public static function normalizePhone(string $raw): ?string
+    {
+        $raw = trim($raw);
+        if ($raw === '' || preg_match('/[^\d\s\-()]/', $raw)) {
+            return null;
+        }
+        $digits = preg_replace('/\D/', '', $raw);
+        return preg_match('/^0\d{8,9}$/', $digits) ? $digits : null;
+    }
+
+    /**
+     * ตรวจรหัสผ่านใหม่ที่ผู้ใช้ตั้งเอง — คืนรายการข้อที่ไม่ผ่าน (ว่าง = ผ่าน)
+     * กติกา: 8–72 ตัวอักษร, มีตัวอักษรภาษาอังกฤษและตัวเลข, ไม่มีช่องว่าง, ห้ามเป็นเบอร์โทร/ชื่อผู้ใช้
+     */
+    public static function passwordProblems(string $password, string $username): array
+    {
+        $problems = [];
+        if (strlen($password) < self::PASSWORD_MIN) {
+            $problems[] = 'ต้องมีอย่างน้อย ' . self::PASSWORD_MIN . ' ตัวอักษร';
+        }
+        if (strlen($password) > self::PASSWORD_MAX) {
+            $problems[] = 'ยาวได้ไม่เกิน ' . self::PASSWORD_MAX . ' ตัวอักษร';
+        }
+        if (!preg_match('/[A-Za-z]/', $password)) {
+            $problems[] = 'ต้องมีตัวอักษรภาษาอังกฤษอย่างน้อย 1 ตัว';
+        }
+        if (!preg_match('/\d/', $password)) {
+            $problems[] = 'ต้องมีตัวเลขอย่างน้อย 1 ตัว';
+        }
+        if (preg_match('/\s/', $password)) {
+            $problems[] = 'ห้ามมีช่องว่าง';
+        }
+        $digits = preg_replace('/\D/', '', $password);
+        if (strcasecmp($password, $username) === 0 || ($digits !== '' && $digits === preg_replace('/\D/', '', $username) && strlen($digits) >= 9)) {
+            $problems[] = 'ห้ามใช้เบอร์โทรศัพท์หรือชื่อผู้ใช้เป็นรหัสผ่าน';
+        }
+        return $problems;
+    }
 
     public function findByUsername(string $username): ?array
     {
@@ -148,6 +195,8 @@ class User extends Model
 
         $data['password_hash'] = $this->hashPassword($data['password']);
         unset($data['password']);
+        // รหัสผ่านที่ admin ตั้ง/รหัสเริ่มต้น (= เบอร์โทร) เป็นรหัสชั่วคราว — ต้องเปลี่ยนเองตอนเข้าใช้ครั้งแรก
+        $data['must_change_password'] = (int)($data['must_change_password'] ?? 1);
 
         // refer_users.nurse_id has a FK to refer_nurses.id — '' must become NULL,
         // otherwise "no linked nurse" accounts fail the constraint
@@ -177,6 +226,8 @@ class User extends Model
         if (isset($data['password'])) {
             $data['password_hash'] = $this->hashPassword($data['password']);
             unset($data['password']);
+            // admin รีเซ็ตรหัสให้ = รหัสชั่วคราว (ผู้ใช้เปลี่ยนเองส่ง must_change_password = false มาเอง)
+            $data['must_change_password'] = (int)($data['must_change_password'] ?? 1);
         }
 
         // Unlinking must store NULL, not '' (FK on nurse_id)
