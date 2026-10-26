@@ -52,6 +52,7 @@ $route = match (true) {
     $path === '/api/auth/login' && $method === 'POST' => ['AuthController', 'login'],
     $path === '/api/auth/logout' && $method === 'POST' => ['AuthController', 'logout'],
     $path === '/api/auth/me' && $method === 'GET' => ['AuthController', 'me'],
+    $path === '/api/auth/change-password' && $method === 'POST' => ['AuthController', 'changePassword'],
 
     // System routes
     $path === '/api/health' && $method === 'GET' => ['HealthController', 'health'],

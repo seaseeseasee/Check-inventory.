@@ -62,6 +62,11 @@ class AuthMiddleware
                 if (!$this->authService->checkAuth()) {
                     Response::unauthorized('Login required');
                 }
+                // ยังใช้รหัสผ่านเริ่มต้น/ชั่วคราว → ทำได้แค่เปลี่ยนรหัสผ่านหรือออกจากระบบ (บังคับที่ server ไม่พึ่งหน้าเว็บ)
+                $allowedWhilePending = ['/api/auth/change-password', '/api/auth/logout'];
+                if ($this->authService->mustChangePassword() && !in_array($path, $allowedWhilePending, true)) {
+                    Response::error('กรุณาเปลี่ยนรหัสผ่านก่อนเริ่มใช้งาน', 403, ['code' => 'PASSWORD_CHANGE_REQUIRED']);
+                }
             }
         }
     }

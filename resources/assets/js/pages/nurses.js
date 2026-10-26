@@ -96,6 +96,14 @@ class NursesPage {
     return `${target.getUTCFullYear()}-${mm}-${String(day).padStart(2, '0')}`;
   }
 
+  /** เบอร์โทร → ชื่อผู้ใช้ตัวเลขล้วน (เหมือน User::normalizePhone ฝั่ง server) — null ถ้าไม่ใช่เบอร์ไทย */
+  static phoneUsername(raw) {
+    const s = String(raw || '').trim();
+    if (!s || /[^\d\s\-()]/.test(s)) return null;
+    const digits = s.replace(/\D/g, '');
+    return /^0\d{8,9}$/.test(digits) ? digits : null;
+  }
+
   static applyPhoneMask(digits) {
     const parts = digits.startsWith('02') && digits.length <= 9
       ? [digits.slice(0, 2), digits.slice(2, 5), digits.slice(5, 9)]   // 02-xxx-xxxx (Bangkok)
@@ -143,7 +151,16 @@ class NursesPage {
 
     // Phone: tel input mask + soft validation
     const phone = document.getElementById('nPhone');
-    phone?.addEventListener('input', (e) => this.onPhoneInput(e));
+    phone?.addEventListener('input', (e) => {
+      this.onPhoneInput(e);
+      // บัญชีใหม่: ชื่อผู้ใช้ = เบอร์โทร (ใส่ให้อัตโนมัติจนกว่าผู้ดูแลจะพิมพ์ชื่อผู้ใช้เอง)
+      const user = document.getElementById('nUsername');
+      if (user && !this.editingLoginUsername && (user.value === '' || user.dataset.auto === '1')) {
+        user.value = NursesPage.phoneUsername(e.target.value) || '';
+        user.dataset.auto = user.value ? '1' : '';
+      }
+    });
+    document.getElementById('nUsername')?.addEventListener('input', (e) => { e.target.dataset.auto = ''; });
     phone?.addEventListener('blur', () => this.validateField('nPhone'));
 
     // Start date: selecting a new date replaces the legacy note
@@ -269,16 +286,18 @@ class NursesPage {
 
     if (name === 'nUsername') {
       const password = document.getElementById('nPassword')?.value || '';
-      if (value && !/^[A-Za-z0-9._-]{3,100}$/.test(value)) {
-        this.setFieldError(name, 'ใช้ได้เฉพาะ a-z A-Z 0-9 . _ - (3-100 ตัวอักษร)');
+      const isPhone = NursesPage.phoneUsername(value) !== null;
+      if (value && !isPhone && !/^[A-Za-z0-9._-]{3,100}$/.test(value)) {
+        this.setFieldError(name, 'ใช้เบอร์โทรศัพท์ (เช่น 0812345678) หรือ a-z A-Z 0-9 . _ - (3-100 ตัวอักษร)');
         return false;
       }
       if (!value && this.editingLoginUsername) {
         this.setFieldError(name, 'ห้ามลบชื่อผู้ใช้ของบัญชีเดิม — ใช้สถานะ "พักใช้งาน" เพื่อปิดการเข้าสู่ระบบแทน');
         return false;
       }
-      if (value && !this.editingLoginUsername && password.length < 6) {
-        this.setFieldError('nPassword', 'บัญชีใหม่ต้องตั้งรหัสผ่านอย่างน้อย 6 ตัวอักษร');
+      // ชื่อผู้ใช้เป็นเบอร์โทร: เว้นรหัสได้ (รหัสเริ่มต้น = เบอร์โทร) — ชื่อแบบอื่นต้องตั้งรหัสเริ่มต้นเอง
+      if (value && !this.editingLoginUsername && !isPhone && password.length < 6) {
+        this.setFieldError('nPassword', 'ชื่อผู้ใช้ไม่ใช่เบอร์โทร — ต้องตั้งรหัสผ่านเริ่มต้นอย่างน้อย 6 ตัวอักษร');
         return false;
       }
       this.setFieldError('nPassword', '');
@@ -600,7 +619,7 @@ class NursesPage {
     if (this.editingLoginUsername) {
       text = `🔑 บัญชีปัจจุบัน: ${this.editingLoginUsername} — เว้นช่องรหัสผ่านว่างไว้เพื่อใช้รหัสเดิม`;
     } else if (this.editingId) {
-      text = 'ยังไม่มีบัญชีเข้าใช้งาน — กรอกชื่อผู้ใช้และรหัสผ่านเพื่อสร้างบัญชีให้พยาบาลรายนี้';
+      text = 'ยังไม่มีบัญชีเข้าใช้งาน — กรอกเบอร์โทรเป็นชื่อผู้ใช้เพื่อสร้างบัญชี (รหัสเริ่มต้น = เบอร์โทร ผู้ใช้จะถูกบังคับเปลี่ยนตอนเข้าครั้งแรก)';
     }
     el.textContent = text;
     el.classList.toggle('hidden', !text);
