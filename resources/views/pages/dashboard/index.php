@@ -9,77 +9,106 @@
 
 <!-- Inspection/Check Tab -->
 <div id="tabContentCheck" class="hidden">
-  <!-- Step 1: Car & Nurse Selection View -->
-  <div class="card" id="inspectionLoginPage">
-    <h2>ตรวจเช็กรถ</h2>
-    <form id="inspectionStartForm">
-      <p class="step-label">1. เลือกรถ</p>
+  <!-- ตรวจเช็กแบบทีละขั้น: 1 เลือกรถ → 2 ผู้ตรวจ/เวร → 3 ตรวจทีละหมวด → 4 สรุป → เสร็จ -->
+  <div class="card wiz" id="inspectionWizard" data-help-tel="<?= escape(env('HELP_PHONE', '')) ?>">
+    <div class="wiz-top">
+      <button type="button" class="gray wiz-back" id="inspectionBackBtn" onclick="inspectionBack()">← ย้อนกลับ</button>
+      <button type="button" class="wiz-help" onclick="openInspectionHelp()">📞 ขอความช่วยเหลือ</button>
+    </div>
+    <div class="wiz-progress">
+      <p class="wiz-step-text" id="inspectionStepText" aria-live="polite"></p>
+      <ol class="wiz-dots" id="inspectionStepDots" aria-hidden="true"><li></li><li></li><li></li><li></li></ol>
+    </div>
+
+    <!-- ขั้นที่ 1: เลือกรถ -->
+    <section class="wiz-step" id="inspectionStepCar">
+      <h2>🚑 วันนี้ตรวจรถคันไหน?</h2>
+      <p class="wiz-sub">แตะที่รถที่ต้องการตรวจ</p>
       <div class="car-grid" aria-label="เลือกรถ" id="inspectionCarGrid"></div>
+    </section>
 
-      <label for="inspectionNurse">2. ผู้ตรวจ</label>
-      <select id="inspectionNurse">
-        <option value="">-- เลือกผู้ตรวจ --</option>
-      </select>
-      <p id="inspectionNurseLock" class="mt-1 hidden text-xs font-semibold" role="status"></p>
+    <!-- ขั้นที่ 2: ผู้ตรวจ วันที่ และเวร -->
+    <section class="wiz-step hidden" id="inspectionStepWho">
+      <form id="inspectionStartForm">
+        <h2>👤 ใครเป็นผู้ตรวจ?</h2>
+        <div class="wiz-picked" id="inspectionPickedCar"></div>
 
-      <div class="shift-row">
-        <div>
-          <label for="inspectionDate">3. วันที่</label>
+        <input type="hidden" id="inspectionNurse">
+        <p id="inspectionNurseLock" class="wiz-lock hidden" role="status"></p>
+        <div id="inspectionNursePicker">
+          <label for="inspectionNurseSearch">🔍 พิมพ์ชื่อเพื่อค้นหา</label>
+          <input type="search" id="inspectionNurseSearch" autocomplete="off" placeholder="เช่น สมศรี">
+          <div class="pick-list" id="inspectionNurseList" role="group" aria-label="รายชื่อผู้ตรวจ"></div>
+        </div>
+
+        <p class="step-label">⏰ เวรที่ตรวจ</p>
+        <input type="hidden" id="inspectionShift">
+        <div class="seg wiz-shift" role="group" aria-label="เลือกเวร">
+          <button type="button" class="seg-btn" data-shift="morning" aria-pressed="false">เช้า<small>08–16 น.</small></button>
+          <button type="button" class="seg-btn" data-shift="afternoon" aria-pressed="false">บ่าย<small>16–24 น.</small></button>
+          <button type="button" class="seg-btn" data-shift="night" aria-pressed="false">ดึก<small>00–08 น.</small></button>
+        </div>
+        <details class="wiz-date">
+          <summary>📅 วันที่ <b id="inspectionDateText"></b> (แตะเพื่อเปลี่ยน)</summary>
+          <label for="inspectionDate">วันที่ตรวจ</label>
           <input type="date" id="inspectionDate" required>
-        </div>
-        <div>
-          <label for="inspectionShift">4. เวร</label>
-          <select id="inspectionShift" required>
-            <option value="">-- เลือกเวร --</option>
-            <option value="morning">เช้า 08-16 น.</option>
-            <option value="afternoon">บ่าย 16-24 น.</option>
-            <option value="night">ดึก 00-08 น.</option>
-          </select>
-        </div>
-      </div>
-      <p id="inspectionShiftHint" class="shift-hint" role="status" aria-live="polite"></p>
+        </details>
+        <p id="inspectionShiftHint" class="shift-hint" role="status" aria-live="polite"></p>
 
-      <button type="submit" id="inspectionStartBtn">เริ่มตรวจ</button>
-    </form>
+        <div class="save-bar wiz-bar">
+          <button type="submit" id="inspectionStartBtn">เริ่มตรวจ →</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ขั้นที่ 3: ตรวจทีละหมวด -->
+    <section class="wiz-step hidden" id="inspectionStepCheck">
+      <div class="top-info" id="inspectionLoginInfo"></div>
+      <p id="inspectionModeNote" class="mode-note hidden" role="status"></p>
+      <h2 id="inspectionGroupTitle"></h2>
+      <p class="wiz-sub" id="inspectionGroupSub" role="status" aria-live="polite"></p>
+      <button type="button" class="wiz-all-ok hidden" id="inspectionPageNoneBtn" onclick="checkAllInspection()">✅ หน้านี้ไม่ได้ใช้ ไม่มีหาย ทั้งหมด</button>
+
+      <div id="inspectionItemTable" class="list"></div>
+
+      <p class="autosave-note" id="inspectionAutosaveNote" role="status" aria-live="polite"></p>
+      <div class="save-bar wiz-bar">
+        <p id="inspectionSaveHint" class="save-hint"></p>
+        <button type="button" id="inspectionNextBtn" onclick="inspectionNext()">ถัดไป →</button>
+      </div>
+    </section>
+
+    <!-- ขั้นที่ 4: สรุปก่อนส่ง -->
+    <section class="wiz-step hidden" id="inspectionStepSummary">
+      <h2>📋 ตรวจสอบอีกครั้งก่อนส่ง</h2>
+      <div class="top-info" id="inspectionSummaryInfo"></div>
+      <div id="inspectionSummary"></div>
+      <div class="save-bar wiz-bar">
+        <button id="inspectionSubmitBtn" type="button" class="secondary" onclick="submitInspection()">✅ ยืนยันส่งผลการตรวจ</button>
+      </div>
+    </section>
+
+    <!-- เสร็จแล้ว -->
+    <section class="wiz-step hidden" id="inspectionStepDone">
+      <div class="wiz-done">
+        <div class="wiz-done-icon" aria-hidden="true">✅</div>
+        <h2>บันทึกผลการตรวจเรียบร้อยแล้ว</h2>
+        <p id="inspectionDoneText"></p>
+      </div>
+      <div class="wiz-done-actions">
+        <button type="button" onclick="switchTab('dashboard')">🏠 กลับหน้าแรก</button>
+        <button type="button" class="gray" onclick="inspectionRestart()">🚑 ตรวจรถคันอื่น</button>
+      </div>
+    </section>
   </div>
 
-  <!-- Step 2: The Active Inspection Form -->
-  <div class="card hidden" id="inspectionCheckPage">
-    <h2>ตรวจนับอุปกรณ์</h2>
-    <div class="top-info" id="inspectionLoginInfo"></div>
-    <p id="inspectionModeNote" class="mode-note hidden" role="status"></p>
-    <details class="check-help">
-      <summary>วิธีตรวจ</summary>
-      <ol>
-        <li>ใส่ <b>ใช้ไป</b> (ไม่ได้ใช้ = 0)</li>
-        <li>นับของ ถ้าตรงกด <b>✓ ครบ</b> ถ้าไม่ตรงกด <b>✗ ไม่ตรง</b></li>
-        <li>เครื่อง/ถัง: เลือกสถานะ แบต หรือแรงดัน</li>
-      </ol>
-    </details>
-
-    <div class="check-sticky">
-      <div class="progress-wrap">
-        <div class="progress-track"><div class="progress-fill" id="inspectionProgressFill"></div></div>
-        <div class="progress-text" id="inspectionProgressText"></div>
-        <p class="autosave-note" id="inspectionAutosaveNote" role="status" aria-live="polite"></p>
-      </div>
-      <div class="filter-chips" role="group" aria-label="กรองรายการตรวจ">
-        <button type="button" class="chip-btn on" id="inspectionChipAll" onclick="setInspectionFilter('all')">ทั้งหมด <b id="inspectionCntAll"></b></button>
-        <button type="button" class="chip-btn" id="inspectionChipPending" onclick="setInspectionFilter('pending')">ยังไม่ตรวจ <b id="inspectionCntPending"></b></button>
-        <button type="button" class="chip-btn" id="inspectionChipAttn" onclick="setInspectionFilter('attn')">ขาด/ผิดปกติ <b id="inspectionCntAttn"></b></button>
-      </div>
-    </div>
-
-    <div class="btn-row">
-      <button type="button" onclick="checkAllInspection()">✅ ที่เหลือ ไม่ได้ใช้</button>
-      <button type="button" class="gray" onclick="cancelInspection()">← กลับ</button>
-    </div>
-
-    <div id="inspectionItemTable" class="list"></div>
-
-    <div class="save-bar">
-      <p id="inspectionSaveHint" class="save-hint"></p>
-      <button id="inspectionSubmitBtn" type="button" class="secondary" onclick="submitInspection()">💾 บันทึก</button>
+  <!-- หน้าต่างช่วยเหลือ -->
+  <div id="inspectionHelp" class="hidden sheet-overlay" role="dialog" aria-modal="true" aria-labelledby="inspectionHelpTitle" onclick="if (event.target === this) closeInspectionHelp()">
+    <div class="sheet">
+      <h3 id="inspectionHelpTitle">📞 ขอความช่วยเหลือ</h3>
+      <div id="inspectionHelpBody"></div>
+      <a class="wiz-call hidden" id="inspectionHelpCall" href="#">📞 โทรหาเจ้าหน้าที่</a>
+      <button type="button" class="gray" onclick="closeInspectionHelp()">ปิดหน้าต่างนี้</button>
     </div>
   </div>
 </div>
@@ -161,27 +190,6 @@
     </div>
     <p id="stockCarMeta" class="vehicle-meta">จำนวนและวันหมดอายุแยกตามรถแต่ละคัน</p>
 
-    <div id="addItemForm" class="hidden">
-      <h3>เพิ่มอุปกรณ์ใหม่</h3>
-      <form id="stockAddForm">
-        <div class="editor">
-          <div><label for="stockName">ชื่ออุปกรณ์</label><input id="stockName" placeholder="ชื่ออุปกรณ์" required></div>
-          <div><label for="stockStandard">จำนวนมาตรฐาน</label><input id="stockStandard" placeholder="จำนวนมาตรฐาน เช่น 10 หรือ 1 ชุด" required></div>
-          <div>
-            <label for="stockItemType">ประเภทอุปกรณ์</label>
-            <select id="stockItemType">
-              <option value="individual">รายชิ้น — แต่ละชิ้นมีวันหมดอายุของตัวเอง</option>
-              <option value="box">กล่อง/ล็อต — ทั้งกล่องวันหมดอายุเดียวกัน</option>
-              <option value="non_expiring">ไม่มีวันหมดอายุ — รายเครื่อง สถานะ/แบต/แรงดัน</option>
-            </select>
-          </div>
-          <button type="submit">เพิ่มอุปกรณ์</button>
-          <button type="button" class="gray" onclick="hideAddItemForm()">ยกเลิก</button>
-        </div>
-        <p class="text-xs text-slate-500">รายการใหม่ยังไม่มียอดบนรถ — เพิ่มของพร้อมวันหมดอายุ/ลงทะเบียนเครื่องที่เมนู “เติมอุปกรณ์” หรือตรวจนับในเวรถัดไป</p>
-      </form>
-    </div>
-    
     <div class="stock-toolbar">
       <button type="button" class="small-btn secondary" onclick="showAddVehicleForm()">🚚 เพิ่มรถใหม่</button>
       <button type="button" class="small-btn" onclick="showAddItemForm()">+ เพิ่มอุปกรณ์</button>

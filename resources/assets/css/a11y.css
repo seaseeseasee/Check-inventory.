@@ -232,3 +232,90 @@ html, body { overflow-x: hidden; }
 .add-dates-grid label { display: grid; gap: 4px; font-size: 16px; }
 .lot-view li { display: grid; gap: 6px; padding: 8px 0; }
 .lot-view .lot-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---- หน้าตรวจเช็กแบบทีละขั้น (inspections.js) ---- */
+.wiz-top {
+  position: sticky; top: var(--app-top-h, 0px); z-index: 50;   /* ความสูงหัวเว็บวัดจริงใน goStep() */
+  display: flex; justify-content: space-between; gap: 12px;
+  margin: -4px -4px 8px; padding: 6px 4px; background: #fff;
+}
+.wiz-top button { flex: 1 1 auto; width: auto; margin: 0; min-height: 52px; padding: 8px 16px; font-weight: 800; white-space: nowrap; }
+.wiz-help { background: #fff7ed; color: #9a3412; border: 2px solid #fdba74; }
+.wiz-progress { margin: 4px 0 14px; }
+.wiz-step-text { margin: 0 0 6px; font-weight: 800; color: #1e293b; }
+.wiz-dots { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.wiz-dots li { flex: 1 1 0; height: 8px; border-radius: 99px; background: #e2e8f0; }
+.wiz-dots li.on { background: var(--teal-700); }
+.wiz h2 { font-size: 1.35rem; line-height: 1.35; margin: 4px 0 6px; color: #0f172a; }   /* ~24px */
+.wiz-sub { margin: 0 0 12px; color: #334155; font-weight: 600; }
+.wiz-picked { margin: 0 0 12px; font-weight: 700; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wiz-lock { margin: 8px 0 4px; padding: 14px; border-radius: 14px; background: var(--teal-50); border: 2px solid var(--teal-300); font-weight: 800; color: var(--teal-800); }
+.wiz-lock.is-error { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
+
+.pick-list { display: grid; gap: 10px; margin-top: 10px; }
+.pick-btn {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  width: 100%; margin: 0; min-height: 60px; padding: 10px 48px 10px 16px; text-align: left;
+  background: #fff; color: #0f172a; border: 2px solid #cbd5e1; box-shadow: none;
+}
+.pick-btn .pick-name { font-size: 1.05rem; font-weight: 800; }
+.pick-btn .pick-sub { font-size: max(0.8rem, 14px); color: #475569; font-weight: 600; }
+.pick-btn.on { border-color: var(--teal-700); background: var(--teal-50); box-shadow: 0 0 0 3px var(--teal-100); }
+.pick-mark { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 1.4rem; font-weight: 900; color: var(--teal-700); }
+
+.wiz-shift { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.wiz-shift .seg-btn { min-height: 64px; flex-direction: column; display: flex; align-items: center; justify-content: center; gap: 2px; font-size: 1.05rem; font-weight: 800; }
+.wiz-shift .seg-btn small { font-size: max(0.75rem, 14px); font-weight: 600; }
+.wiz-date { margin: 12px 0 4px; }
+.wiz-date summary { font-weight: 700; color: #1e293b; flex-wrap: wrap; gap: 0 6px; }   /* summary เป็น flex จึงต้องเว้นช่องเอง */
+
+.wiz-all-ok {
+  width: 100%; margin: 0 0 12px; min-height: 56px; font-weight: 800;
+  background: #ecfdf5; color: #065f46; border: 2px solid #6ee7b7; box-shadow: none;
+}
+.wiz-bar { position: sticky; }
+.wiz-bar button:disabled { opacity: 0.55; }
+
+.sum-block { margin: 0 0 12px; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); background: #fff; }
+.sum-block.is-ok { border-color: #6ee7b7; background: #ecfdf5; }
+.sum-block.is-warn { border-color: #fcd34d; background: #fffbeb; }
+.sum-block.is-bad { border-color: #fca5a5; background: #fef2f2; }
+.sum-title { margin: 0; font-size: 1.05rem; font-weight: 800; color: #0f172a; }
+.sum-list { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.sum-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 8px; border-top: 1px solid rgba(15, 23, 42, 0.08); }
+.sum-list li span { flex: 1 1 auto; font-weight: 600; }
+.sum-list .small-btn { flex: 0 0 auto; margin: 0; }
+
+.wiz-done { text-align: center; padding: 24px 8px 8px; }
+.wiz-done-icon { font-size: 64px; line-height: 1; margin-bottom: 12px; }
+.wiz-done p { font-size: 1.05rem; color: #1e293b; }
+.wiz-done-actions { display: grid; gap: 14px; margin-top: 16px; }
+.wiz-done-actions button { margin: 0; min-height: 56px; font-size: 1.1rem; }
+
+#inspectionHelp .sheet h3 { font-size: 1.25rem; }
+.help-lead { font-weight: 700; margin: 0 0 6px; }
+.help-steps { margin: 0 0 14px; padding-left: 22px; display: grid; gap: 8px; line-height: 1.6; }
+#inspectionHelp .sheet > button, .wiz-call { width: 100%; margin: 8px 0 0; min-height: 56px; }
+.wiz-call {
+  display: flex; align-items: center; justify-content: center; border-radius: 14px;
+  background: #c2410c; color: #fff; font-weight: 800; font-size: 1.1rem; text-decoration: none;
+}
+.check-card.is-focus { border: 2px solid #f59e0b; box-shadow: 0 0 0 4px #fde68a; }
+
+@media (max-width: 760px) {
+  .wiz-top button { padding: 8px 12px; font-size: 0.9rem; }
+}
+
+/* ---- pop up เพิ่มอุปกรณ์ (vehicles.js) ---- */
+.item-form-car { margin: 0 0 12px; font-weight: 700; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.item-type-pick { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; }
+.item-type-pick legend { font-weight: 700; color: #1e293b; margin-bottom: 6px; padding: 0; }
+.item-type-opt {
+  display: flex; align-items: center; gap: 12px; margin: 0; min-height: 60px; padding: 10px 14px;
+  border: 2px solid #cbd5e1; border-radius: 14px; background: #fff; cursor: pointer;
+}
+.item-type-opt span { display: flex; flex-direction: column; gap: 2px; }
+.item-type-opt b { font-size: 1.05rem; color: #0f172a; }
+.item-type-opt small { font-size: max(0.8rem, 14px); color: #475569; font-weight: 600; }
+.item-type-opt:has(input:checked) { border-color: var(--teal-700); background: var(--teal-50); box-shadow: 0 0 0 3px var(--teal-100); }
+.stock-card.is-focus { border: 2px solid var(--teal-600); box-shadow: 0 0 0 4px var(--teal-100); }

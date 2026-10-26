@@ -1,11 +1,9 @@
 # syntax=docker/dockerfile:1
 #
 # emer — Ambulance Refer Checklist System
-# Base image pinned to PHP 8.2 to match the version already proven to run this
-# exact codebase (XAMPP on the dev machine reports PHP 8.2.12) and satisfies
-# the project's own documented minimum (PHP 8.1+, see README.md). Not an
-# upgrade — matching what already works.
-FROM php:8.2-apache
+# Base image: PHP 8.5 (upgraded from 8.2; whole codebase lints clean on 8.5
+# with E_ALL). App code still stays 8.2-compatible for the XAMPP dev machine.
+FROM php:8.5-apache
 
 # ---- PHP extensions actually used by app/ (verified by grep, not assumed) ----
 # pdo + pdo_mysql : app/Config/Database.php (`new PDO(...)`, mysql DSN)

@@ -20,11 +20,11 @@ class VehiclesPage {
     this.currentVehicleId = null;
     this.currentVehicle = null;
     this.items = [];
-    this.showAddForm = false;
     this.editingItemId = null;
     this.copyStaging = [];
     this.copySourceLabel = '';
     this._vehicleModal = null;
+    this._itemModal = null;
     this.init();
   }
 
@@ -66,9 +66,6 @@ class VehiclesPage {
     document.getElementById('btnEditVehicle')?.addEventListener('click', () => this.showEditVehicleForm());
     document.getElementById('btnToggleVehicleStatus')?.addEventListener('click', () => this.handleToggleVehicleStatus());
     document.getElementById('btnDeleteVehicle')?.addEventListener('click', () => this.handleDeleteVehicle());
-
-    // Add item form
-    document.getElementById('stockAddForm')?.addEventListener('submit', (e) => this.handleAddItem(e));
 
     // Copy items from another vehicle
     document.getElementById('btnCopyStart')?.addEventListener('click', () => this.handleCopyStart());
@@ -674,51 +671,176 @@ class VehiclesPage {
     return `${Number(m[3])}/${Number(m[2])}/${Number(m[1]) + 543} ${m[4]}:${m[5]}`;
   }
 
+  // ---------- เพิ่มอุปกรณ์: pop up แบบเดียวกับ "เพิ่มรถใหม่" ----------
+  itemFormFields() {
+    const types = [
+      ['individual', '🧩 รายชิ้น', 'แต่ละชิ้นมีวันหมดอายุของตัวเอง'],
+      ['box', '📦 กล่อง / ล็อต', 'ทั้งกล่องวันหมดอายุเดียวกัน'],
+      ['non_expiring', '🩺 ไม่มีวันหมดอายุ', 'ตรวจรายเครื่อง: สถานะ / แบต / แรงดัน'],
+    ];
+    return `
+      <p class="item-form-car">🚑 เพิ่มในรถ: ${window.vehicleChip(this.currentVehicle || { id: this.currentVehicleId })}</p>
+      <div class="grid gap-4">
+        <div>
+          <label for="itemName" class="!mt-0">ชื่ออุปกรณ์ <span class="text-red-500" aria-hidden="true">*</span></label>
+          <input id="itemName" type="text" maxlength="255" placeholder="เช่น Adrenaline 1 mg" autocomplete="off">
+          <p class="mt-1 hidden text-xs font-semibold text-red-600" id="itemNameError" role="alert"></p>
+        </div>
+        <div>
+          <label for="itemStandard">จำนวนมาตรฐาน (ขั้นต่ำที่ต้องมี) <span class="text-red-500" aria-hidden="true">*</span></label>
+          <input id="itemStandard" type="text" maxlength="100" placeholder="เช่น 10 หลอด หรือ 1 ชุด" autocomplete="off">
+          <p class="mt-1 hidden text-xs font-semibold text-red-600" id="itemStandardError" role="alert"></p>
+        </div>
+        <fieldset class="item-type-pick">
+          <legend>ประเภทอุปกรณ์</legend>
+          ${types.map(([value, label, hint], i) => `
+          <label class="item-type-opt">
+            <input type="radio" name="itemType" value="${value}" ${i === 0 ? 'checked' : ''}>
+            <span><b>${label}</b><small>${hint}</small></span>
+          </label>`).join('')}
+        </fieldset>
+        <div class="flag-row hidden" id="itemFlags">
+          <label><input type="checkbox" id="itemIsBattery"> 🔋 มีแบตเตอรี่</label>
+          <label><input type="checkbox" id="itemHasPressure"> 🫧 วัดแรงดัน (PSI)</label>
+        </div>
+        <p class="text-xs text-slate-500">อุปกรณ์ใหม่ยังไม่มียอดบนรถ — ใส่จำนวนและวันหมดอายุได้ที่การ์ดของอุปกรณ์หลังบันทึก หรือที่เมนู “เติมของ”</p>
+      </div>
+    `;
+  }
+
   showAddItemForm() {
-    this.showAddForm = true;
-    document.getElementById('addItemForm').classList.remove('hidden');
-    document.getElementById('stockName').focus();
+    if (!this.currentVehicleId) {
+      window.toast.warning('กรุณาเลือกรถก่อน');
+      return;
+    }
+    this.hideAddItemForm();
+
+    const modal = new Modal({
+      title: 'เพิ่มอุปกรณ์ใหม่',
+      size: 'md',
+      content: `<form id="itemForm" novalidate>${this.itemFormFields()}</form>`,
+      onClose: () => { this._itemModal = null; },
+    }).render();
+    this._itemModal = modal;
+
+    const actions = modal.element.querySelector('.sheet-actions');
+    actions.innerHTML = `
+      <button type="button" class="small-btn gray flex-1" data-action="cancel">ยกเลิก</button>
+      <button type="button" class="flex-1" data-action="save">บันทึกอุปกรณ์ใหม่</button>
+    `;
+    actions.querySelector('[data-action="cancel"]').onclick = () => this.cancelItemForm();
+    actions.querySelector('[data-action="save"]').onclick = () => this.handleAddItem();
+
+    const form = modal.element.querySelector('#itemForm');
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      this.handleAddItem();
+    });
+    form.querySelector('#itemName')?.addEventListener('input', () => this.setItemFieldError('itemName', ''));
+    form.querySelector('#itemStandard')?.addEventListener('input', () => this.setItemFieldError('itemStandard', ''));
+    // แบต/แรงดัน มีเฉพาะประเภท "ไม่มีวันหมดอายุ"
+    form.querySelectorAll('input[name="itemType"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        form.querySelector('#itemFlags')?.classList.toggle('hidden', this.itemFormType() !== 'non_expiring');
+      });
+    });
+
+    modal.open();
+    form.querySelector('#itemName')?.focus();
   }
 
   hideAddItemForm() {
-    this.showAddForm = false;
-    document.getElementById('addItemForm').classList.add('hidden');
-    document.getElementById('stockName').value = '';
-    document.getElementById('stockStandard').value = '';
-    const typeEl = document.getElementById('stockItemType');
-    if (typeEl) typeEl.value = 'individual';
-    const minEl = null;
-    if (minEl) minEl.value = '';
+    if (this._itemModal) {
+      try { this._itemModal.destroy(); } catch (e) { /* node ถูกลบไปแล้ว */ }
+      this._itemModal = null;
+    }
   }
 
-  async handleAddItem(event) {
-    event.preventDefault();
+  itemFormType() {
+    return this._itemModal?.element.querySelector('input[name="itemType"]:checked')?.value || 'individual';
+  }
 
-    const name = document.getElementById('stockName')?.value?.trim();
-    const standard = document.getElementById('stockStandard')?.value?.trim();
-    const itemType = document.getElementById('stockItemType')?.value || 'individual';
+  setItemFieldError(inputId, message) {
+    const form = this._itemModal?.element.querySelector('#itemForm');
+    const input = form?.querySelector('#' + inputId);
+    const errorEl = form?.querySelector('#' + inputId + 'Error');
+    if (input) {
+      if (message) input.setAttribute('aria-invalid', 'true');
+      else input.removeAttribute('aria-invalid');
+    }
+    if (errorEl) {
+      errorEl.textContent = message || '';
+      errorEl.classList.toggle('hidden', !message);
+    }
+  }
+
+  async cancelItemForm() {
+    const form = this._itemModal?.element.querySelector('#itemForm');
+    const hasInput = ['itemName', 'itemStandard'].some(id => (form?.querySelector('#' + id)?.value || '').trim() !== '');
+    if (hasInput) {
+      const ok = await window.confirmDialog('ต้องการยกเลิกและล้างข้อมูลที่กรอกไว้หรือไม่?', {
+        title: 'ยกเลิกการเพิ่มอุปกรณ์',
+        confirmText: 'ล้างข้อมูล',
+        cancelText: 'กรอกต่อ',
+      });
+      if (!ok) return;
+    }
+    this.hideAddItemForm();
+  }
+
+  async handleAddItem() {
+    const form = this._itemModal?.element.querySelector('#itemForm');
+    if (!form) return;
     const vehicleId = this.currentVehicleId;
+    const name = form.querySelector('#itemName').value.trim();
+    const standard = form.querySelector('#itemStandard').value.trim();
+    const itemType = this.itemFormType();
 
+    this.setItemFieldError('itemName', name ? '' : 'กรุณากรอกชื่ออุปกรณ์');
+    this.setItemFieldError('itemStandard', standard ? '' : 'กรุณากรอกจำนวนมาตรฐาน เช่น 10 หรือ 1 ชุด');
     if (!name || !standard) {
-      window.toast.error('กรอกชื่อและจำนวน');
+      form.querySelector(name ? '#itemStandard' : '#itemName')?.focus();
       return;
     }
-
     if (!vehicleId) {
-      window.toast.error('เลือกรถก่อน');
+      window.toast.error('กรุณาเลือกรถก่อน');
       return;
     }
 
     const payload = { name, standard, item_type: itemType };
-
-    try {
-      await window.vehicleApi.addItem(vehicleId, payload);
-      this.hideAddItemForm();
-      window.toast.success('เพิ่มอุปกรณ์เรียบร้อย — เพิ่มของ/วันหมดอายุได้ที่เมนู “เติมอุปกรณ์”');
-      await this.loadItems(vehicleId);
-    } catch (error) {
-      window.toast.error('เพิ่มไม่สำเร็จ: ' + error.message);
+    if (itemType === 'non_expiring') {
+      payload.is_battery = form.querySelector('#itemIsBattery').checked;
+      payload.has_pressure = form.querySelector('#itemHasPressure').checked;
     }
+
+    const saveBtn = this._itemModal.element.querySelector('[data-action="save"]');
+    if (saveBtn) UI.setLoading(saveBtn, true);
+    try {
+      const res = await window.vehicleApi.addItem(vehicleId, payload);
+      this.hideAddItemForm();
+      window.toast.success(`เพิ่ม “${name}” แล้ว — ใส่จำนวนบนรถและวันหมดอายุได้ที่การ์ดด้านล่าง`);
+      await this.loadItems(vehicleId);
+      this.focusItemCard(res?.data?.id);
+    } catch (error) {
+      const errs = error.data?.errors || {};
+      const first = (key) => (Array.isArray(errs[key]) ? errs[key][0] : errs[key]);
+      if (errs.name) this.setItemFieldError('itemName', first('name'));
+      if (errs.standard) this.setItemFieldError('itemStandard', first('standard'));
+      if (error.status === 409) this.setItemFieldError('itemName', error.message);   // ชื่อซ้ำในรถคันนี้
+      window.toast.error('เพิ่มอุปกรณ์ไม่สำเร็จ: ' + (error.message || 'ไม่ทราบสาเหตุ'));
+    } finally {
+      if (saveBtn) UI.setLoading(saveBtn, false);
+    }
+  }
+
+  // พาไปที่การ์ดอุปกรณ์ที่เพิ่งเพิ่ม — ผู้ใช้เห็นทันทีว่าเพิ่มแล้ว และกรอกยอดบนรถต่อได้เลย
+  focusItemCard(itemId) {
+    if (!itemId) return;
+    const card = document.querySelector(`#stockTable .stock-card[data-item-id="${CSS.escape(String(itemId))}"]`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('is-focus');
+    setTimeout(() => card.classList.remove('is-focus'), 3000);
   }
 
   /**

@@ -270,7 +270,8 @@ class RefillPage {
     const topUpable = piece ? [] : lots.filter(l => l.state !== 'expired');
     const newRows = d.lots.map((lot, i) => {
       const existing = lot.lot_id ? lots.find(l => l.id === lot.lot_id) : null;
-      const warn = !existing && lot.expiry_date && lot.expiry_date < today ? '<p class="lot-warn">⛔ หมดอายุแล้ว — เติมไม่ได้</p>' : '';
+      const expired = piece ? (lot.expiries || []).some(e => e && e < today) : (lot.expiry_date && lot.expiry_date < today);
+      const warn = !existing && expired ? '<p class="lot-warn">⛔ หมดอายุแล้ว — เติมไม่ได้</p>' : '';
       const fid = (f) => `rf-${UI.escape(item.id)}-${i}-${f}`;
       return `
       <div class="lot-input-card" data-row="${i}">
@@ -284,8 +285,9 @@ class RefillPage {
           <div><label for="${fid('qty')}">${piece ? 'จำนวนชิ้น *' : 'จำนวนที่เติม *'}</label>
             ${UI.stepper(`id="${fid('qty')}" min="0" data-field="qty" value="${UI.escape(lot.qty)}"`, 'จำนวนที่เติม')}</div>
           ${existing ? '' : `
+          ${piece ? `<div class="add-dates" data-role="piece-dates">${this.renderPieceDates(item, lot, i)}</div>` : `
           <div><label for="${fid('exp')}">วันหมดอายุ${item.requires_expiry ? ' *' : ' (ถ้ามี)'}</label>
-            <input id="${fid('exp')}" type="date" min="${UI.escape(today)}" data-field="expiry_date" value="${UI.escape(lot.expiry_date)}"></div>
+            <input id="${fid('exp')}" type="date" min="${UI.escape(today)}" data-field="expiry_date" value="${UI.escape(lot.expiry_date)}"></div>`}
           <details class="more-fields"><summary>เลขล็อต / วันรับ / หมายเหตุ</summary>
             <label for="${fid('no')}">เลขล็อต</label>
             <input id="${fid('no')}" type="text" maxlength="100" data-field="lot_number" value="${UI.escape(lot.lot_number)}">
@@ -362,6 +364,21 @@ class RefillPage {
       <div class="add-row"><button type="button" class="small-btn add-btn" data-action="add-unit">➕ เพิ่ม${word}</button></div>`;
   }
 
+  /** ของแบบชิ้น: ช่องวันหมดอายุ 1 ช่องต่อ 1 ชิ้น ตามจำนวนชิ้นที่กรอก (ค่าที่กรอกแล้วเก็บใน lot.expiries ไม่หายเมื่อแก้จำนวน) */
+  renderPieceDates(item, lot, row) {
+    const n = Number(lot.qty);
+    if (lot.qty === '' || !(n > 0)) return '<p class="text-sm text-slate-500">กรอกจำนวนชิ้น แล้วจะมีช่องให้ใส่วันหมดอายุของแต่ละชิ้น</p>';
+    if (!Number.isInteger(n)) return '<p class="txt-bad">จำนวนชิ้นต้องเป็นจำนวนเต็ม</p>';
+    if (n > 50) return '<p class="txt-bad">เติมได้ครั้งละไม่เกิน 50 ชิ้น</p>';
+    const exp = lot.expiries || [];
+    return `<p class="add-dates-title">วันหมดอายุของแต่ละชิ้น (${n} ชิ้น) *</p>
+      <div class="add-dates-grid">${Array.from({ length: n }, (_, k) => `
+        <label for="rf-${UI.escape(item.id)}-${row}-pexp-${k}">ชิ้นที่ ${k + 1}
+          <input id="rf-${UI.escape(item.id)}-${row}-pexp-${k}" type="date" min="${UI.escape(this.sheet.today)}" data-field="piece_expiry" data-k="${k}" value="${UI.escape(exp[k] || '')}"></label>`).join('')}
+      </div>
+      ${n > 1 ? '<button type="button" class="small-btn gray" data-action="fill-dates">ใช้วันแรกกับช่องที่ว่าง</button>' : ''}`;
+  }
+
   rerenderItem(id) {
     const card = document.querySelector(`#refillItems .refill-card[data-id="${CSS.escape(id)}"]`);
     const item = this.itemById(id);
@@ -387,8 +404,18 @@ class RefillPage {
     const item = this.itemById(id);
     const target = upd ? d.updates[upd.dataset.update]
       : (UNIT_TYPES.includes(item.item_type) ? d.units[Number(row.dataset.row)] : d.lots[Number(row.dataset.row)]);
-    target[el.dataset.field] = el.value;
     this.clientToken = null;   // ข้อมูลเปลี่ยน = การบันทึกครั้งใหม่
+    if (el.dataset.field === 'piece_expiry') {
+      (target.expiries = target.expiries || [])[Number(el.dataset.k)] = el.value;
+      this.renderSummary();
+      return;
+    }
+    target[el.dataset.field] = el.value;
+    // ของแบบชิ้น: จำนวนชิ้นเปลี่ยน → วาดช่องวันหมดอายุใหม่เฉพาะส่วนนั้น (ไม่ render ทั้งการ์ด เคอร์เซอร์จะได้ไม่หลุดจากช่องจำนวน)
+    if (el.dataset.field === 'qty' && item.item_type === 'individual' && !target.lot_id) {
+      const box = row.querySelector('[data-role="piece-dates"]');
+      if (box) box.innerHTML = this.renderPieceDates(item, target, Number(row.dataset.row));
+    }
     // select / date เปลี่ยนโครงฟอร์ม (เช่น เลือกล็อตเดิม → ซ่อนช่องวันหมดอายุ) จึง render ใหม่เมื่อ change เท่านั้น
     if (event.type === 'change' && el.tagName === 'SELECT') this.rerenderItem(id); else this.renderSummary();
   }
@@ -412,6 +439,12 @@ class RefillPage {
         qty: !d.lots.length && suggest > 0 ? String(suggest) : '',
         expiry_date: '', lot_number: '', received_date: this.sheet.today, note: '',
       });
+    } else if (action === 'fill-dates') {
+      const lot = d.lots[Number(btn.closest('[data-row]').dataset.row)];
+      const exp = lot.expiries = lot.expiries || [];
+      const first = exp.find(Boolean);
+      if (!first) { window.toast.error('ใส่วันหมดอายุอย่างน้อย 1 ช่องก่อน'); return; }
+      for (let k = 0; k < Number(lot.qty); k++) if (!exp[k]) exp[k] = first;
     } else if (action === 'add-unit') {
       d.units.push({ label: '', status: 'ready', battery_level: item.battery_max_bars, pressure_psi: '', note: '' });
     } else if (action === 'update-unit') {
@@ -557,10 +590,14 @@ class RefillPage {
           const label = `${item.name} (แถว ${i + 1})`;
           const n = Number(lot.qty);
           if (!(n > 0) || !Number.isInteger(n)) errors.push(`${label}: จำนวนชิ้นต้องเป็นจำนวนเต็มมากกว่า 0`);
-          if (!lot.expiry_date) errors.push(`${label}: ต้องระบุวันหมดอายุ`);
-          else if (lot.expiry_date < today) errors.push(`${label}: ของหมดอายุแล้ว ไม่อนุญาตให้เติม`);
-          for (let k = 0; k < (Number.isInteger(n) && n > 0 ? n : 0); k++) {
-            pieces.push({ expiry_date: lot.expiry_date, lot_number: lot.lot_number, received_date: lot.received_date, note: lot.note });
+          else if (n > 50) errors.push(`${label}: เติมได้ครั้งละไม่เกิน 50 ชิ้น`);
+          const count = Number.isInteger(n) && n > 0 && n <= 50 ? n : 0;
+          const exp = (lot.expiries || []).slice(0, count);
+          const missing = Array.from({ length: count }, (_, k) => k).filter(k => !exp[k]);
+          if (missing.length) errors.push(`${label}: ต้องระบุวันหมดอายุชิ้นที่ ${missing.map(k => k + 1).join(', ')}`);
+          if (exp.some(e => e && e < today)) errors.push(`${label}: มีชิ้นที่หมดอายุแล้ว ไม่อนุญาตให้เติม`);
+          for (let k = 0; k < count; k++) {
+            pieces.push({ expiry_date: exp[k] || null, lot_number: lot.lot_number, received_date: lot.received_date, note: lot.note });
           }
         });
         lines.push({ item_id: item.id, qty: pieces.length, pieces });

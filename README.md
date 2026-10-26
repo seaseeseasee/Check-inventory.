@@ -100,7 +100,7 @@ VALUES ('usr-admin-001', 'admin', '<ค่า hash จากคำสั่ง�
 Browser ─127.0.0.1:8080─▶ frontend (nginx) ── /assets/* เสิร์ฟเอง
                               │ / และ /api/*  (network "edge")
                               ▼
-                          backend (PHP 8.2 + Apache, Document Root = public/)
+                          backend (PHP 8.5 + Apache, Document Root = public/)
                               │ (network "data" — internal)
                               ▼
                           db (MariaDB 10.4)

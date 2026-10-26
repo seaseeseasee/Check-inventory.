@@ -13,7 +13,8 @@
 
 $ctx = stream_context_create(['http' => ['timeout' => 3, 'ignore_errors' => true]]);
 $body = @file_get_contents('http://127.0.0.1/', false, $ctx);
-$status = isset($http_response_header[0]) ? (int)(explode(' ', $http_response_header[0])[1] ?? 0) : 0;
+$headers = http_get_last_response_headers();
+$status = isset($headers[0]) ? (int)(explode(' ', $headers[0])[1] ?? 0) : 0;
 if ($body === false || $status !== 200) {
     fwrite(STDERR, "web: unexpected status {$status}\n");
     exit(1);

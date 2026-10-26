@@ -133,7 +133,7 @@ class RestockRequest extends Model
         return $requests;
     }
 
-    public function getAllWithDetailsForStaff(string $userId = null): array
+    public function getAllWithDetailsForStaff(?string $userId = null): array
     {
         $sql = "SELECT * FROM {$this->table} WHERE status != ?";
         $params = [self::STATUS_CANCELLED];

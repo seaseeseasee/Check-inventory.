@@ -156,7 +156,7 @@ class Validator
         return $d && $d->format('Y-m-d') === $value;
     }
 
-    protected function validateUnique(string $field, mixed $value, string $table, string $column = null): bool
+    protected function validateUnique(string $field, mixed $value, string $table, ?string $column = null): bool
     {
         $db = \App\Config\Database::getConnection();
         $column = $column ?? $field;
