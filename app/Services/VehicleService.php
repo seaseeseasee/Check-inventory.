@@ -854,10 +854,48 @@ class VehicleService
     // ==================== อุปกรณ์: เพิ่ม / แก้ / ลบ ====================
 
     /**
-     * เพิ่มอุปกรณ์ประจำรถ
-     *  input: name*, standard*, expiry_text, is_battery,
-     *         onboard_qty (ยอดบนรถวันนี้ — จะเขียน stamp ว่าตรวจนับแล้ว),
-     *         current_stock/min_stock (คลังกลางตามชื่อ)
+     * เกณฑ์เตือนรายอุปกรณ์ (หน่วยงานเป็นผู้กำหนด — ค่าว่าง = ไม่เตือน/ใช้ค่าระบบ) — คืนเฉพาะฟิลด์ที่ส่งมา
+     * $item = แถวเดิม (ใช้หาจำนวนขีดแบตเต็มเมื่อไม่ได้ส่ง battery_max_bars มาด้วย)
+     */
+    private function thresholdData(array $input, array $item): array
+    {
+        $int = function (string $key, int $min, int $max, string $label, bool $nullable = true) use ($input): ?int {
+            $raw = trim((string)($input[$key] ?? ''));
+            if ($raw === '') {
+                if (!$nullable) {
+                    throw new ApiException($label . ' ห้ามว่าง', 422, ['errors' => [$key => [$label . ' ห้ามว่าง']]]);
+                }
+                return null;
+            }
+            if (!preg_match('/^\d+$/', $raw) || (int)$raw < $min || (int)$raw > $max) {
+                throw new ApiException(sprintf('%s ต้องเป็นจำนวนเต็ม %d-%d', $label, $min, $max), 422, ['errors' => [$key => [$label . ' ไม่ถูกต้อง']]]);
+            }
+            return (int)$raw;
+        };
+        $data = [];
+        if (array_key_exists('battery_max_bars', $input)) {
+            $data['battery_max_bars'] = $int('battery_max_bars', 1, 10, 'จำนวนขีดแบตเมื่อเต็ม', false);
+        }
+        if (array_key_exists('battery_low_bars', $input)) {
+            $max = $data['battery_max_bars'] ?? VehicleStockService::batteryMax($item);
+            $data['battery_low_bars'] = $int('battery_low_bars', 0, $max, 'เกณฑ์แบตต่ำ');
+        }
+        if (array_key_exists('o2_low_psi', $input)) {
+            $data['o2_low_psi'] = $int('o2_low_psi', 0, VehicleStockService::MAX_PSI, 'เกณฑ์แรงดัน O2 ต่ำ (PSI)');
+        }
+        if (array_key_exists('expiry_warn_days', $input)) {
+            $data['expiry_warn_days'] = $int('expiry_warn_days', 0, 3650, 'จำนวนวันเตือนใกล้หมดอายุ');
+        }
+        return $data;
+    }
+
+    /**
+     * เพิ่มอุปกรณ์ประจำรถ — กรอกรายละเอียดตามประเภทได้ในครั้งเดียว (ไม่ส่ง = เพิ่มแค่รายการ ยังไม่มีของบนรถ)
+     *  input: name*, standard*, item_type, is_battery, has_pressure,
+     *         เกณฑ์เตือน: expiry_warn_days | battery_max_bars, battery_low_bars, o2_low_psi
+     *         กล่อง/รายชิ้น: onboard_qty + onboard_expiry (กล่อง) / onboard_expiries[] (รายชิ้น 1 วันต่อ 1 ชิ้น)
+     *         ไม่มีวันหมดอายุ: units[] = [{label, status, battery_level, pressure_psi, note}]
+     *  ทั้งหมดอยู่ใน transaction เดียว — ข้อมูลส่วนไหนผิด จะไม่สร้างอุปกรณ์เลย
      */
     public function addItem(string $carId, array $input, ?array $actor): array
     {
@@ -887,12 +925,27 @@ class VehicleService
             throw new ApiException('อุปกรณ์ชื่อ "' . $name . '" มีอยู่ในรถคันนี้แล้ว', 409);
         }
 
+        $isUnitType = $itemType === VehicleStockService::TYPE_NON_EXPIRING;
+        $flags = [
+            'is_battery' => ($isUnitType && !empty($input['is_battery'])) ? 1 : 0,
+            'has_pressure' => ($isUnitType && !empty($input['has_pressure'])) ? 1 : 0,
+        ];
+        // เกณฑ์เตือนรับเฉพาะที่ตรงประเภท (เช่น กล่องไม่มีแบต) — ค่าที่ไม่เกี่ยวถูกตัดทิ้ง
+        $allowed = $isUnitType
+            ? array_merge($flags['is_battery'] ? ['battery_max_bars', 'battery_low_bars'] : [], $flags['has_pressure'] ? ['o2_low_psi'] : [])
+            : ['expiry_warn_days'];
+        $thresholds = $this->thresholdData(array_intersect_key($input, array_flip($allowed)), $flags);
+        $units = $isUnitType ? array_values(array_filter((array)($input['units'] ?? []), 'is_array')) : [];
+        if (count($units) > 50) {
+            throw new ApiException('เพิ่มเครื่อง/ถังได้ครั้งละไม่เกิน 50', 422);
+        }
+
         $itemId = 'itm-' . substr(generate_id(), 0, 12);
         $target = self::deriveTarget($standard);
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
-            $this->itemModel->create([
+            $this->itemModel->create($thresholds + [
                 'id' => $itemId,
                 'car_id' => $carId,
                 'name' => $name,
@@ -901,11 +954,21 @@ class VehicleService
                 'unit' => $target['unit'],
                 'expiry_text' => '',
                 'item_type' => $itemType,
-                'is_battery' => ($itemType === VehicleStockService::TYPE_NON_EXPIRING && !empty($input['is_battery'])) ? 1 : 0,
-                'has_pressure' => ($itemType === VehicleStockService::TYPE_NON_EXPIRING && !empty($input['has_pressure'])) ? 1 : 0,
+                'is_battery' => $flags['is_battery'],
+                'has_pressure' => $flags['has_pressure'],
                 'active' => true,
             ]);
-            // รายการใหม่ = "ยังไม่เคยตรวจนับ" — ยอดเกิดจากการเติมของ (Lot + วันหมดอายุ) หรือการตรวจนับเวรแรก
+            // ไม่ได้กรอกของบนรถ = "ยังไม่เคยตรวจนับ" — ยอดเกิดจากการเติมของ (Lot + วันหมดอายุ) หรือการตรวจนับเวรแรก
+            if ($isUnitType && $units) {
+                $item = $this->itemModel->lockById($itemId);
+                $ctx = ['by_user_id' => $actor['id'] ?? null, 'by_name' => (string)($actor['full_name'] ?? ''), 'at' => $this->now()];
+                $stock = new VehicleStockService();
+                foreach ($units as $u) {
+                    $stock->addUnit($item, VehicleStockService::parseUnitInput($u, $item, (string)($u['label'] ?? '')), $ctx);
+                }
+            } elseif (!$isUnitType) {
+                $this->applyOnboardQty($this->itemModel->lockById($itemId), $input, $actor);
+            }
             $db->commit();
         } catch (\Throwable $e) {
             $db->rollBack();
@@ -998,33 +1061,7 @@ class VehicleService
                 $data['active'] = !empty($input['active']) ? 1 : 0;   // PDO ส่ง false เป็น '' ซึ่ง MariaDB strict ปฏิเสธ
             }
 
-            // เกณฑ์เตือนรายอุปกรณ์ (หน่วยงานเป็นผู้กำหนด — ค่าว่าง = ไม่เตือน/ใช้ค่าระบบ)
-            $int = function (string $key, int $min, int $max, string $label, bool $nullable = true) use ($input): ?int {
-                $raw = trim((string)($input[$key] ?? ''));
-                if ($raw === '') {
-                    if (!$nullable) {
-                        throw new ApiException($label . ' ห้ามว่าง', 422, ['errors' => [$key => [$label . ' ห้ามว่าง']]]);
-                    }
-                    return null;
-                }
-                if (!preg_match('/^\d+$/', $raw) || (int)$raw < $min || (int)$raw > $max) {
-                    throw new ApiException(sprintf('%s ต้องเป็นจำนวนเต็ม %d-%d', $label, $min, $max), 422, ['errors' => [$key => [$label . ' ไม่ถูกต้อง']]]);
-                }
-                return (int)$raw;
-            };
-            if (array_key_exists('battery_max_bars', $input)) {
-                $data['battery_max_bars'] = $int('battery_max_bars', 1, 10, 'จำนวนขีดแบตเมื่อเต็ม', false);
-            }
-            if (array_key_exists('battery_low_bars', $input)) {
-                $max = $data['battery_max_bars'] ?? VehicleStockService::batteryMax($existing);
-                $data['battery_low_bars'] = $int('battery_low_bars', 0, $max, 'เกณฑ์แบตต่ำ');
-            }
-            if (array_key_exists('o2_low_psi', $input)) {
-                $data['o2_low_psi'] = $int('o2_low_psi', 0, VehicleStockService::MAX_PSI, 'เกณฑ์แรงดัน O2 ต่ำ (PSI)');
-            }
-            if (array_key_exists('expiry_warn_days', $input)) {
-                $data['expiry_warn_days'] = $int('expiry_warn_days', 0, 3650, 'จำนวนวันเตือนใกล้หมดอายุ');
-            }
+            $data += $this->thresholdData($input, $existing);
 
             $wantsOnboard = array_key_exists('onboard_qty', $input) && trim((string)$input['onboard_qty']) !== '';
             if (empty($data) && !$wantsOnboard) {

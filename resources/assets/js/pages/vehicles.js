@@ -20,6 +20,7 @@ class VehiclesPage {
     this.currentVehicleId = null;
     this.currentVehicle = null;
     this.items = [];
+    this.openItems = new Set();   // การ์ดอุปกรณ์ที่ขยายอยู่ (ค่าเริ่มต้น = ย่อทุกใบ)
     this.editingItemId = null;
     this.copyStaging = [];
     this.copySourceLabel = '';
@@ -281,6 +282,8 @@ class VehiclesPage {
 
       return `
       <article class="stock-card${item.active ? '' : ' is-off'}" data-item-id="${item.id}">
+        <details class="stock-collapse" data-item-id="${item.id}" ${this.openItems.has(item.id) ? 'open' : ''}>
+        ${this.renderItemSummary(item, type, counted, expiry, unitWord)}
         <div class="stock-top">
           <input type="text" class="stock-name-input" value="${UI.escape(item.name)}" data-item-id="${item.id}" data-field="name" aria-label="ชื่ออุปกรณ์">
           <span class="chip ${item.active ? 'chip-ok' : 'chip-off'}">
@@ -334,9 +337,17 @@ class VehiclesPage {
           </button>
           <button type="button" class="small-btn danger" data-action="delete" data-item-id="${item.id}">ลบ</button>
         </div>
+        </details>
       </article>
     `;
     }).join('') || '<p class="empty">ยังไม่มีอุปกรณ์ในรถคันนี้</p>';
+
+    // จำว่าเปิดการ์ดไหนไว้ — render ใหม่ (เช่น แก้ล็อต/พักใช้งาน) แล้วยังเปิดอยู่ (ปิดเองเมื่อบันทึกสำเร็จ)
+    container.querySelectorAll('details.stock-collapse').forEach(el => {
+      el.addEventListener('toggle', () => {
+        if (el.open) this.openItems.add(el.dataset.itemId); else this.openItems.delete(el.dataset.itemId);
+      });
+    });
 
     // Bind events
     container.querySelectorAll('[data-action="save"]').forEach(btn => {
@@ -374,6 +385,37 @@ class VehiclesPage {
     container.querySelectorAll('[data-action="delete"]').forEach(btn => {
       btn.addEventListener('click', () => this.deleteItem(btn.dataset.itemId));
     });
+  }
+
+  /** แถวย่อของการ์ดอุปกรณ์ (กดเพื่อขยาย): ชื่อ • ประเภท • ยอดบนรถ/ขั้นต่ำ • หมดอายุเร็วสุด */
+  renderItemSummary(item, type, counted, expiry, unitWord) {
+    const TYPE = { individual: '🧩 รายชิ้น', box: '📦 กล่อง', non_expiring: '🩺 ไม่มีวันหมดอายุ' };
+    const fmt = (n) => String(Math.round(Number(n || 0) * 100) / 100);
+    const unit = type === 'non_expiring' ? unitWord : (item.unit ? ' ' + item.unit : '');
+    const target = item.target_qty === null || item.target_qty === undefined || item.target_qty === '' ? null : Number(item.target_qty);
+    const short = counted && target !== null && Number(item.current_qty || 0) < target;
+    const qty = counted
+      ? `<span class="${short ? 'txt-bad' : ''}">บนรถ <b>${UI.escape(fmt(item.current_qty))}</b>${target !== null ? ' / ' + UI.escape(fmt(target)) : ''}${UI.escape(unit)}${short ? ' (ขาด)' : ''}</span>`
+      : '<span class="txt-bad">ยังไม่ได้จัดขึ้นรถ</span>';
+    let exp = '';
+    if (type !== 'non_expiring' && expiry) {
+      const today = this.todayIso();
+      const warnDays = item.expiry_warn_days === null || item.expiry_warn_days === undefined || item.expiry_warn_days === '' ? 30 : Number(item.expiry_warn_days);
+      const soon = new Date(today + 'T00:00:00');
+      soon.setDate(soon.getDate() + warnDays);
+      const soonIso = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, '0')}-${String(soon.getDate()).padStart(2, '0')}`;
+      const state = expiry < today ? ['txt-bad', '⛔ หมดอายุ '] : (expiry <= soonIso ? ['txt-warn', '⚠️ ใกล้หมดอายุ '] : ['', 'หมดอายุ ']);
+      exp = `<span class="${state[0]}">${state[1]}${UI.escape(UI.formatDateThai(expiry))}</span>`;
+    }
+    return `
+        <summary class="stock-summary">
+          <span class="stock-sum-name">${UI.escape(item.name)}</span>
+          ${item.active ? '' : '<span class="chip chip-off">พัก</span>'}
+          <span class="stock-sum-meta">
+            <span class="type-badge type-${UI.escape(type)}">${TYPE[type] || ''}</span>
+            ${qty}${exp}
+          </span>
+        </summary>`;
   }
 
   // ---------- ช่องวันหมดอายุของที่เพิ่ม (หน้ารถ) ----------
@@ -703,9 +745,118 @@ class VehiclesPage {
           <label><input type="checkbox" id="itemIsBattery"> 🔋 มีแบตเตอรี่</label>
           <label><input type="checkbox" id="itemHasPressure"> 🫧 วัดแรงดัน (PSI)</label>
         </div>
-        <p class="text-xs text-slate-500">อุปกรณ์ใหม่ยังไม่มียอดบนรถ — ใส่จำนวนและวันหมดอายุได้ที่การ์ดของอุปกรณ์หลังบันทึก หรือที่เมนู “เติมของ”</p>
+        <fieldset class="item-details" id="itemDetails"></fieldset>
       </div>
     `;
+  }
+
+  /**
+   * รายละเอียดตามประเภท (กรอกต่อได้เลยในหน้าต่างเดียวกัน — ไม่กรอก = เพิ่มแค่รายการ ยังไม่มีของบนรถ)
+   *  กล่อง: จำนวน + วันหมดอายุ 1 วัน | รายชิ้น: จำนวน + วันหมดอายุทีละชิ้น | ไม่มีวันหมดอายุ: เกณฑ์แบต/แรงดัน + เครื่อง/ถังทีละตัว
+   * render ใหม่เมื่อเปลี่ยนประเภท/ธง/จำนวน โดยเก็บค่าที่กรอกไว้แล้ว (ตาม id ของช่อง)
+   */
+  renderItemDetails() {
+    const box = this._itemModal?.element.querySelector('#itemDetails');
+    if (!box) return;
+    const keep = {};
+    box.querySelectorAll('input, select').forEach(el => { if (el.id) keep[el.id] = el.value; });
+    const type = this.itemFormType();
+    const v = (id, dflt = '') => UI.escape(keep[id] ?? dflt);
+    const num = (id, label, attrs, placeholder = '') => `
+      <div><label for="${id}">${label}</label>
+        <input id="${id}" type="number" inputmode="numeric" step="1" ${attrs} value="${v(id)}" placeholder="${placeholder}"></div>`;
+
+    if (type !== 'non_expiring') {
+      const qty = Number(keep.itemOnboard || 0);
+      box.innerHTML = `<legend>รายละเอียด${type === 'individual' ? 'รายชิ้น' : 'กล่อง / ล็อต'} <small>(ไม่บังคับ — กรอกทีหลังได้)</small></legend>
+        <div><label for="itemOnboard">จำนวนที่มีบนรถตอนนี้</label>
+          ${UI.stepper(`id="itemOnboard" min="0" value="${v('itemOnboard')}" placeholder="0"`, 'จำนวนบนรถ')}</div>
+        <div class="add-dates" data-role="add-dates">${this.renderAddDates({ id: 'new', item_type: type }, qty)}</div>
+        ${num('itemWarnDays', 'เตือนใกล้หมดอายุ (วัน)', 'min="0" max="3650"', 'ว่าง = 30 วัน')}`;
+      box.querySelectorAll('input[type="date"]').forEach(i => { if (keep[i.id]) i.value = keep[i.id]; });
+      return;
+    }
+
+    const form = this._itemModal.element;
+    const battery = form.querySelector('#itemIsBattery')?.checked;
+    const pressure = form.querySelector('#itemHasPressure')?.checked;
+    const maxBars = Number(keep.itemBatMax) >= 1 && Number(keep.itemBatMax) <= 10 ? Number(keep.itemBatMax) : 4;
+    const count = Math.min(50, Math.max(0, Math.floor(Number(keep.itemUnitCount || 0))));
+    const units = Array.from({ length: count }, (_, k) => {
+      const id = (f) => `itemUnit-${k}-${f}`;
+      const status = keep[id('status')] || 'ready';
+      return `
+        <div class="lot-input-card">
+          <p class="lot-input-title">🩺 เครื่อง/ถังที่ ${k + 1}</p>
+          <div class="lot-input-grid">
+            <div><label for="${id('label')}">ชื่อ / เลขเครื่อง</label>
+              <input id="${id('label')}" type="text" maxlength="100" value="${v(id('label'))}" placeholder="เช่น ถัง O2 #1"></div>
+            <div><label for="${id('status')}">สถานะ</label>
+              <select id="${id('status')}" data-rerender>
+                ${[['ready', '✅ พร้อมใช้'], ['not_ready', '⛔ ไม่พร้อมใช้']].concat(battery ? [['no_power', '🔋 เปิดไม่ติด']] : [])
+                  .map(([val, label]) => `<option value="${val}" ${status === val ? 'selected' : ''}>${label}</option>`).join('')}
+              </select></div>
+            ${battery && status !== 'no_power' ? num(id('bat'), `แบตเตอรี่ (0-${maxBars} ขีด) *`, `min="0" max="${maxBars}"`) : ''}
+            ${pressure ? num(id('psi'), 'แรงดัน (PSI) *', 'min="0" max="10000"') : ''}
+            <div><label for="${id('note')}">หมายเหตุ${status !== 'ready' ? ' (สาเหตุ) *' : ''}</label>
+              <input id="${id('note')}" type="text" maxlength="200" value="${v(id('note'))}"></div>
+          </div>
+        </div>`;
+    }).join('');
+    box.innerHTML = `<legend>รายละเอียดเครื่อง / ถัง <small>(ไม่บังคับ — กรอกทีหลังได้)</small></legend>
+      ${battery ? num('itemBatMax', 'แบตเต็มกี่ขีด', 'min="1" max="10" data-rerender', '4') + num('itemBatLow', 'เตือนเมื่อแบต ≤ (ขีด)', `min="0" max="${maxBars}"`, 'ว่าง = ไม่เตือน') : ''}
+      ${pressure ? num('itemO2Low', 'เตือนเมื่อแรงดัน < (PSI)', 'min="0" max="10000"', 'ว่าง = ยังไม่กำหนดเกณฑ์') : ''}
+      <div><label for="itemUnitCount">จำนวนเครื่อง/ถังที่มีบนรถตอนนี้</label>
+        ${UI.stepper(`id="itemUnitCount" min="0" max="50" value="${v('itemUnitCount')}" placeholder="0"`, 'จำนวนเครื่อง')}</div>
+      ${units}`;
+  }
+
+  /** ค่ารายละเอียดจากหน้าต่างเพิ่มอุปกรณ์ → ฟิลด์ใน payload (ตรวจซ้ำที่ server) */
+  itemDetailsPayload(form, itemType) {
+    const val = (id) => (form.querySelector('#' + id)?.value || '').trim();
+    const out = {};
+    const errors = [];
+    const today = this.todayIso();
+    if (itemType !== 'non_expiring') {
+      if (val('itemWarnDays') !== '') out.expiry_warn_days = val('itemWarnDays');
+      const qty = Number(val('itemOnboard') || 0);
+      if (qty > 0) {
+        out.onboard_qty = String(qty);
+        if (itemType === 'individual') {
+          if (!Number.isInteger(qty) || qty > 50) errors.push('ของแบบชิ้นต้องเป็นจำนวนเต็ม ไม่เกิน 50 ชิ้น');
+          const dates = [...form.querySelectorAll('[data-field="piece_expiry"]')].map(i => i.value);
+          const missing = dates.map((d, k) => (d ? 0 : k + 1)).filter(Boolean);
+          if (missing.length) errors.push(`กรอกวันหมดอายุชิ้นที่ ${missing.join(', ')}`);
+          out.onboard_expiries = dates;
+        } else {
+          out.onboard_expiry = form.querySelector('[data-field="onboard_expiry"]')?.value || '';
+          if (!out.onboard_expiry) errors.push('กรอกวันหมดอายุของที่มีบนรถ');
+        }
+        if ([].concat(out.onboard_expiries || out.onboard_expiry).some(d => d && d < today)) errors.push('วันหมดอายุผ่านไปแล้ว — เพิ่มของหมดอายุไม่ได้');
+      }
+      return { out, errors };
+    }
+    const battery = form.querySelector('#itemIsBattery').checked;
+    const pressure = form.querySelector('#itemHasPressure').checked;
+    if (battery && val('itemBatMax') !== '') out.battery_max_bars = val('itemBatMax');
+    if (battery && val('itemBatLow') !== '') out.battery_low_bars = val('itemBatLow');
+    if (pressure && val('itemO2Low') !== '') out.o2_low_psi = val('itemO2Low');
+    const count = Math.min(50, Math.max(0, Math.floor(Number(val('itemUnitCount') || 0))));
+    out.units = Array.from({ length: count }, (_, k) => {
+      const f = (name) => val(`itemUnit-${k}-${name}`);
+      const status = f('status') || 'ready';
+      const label = `เครื่อง/ถังที่ ${k + 1}`;
+      if (battery && status !== 'no_power' && f('bat') === '') errors.push(`${label}: กรอกระดับแบตเตอรี่`);
+      if (pressure && f('psi') === '') errors.push(`${label}: กรอกแรงดัน (PSI)`);
+      if (status !== 'ready' && !f('note')) errors.push(`${label}: ไม่พร้อมใช้/เปิดไม่ติด ต้องระบุสาเหตุ`);
+      return {
+        label: f('label'), status, note: f('note'),
+        battery_level: battery && status !== 'no_power' ? Number(f('bat')) : null,
+        pressure_psi: pressure ? Number(f('psi')) : null,
+      };
+    });
+    if (!out.units.length) delete out.units;
+    return { out, errors };
   }
 
   showAddItemForm() {
@@ -738,12 +889,38 @@ class VehiclesPage {
     });
     form.querySelector('#itemName')?.addEventListener('input', () => this.setItemFieldError('itemName', ''));
     form.querySelector('#itemStandard')?.addEventListener('input', () => this.setItemFieldError('itemStandard', ''));
-    // แบต/แรงดัน มีเฉพาะประเภท "ไม่มีวันหมดอายุ"
-    form.querySelectorAll('input[name="itemType"]').forEach(radio => {
-      radio.addEventListener('change', () => {
+    // แบต/แรงดัน มีเฉพาะประเภท "ไม่มีวันหมดอายุ" — เปลี่ยนประเภท/ธง = เปลี่ยนช่องรายละเอียด
+    form.querySelectorAll('input[name="itemType"], #itemIsBattery, #itemHasPressure').forEach(el => {
+      el.addEventListener('change', () => {
         form.querySelector('#itemFlags')?.classList.toggle('hidden', this.itemFormType() !== 'non_expiring');
+        this.renderItemDetails();
       });
     });
+    const details = form.querySelector('#itemDetails');
+    // จำนวนเปลี่ยน → ช่องวันหมดอายุ/เครื่องเปลี่ยนตาม (render เฉพาะส่วนล่าง เคอร์เซอร์ยังอยู่ช่องจำนวน)
+    details.addEventListener('input', (e) => {
+      if (e.target.id === 'itemOnboard') {
+        const dates = details.querySelector('[data-role="add-dates"]');
+        const keep = [...dates.querySelectorAll('input[type="date"]')].map(i => i.value);
+        dates.innerHTML = this.renderAddDates({ id: 'new', item_type: this.itemFormType() }, Number(e.target.value || 0));
+        dates.querySelectorAll('input[type="date"]').forEach((i, k) => { if (keep[k]) i.value = keep[k]; });
+      }
+    });
+    details.addEventListener('change', (e) => {
+      if (e.target.id === 'itemUnitCount' || e.target.hasAttribute('data-rerender')) {
+        const focusId = e.target.id;
+        this.renderItemDetails();
+        form.querySelector('#' + CSS.escape(focusId))?.focus();
+      }
+    });
+    details.addEventListener('click', (e) => {
+      if (!e.target.closest('[data-action="fill-dates"]')) return;
+      const inputs = [...details.querySelectorAll('[data-role="add-dates"] input[type="date"]')];
+      const first = inputs.find(i => i.value);
+      if (first) inputs.forEach(i => { if (!i.value) i.value = first.value; });
+      else window.toast.warning('ใส่วันหมดอายุอย่างน้อย 1 ช่องก่อน');
+    });
+    this.renderItemDetails();
 
     modal.open();
     form.querySelector('#itemName')?.focus();
@@ -807,7 +984,12 @@ class VehiclesPage {
       return;
     }
 
-    const payload = { name, standard, item_type: itemType };
+    const details = this.itemDetailsPayload(form, itemType);
+    if (details.errors.length) {
+      window.toast.warning(details.errors.join(' • '));
+      return;
+    }
+    const payload = { name, standard, item_type: itemType, ...details.out };
     if (itemType === 'non_expiring') {
       payload.is_battery = form.querySelector('#itemIsBattery').checked;
       payload.has_pressure = form.querySelector('#itemHasPressure').checked;
@@ -818,7 +1000,8 @@ class VehiclesPage {
     try {
       const res = await window.vehicleApi.addItem(vehicleId, payload);
       this.hideAddItemForm();
-      window.toast.success(`เพิ่ม “${name}” แล้ว — ใส่จำนวนบนรถและวันหมดอายุได้ที่การ์ดด้านล่าง`);
+      const stocked = payload.onboard_qty || payload.units;
+      window.toast.success(stocked ? `เพิ่ม “${name}” พร้อมของบนรถแล้ว` : `เพิ่ม “${name}” แล้ว — ใส่จำนวนบนรถและวันหมดอายุได้ที่การ์ดด้านล่าง`);
       await this.loadItems(vehicleId);
       this.focusItemCard(res?.data?.id);
     } catch (error) {
@@ -972,6 +1155,7 @@ class VehiclesPage {
       if (data.standard) message += ' • ปรับขั้นต่ำแล้ว';
       if (res?.data?.onboard) message += ` • ยอดบนรถ ${res.data.onboard.after}`;
       window.toast.success(message);
+      this.openItems.delete(itemId);   // บันทึกแล้ว → ย่อกลับเป็นรายการ
       await this.loadItems(this.currentVehicleId);
     } catch (error) {
       window.toast.error('อัปเดตไม่สำเร็จ: ' + error.message);

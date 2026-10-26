@@ -26,6 +26,7 @@ class RefillPage {
     this.sheet = null;
     this.drafts = {};            // item_id => {lots: [...], units: [...], retire: Set}
     this.openLots = new Set();   // item_id ที่ขยายรายละเอียดล็อตไว้
+    this.openCards = new Set();  // item_id ที่ขยายการ์ดไว้ (ค่าเริ่มต้น = ย่อทุกใบ เหลือแถวสรุป)
     this.filter = 'need';
     this.requestFilter = 'open';
     this.clientToken = null;
@@ -46,6 +47,12 @@ class RefillPage {
       list.addEventListener('input', (e) => this.onInput(e));
       list.addEventListener('change', (e) => this.onInput(e));
       list.addEventListener('click', (e) => this.onClick(e));
+      // toggle ของ <details> ไม่ bubble — ดักแบบ capture ที่ list ครั้งเดียว ใช้ได้กับการ์ดที่ render ใหม่
+      list.addEventListener('toggle', (e) => {
+        const el = e.target;
+        if (!el.classList?.contains('refill-collapse')) return;
+        if (el.open) this.openCards.add(el.dataset.id); else this.openCards.delete(el.dataset.id);
+      }, true);
     }
     document.getElementById('restockList')?.addEventListener('click', (e) => this.onRequestClick(e));
   }
@@ -95,6 +102,7 @@ class RefillPage {
     } else if (!d.lots.length) {
       d.lots.push({ lot_id: '', qty: '', expiry_date: '', lot_number: '', received_date: this.sheet.today, note: '' });
     }
+    this.openCards.add(itemId);
     this.rerenderItem(itemId);
     const card = document.querySelector(`#refillItems .refill-card[data-id="${CSS.escape(itemId)}"]`);
     if (card) {
@@ -219,20 +227,24 @@ class RefillPage {
     const after = Number(item.current_qty || 0) + added;
     const target = item.target_qty === null ? null : Number(item.target_qty);
 
+    // แถวสรุป (กดเพื่อขยาย): ชื่อ • ยอด • สถานะที่ต้องเห็นทันที — ส่วนกรอกเติมของอยู่ในส่วนที่ขยาย
     const head = `
-      <div class="check-card-head">
-        <div>
-          <strong>${UI.escape(item.name)}</strong>
-          <span class="type-badge type-${UI.escape(item.item_type)}">${REFILL_TYPE_LABEL[item.item_type] || ''}</span>
+      <summary class="refill-summary">
+        <div class="check-card-head">
+          <div>
+            <strong>${UI.escape(item.name)}</strong>
+            <span class="type-badge type-${UI.escape(item.item_type)}">${REFILL_TYPE_LABEL[item.item_type] || ''}</span>
+          </div>
         </div>
-      </div>
-      <p class="qty-big">คงเหลือ <b>${item.counted ? this.fmt(item.current_qty) : '-'}</b>${target !== null ? ' / ' + this.fmt(target) : ''}${unit}
-        ${added ? ` → <b class="txt-ok">${this.fmt(after)}</b>` : ''}</p>
-      ${this.statusChips(item, unit)}
-      ${item.requested > 0 ? `<p class="check-sub"><span class="req-badge">รอเติม ${this.fmt(item.requested)}${unit}</span></p>` : ''}`;
+        <p class="qty-big">คงเหลือ <b>${item.counted ? this.fmt(item.current_qty) : '-'}</b>${target !== null ? ' / ' + this.fmt(target) : ''}${unit}
+          ${added ? ` → <b class="txt-ok">${this.fmt(after)}</b>` : ''}</p>
+        ${this.statusChips(item, unit)}
+        ${item.requested > 0 ? `<p class="check-sub"><span class="req-badge">รอเติม ${this.fmt(item.requested)}${unit}</span></p>` : ''}
+      </summary>`;
 
-    return head + (isUnit ? this.renderUnitSection(item, d) : this.renderLotSection(item, d, unit))
-      + '<div class="card-foot"><button type="button" class="small-btn gray" data-action="history">🕘 ประวัติ</button></div>';
+    return `<details class="refill-collapse" data-id="${UI.escape(item.id)}" ${this.openCards.has(item.id) ? 'open' : ''}>`
+      + head + (isUnit ? this.renderUnitSection(item, d) : this.renderLotSection(item, d, unit))
+      + '<div class="card-foot"><button type="button" class="small-btn gray" data-action="history">🕘 ประวัติ</button></div></details>';
   }
 
   // ---------- ล็อต (กล่อง) / รายชิ้น (1 แถว = 1 ชิ้น มีวันหมดอายุของตัวเอง) ----------
@@ -663,6 +675,7 @@ class RefillPage {
       window.toast.success((data.duplicate ? 'บันทึกไปแล้ว (ไม่เติมซ้ำ)' : 'บันทึกสำเร็จ') + (parts.length ? '\n' + parts.join('\n') : ''), 8000);
       (data.warnings || []).forEach(w => window.toast.warning(w, 9000));
       this.drafts = {};
+      this.openCards.clear();   // บันทึกแล้ว → ย่อทุกการ์ดกลับเป็นรายการ
       this.clientToken = null;
       const noteEl = document.getElementById('refillNote');
       if (noteEl) noteEl.value = '';

@@ -4,7 +4,7 @@
  * No external dependencies required
  */
 
-function loadEnv(string $path = null): void
+function loadEnv(?string $path = null): void
 {
     if ($path === null) {
         // Try multiple locations

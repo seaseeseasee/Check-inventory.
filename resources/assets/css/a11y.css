@@ -33,9 +33,10 @@ textarea {
   min-height: 52px;
 }
 input[type="checkbox"], input[type="radio"] { width: 24px; height: 24px; accent-color: var(--teal-700); vertical-align: middle; }
-button { font-size: 1rem; min-height: 52px; border-radius: 14px; }
-.small-btn { font-size: 0.9rem; min-height: 48px; padding: 10px 16px; }
-.chip-btn, .seg-btn { min-height: 48px; font-size: 0.9rem; }
+/* ปุ่มทั่วไปกะทัดรัดขึ้น แต่ยังกดง่าย (≥ 40px ผ่าน WCAG 2.2 target size) — ปุ่มหลักของหน้าตรวจ/แถบบันทึกกำหนดขนาดเองด้านล่าง */
+button { font-size: 0.95rem; min-height: 44px; padding: 8px 16px; border-radius: 12px; }
+.small-btn { font-size: 0.85rem; min-height: 40px; padding: 6px 12px; border-radius: 10px; }
+.chip-btn, .seg-btn { min-height: 40px; font-size: 0.85rem; }
 .bat-btn { min-height: 52px; font-size: 0.95rem; }
 .signout { min-height: 48px; font-size: 0.8rem; }
 summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; }
@@ -51,7 +52,7 @@ summary { min-height: 48px; display: flex; align-items: center; cursor: pointer;
 .stepper { display: flex; align-items: stretch; gap: 6px; }
 .stepper input { text-align: center; font-size: 1.15rem !important; font-weight: 700; margin: 0; min-width: 0; flex: 1 1 auto; }
 .stepper button {
-  flex: 0 0 52px; width: 52px; min-height: 52px; margin: 0; padding: 0;
+  flex: 0 0 44px; width: 44px; min-height: 44px; margin: 0; padding: 0;
   font-size: 1.5rem; line-height: 1; background: #e2e8f0; color: #0f172a; border: 1.5px solid #cbd5e1;
 }
 .stepper button:active { background: #cbd5e1; }
@@ -215,6 +216,16 @@ html, body { overflow-x: hidden; }
 .lot-view .lv-expired .lot-state { color: var(--bad); }
 .lot-view .lv-soon .lot-state { color: #b45309; }
 .refill-card.is-focus { border: 2px solid var(--teal-600); box-shadow: 0 0 0 4px var(--teal-100); }
+/* หน้าเติมของ: การ์ดย่อ/ขยาย — แถวสรุปกดได้ทั้งแถว (แบบเดียวกับการ์ดอุปกรณ์หน้ารถ) */
+.refill-summary { display: block; list-style: none; position: relative; padding-right: 32px; }
+.refill-summary::-webkit-details-marker { display: none; }
+.refill-summary::after {
+  content: '▾'; position: absolute; right: 4px; top: 6px;
+  font-size: 1.2rem; color: var(--muted, #475569); transition: transform .15s;
+}
+.refill-collapse[open] > .refill-summary::after { transform: rotate(180deg); }
+.refill-collapse[open] > .refill-summary { border-bottom: 1px solid var(--line, #e2e8f0); padding-bottom: 6px; margin-bottom: 10px; }
+.refill-summary .chip-line { margin-bottom: 0; }
 .empty .small-btn { display: block; margin: 10px auto 0; }
 
 /* ---- 3 ประเภทอุปกรณ์: ธงแบต/แรงดัน, อัปเดตเครื่องเดิม, ค่าล่าสุด ---- */
@@ -310,6 +321,10 @@ html, body { overflow-x: hidden; }
 .item-form-car { margin: 0 0 12px; font-weight: 700; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .item-type-pick { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; }
 .item-type-pick legend { font-weight: 700; color: #1e293b; margin-bottom: 6px; padding: 0; }
+/* หน้าต่างเพิ่มอุปกรณ์: รายละเอียดตามประเภท (จำนวน / วันหมดอายุ / เครื่อง-ถัง) */
+.item-details { margin: 0; padding: 12px; border: 2px dashed #cbd5e1; border-radius: 12px; display: grid; gap: 12px; }
+.item-details legend { font-weight: 700; color: #1e293b; padding: 0 6px; }
+.item-details legend small { font-weight: 600; color: #475569; }
 .item-type-opt {
   display: flex; align-items: center; gap: 12px; margin: 0; min-height: 60px; padding: 10px 14px;
   border: 2px solid #cbd5e1; border-radius: 14px; background: #fff; cursor: pointer;
@@ -319,3 +334,19 @@ html, body { overflow-x: hidden; }
 .item-type-opt small { font-size: max(0.8rem, 14px); color: #475569; font-weight: 600; }
 .item-type-opt:has(input:checked) { border-color: var(--teal-700); background: var(--teal-50); box-shadow: 0 0 0 3px var(--teal-100); }
 .stock-card.is-focus { border: 2px solid var(--teal-600); box-shadow: 0 0 0 4px var(--teal-100); }
+/* การ์ดอุปกรณ์แบบย่อ/ขยาย — แถวย่อกดได้ทั้งแถว */
+.stock-summary {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  min-height: 48px; cursor: pointer; list-style: none; padding-right: 32px; position: relative;
+}
+.stock-summary::-webkit-details-marker { display: none; }
+.stock-summary::after {
+  content: '▾'; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  font-size: 1.2rem; color: var(--muted, #475569); transition: transform .15s;
+}
+.stock-collapse[open] > .stock-summary::after { transform: translateY(-50%) rotate(180deg); }
+.stock-collapse[open] > .stock-summary { border-bottom: 1px solid var(--line, #e2e8f0); padding-bottom: 8px; margin-bottom: 10px; }
+.stock-summary:focus-visible { outline: 3px solid var(--teal-600); outline-offset: 4px; border-radius: 8px; }
+.stock-sum-name { flex: 1 1 auto; font-weight: 800; font-size: 1.05rem; color: #0f172a; word-break: break-word; }
+.stock-sum-meta { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 15px; color: #334155; }
+.txt-warn { color: #b45309; font-weight: 700; }
