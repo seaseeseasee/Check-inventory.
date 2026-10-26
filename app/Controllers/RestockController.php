@@ -57,85 +57,6 @@ class RestockController extends Controller
     }
 
     /**
-     * Start restocking (Staff - change status to IN_PROGRESS)
-     */
-    public function start(string $id): void
-    {
-        $this->roleMiddleware->requireStaff();
-        
-        $user = $this->roleMiddleware->getCurrentUser();
-        $result = $this->restockService->startRestock($id, (string)($user['id'] ?? ''), (string)($user['full_name'] ?? ''), $user);
-        
-        if (!$result) {
-            $this->error('ไม่พบคำขอเติมอุปกรณ์นี้');
-        }
-        $this->success($result);
-    }
-
-    /**
-     * Record restock quantity (Staff)
-     */
-    public function restock(string $id): void
-    {
-        $this->roleMiddleware->requireStaff();
-        
-        $input = $this->getInput();
-        
-        $validator = new Validator($input, [
-            'items' => 'required|array',
-            'note' => 'string|max:2000',
-        ]);
-
-        if (!$validator->validate()) {
-            $this->validationError($validator->errors());
-        }
-
-        // Validate each item has item_id and qty (ข้อ 7.4/7.5)
-        foreach ($input['items'] as $index => $item) {
-            if (!isset($item['item_id']) || !isset($item['qty'])) {
-                $this->validationError(['items' => 'ทุกรายการต้องมีรหัสอุปกรณ์ (item_id) และจำนวน (qty)']);
-            }
-            if (!is_numeric($item['qty']) || (float)$item['qty'] <= 0) {
-                $this->validationError(['items' => 'จำนวนที่เติมต้องเป็นตัวเลขมากกว่า 0 (รายการลำดับที่ ' . ((int)$index + 1) . ')']);
-            }
-        }
-
-        $user = $this->roleMiddleware->getCurrentUser();
-        $result = $this->restockService->recordRestock(
-            $id,
-            (string)($user['id'] ?? ''),
-            (string)($user['full_name'] ?? ''),
-            $input['items'],
-            $input['note'] ?? '',
-            $user
-        );
-        
-        if (!$result) {
-            $this->error('ไม่พบคำขอเติมอุปกรณ์นี้');
-        }
-        $this->success($result);
-    }
-
-    /**
-     * Complete restock (Staff - mark as COMPLETED)
-     */
-    public function complete(string $id): void
-    {
-        $this->roleMiddleware->requireStaff();
-        
-        $input = $this->getInput();
-        $note = $input['note'] ?? '';
-        
-        $user = $this->roleMiddleware->getCurrentUser();
-        $result = $this->restockService->completeRestock($id, (string)($user['id'] ?? ''), (string)($user['full_name'] ?? ''), $note, $user);
-        
-        if (!$result) {
-            $this->error('ไม่พบคำขอเติมอุปกรณ์นี้');
-        }
-        $this->success($result);
-    }
-
-    /**
      * Cancel restock request (Admin/Staff)
      */
     public function cancel(string $id): void
@@ -157,46 +78,6 @@ class RestockController extends Controller
         
         if (!$result) {
             $this->error('ไม่พบคำขอเติมอุปกรณ์นี้');
-        }
-        $this->success($result);
-    }
-
-    /**
-     * Assign restock request to staff (Admin only)
-     */
-    public function assign(string $id): void
-    {
-        $this->roleMiddleware->requireAdmin();
-        
-        $input = $this->getInput();
-        
-        $validator = new Validator($input, [
-            'assigned_user_id' => 'required|string|max:100',
-        ]);
-
-        if (!$validator->validate()) {
-            $this->validationError($validator->errors());
-        }
-
-        $result = $this->restockService->assignToStaff($id, $input['assigned_user_id']);
-        
-        if (!$result) {
-            $this->error('Cannot assign: invalid request or status');
-        }
-        $this->success($result);
-    }
-
-    /**
-     * Unassign restock request (Admin only)
-     */
-    public function unassign(string $id): void
-    {
-        $this->roleMiddleware->requireAdmin();
-        
-        $result = $this->restockService->unassign($id);
-        
-        if (!$result) {
-            $this->error('Cannot unassign: invalid request');
         }
         $this->success($result);
     }

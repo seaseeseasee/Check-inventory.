@@ -170,11 +170,19 @@ function initializeRoleUI() {
   const headerTitle = document.getElementById('headerTitle');
   if (headerTitle) {
     const roleLabel = user.role === 'admin' ? '👑 ผู้ดูแลระบบ' : '👩‍⚕️ เจ้าหน้าที่';
-    headerTitle.textContent = `ระบบตรวจเช็กรถ Refer / Ambulance — ${user.full_name} (${roleLabel})`;
+    // ชื่อระบบสั้น + บรรทัดผู้ใช้แยก — บนมือถือหัวเว็บจะไม่สูงจนบังเนื้อหา
+    headerTitle.textContent = '';
+    const title = document.createElement('span');
+    title.className = 'header-name';
+    title.textContent = 'ตรวจเช็กรถ Refer';
+    const who = document.createElement('span');
+    who.className = 'header-user';
+    who.textContent = `${user.full_name} · ${roleLabel}`;
+    headerTitle.append(title, who);
   }
 
   // Show/hide tabs based on role
-  const adminTabs = ['btnTabNurses', 'btnTabStock', 'btnTabUsers']; // Admin-only tabs
+  const adminTabs = ['btnTabNurses', 'btnTabStock']; // Admin-only tabs (จัดการผู้ใช้ = btnTabNurses)
   const staffTabs = ['btnTabCheck', 'btnTabRestock']; // Staff tabs
   
   if (user.role === 'admin') {

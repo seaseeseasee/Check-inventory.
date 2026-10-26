@@ -119,7 +119,7 @@ window.confirmDialog = async (message, options = {}) => {
 
     const actions = modal.element.querySelector('.sheet-actions');
     actions.innerHTML = `
-      <button type="button" class="small-btn gray flex-1" data-action="cancel">ยกเลิก</button>
+      <button type="button" class="small-btn gray flex-1" data-action="cancel">${UI.escape(options.cancelText || 'ยกเลิก')}</button>
       <button type="button" class="flex-1" style="background: var(--bad);" data-action="confirm">${UI.escape(options.confirmText || 'ยืนยัน')}</button>
     `;
 
@@ -154,7 +154,7 @@ window.promptDialog = async (message, defaultValue = '', options = {}) => {
     const input = modal.element.querySelector('#prompt-input');
     const actions = modal.element.querySelector('.sheet-actions');
     actions.innerHTML = `
-      <button type="button" class="small-btn gray flex-1" data-action="cancel">ยกเลิก</button>
+      <button type="button" class="small-btn gray flex-1" data-action="cancel">${UI.escape(options.cancelText || 'ยกเลิก')}</button>
       <button type="button" class="flex-1" data-action="confirm">${UI.escape(options.confirmText || 'ตกลง')}</button>
     `;
 

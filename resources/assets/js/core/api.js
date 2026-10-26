@@ -213,8 +213,6 @@ window.adminApi = {
   
   getRestockRequests: () => api.get('/admin/restock'),
   getRestockStats: () => api.get('/admin/restock/stats'),
-  assignRestock: (id, data) => api.post(`/admin/restock/${id}/assign`, data),
-  unassignRestock: (id) => api.post(`/admin/restock/${id}/unassign`, data),
 };
 
 // Staff API helpers
@@ -230,10 +228,17 @@ window.staffApi = {
   getRestockRequests: () => api.get('/staff/restock'),
   getMyRestockRequests: () => api.get('/staff/restock/my'),
   getRestockRequest: (id) => api.get(`/staff/restock/${id}`),
-  startRestock: (id, data) => api.post(`/staff/restock/${id}/start`, data),
-  recordRestock: (id, data) => api.post(`/staff/restock/${id}/restock`, data),
-  completeRestock: (id, data) => api.post(`/staff/restock/${id}/complete`, data),
   cancelRestock: (id, data) => api.post(`/staff/restock/${id}/cancel`, data),
+  // ตรวจเช็คตามเวร
+  getShiftStatus: (date) => api.get(`/staff/inspections/shifts${date ? '?date=' + encodeURIComponent(date) : ''}`),
+  getDraftInfo: (carId) => api.get(`/staff/inspections/draft?car=${encodeURIComponent(carId)}`),
+  // เติมของเข้ารถโดยตรง (ไม่มีคลังกลาง)
+  getRefillSheet: (carId) => api.get(`/staff/refill/${encodeURIComponent(carId)}`),
+  refill: (carId, data) => api.post(`/staff/refill/${encodeURIComponent(carId)}`, data),
+  // จัดการล็อต (ไม่มีการลบ — ยกเลิก/จำหน่ายหมดอายุเป็น movement)
+  editLot: (lotId, data) => api.put(`/staff/lots/${encodeURIComponent(lotId)}`, data),
+  lotAction: (lotId, action, data) => api.post(`/staff/lots/${encodeURIComponent(lotId)}/${action}`, data || {}),
+  itemMovements: (itemId) => api.get(`/staff/items/${encodeURIComponent(itemId)}/movements`),
   
   getInspections: (params = {}) => {
     const searchParams = new URLSearchParams(params);
@@ -259,14 +264,3 @@ window.historyApi = {
   clearInspections: () => api.post('/history/inspections/clear'),
 };
 
-// Stock (คลังสต็อกกลาง) helpers
-window.stockApi = {
-  getOverview: () => api.get('/stock'),
-  getTransactions: (params = {}) => {
-    const searchParams = new URLSearchParams(params);
-    const qs = searchParams.toString();
-    return api.get(`/stock/transactions${qs ? '?' + qs : ''}`);
-  },
-  receive: (id, data) => api.post(`/stock/${id}/receive`, data),
-  adjust: (id, data) => api.post(`/stock/${id}/adjust`, data),
-};

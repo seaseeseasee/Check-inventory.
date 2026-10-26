@@ -115,7 +115,14 @@ class AuthService
             if ($port) {
                 $expected .= ':' . $port;
             }
-            if ($requestOrigin !== $expected) {
+            // Loopback aliases are the same machine: accept localhost/127.0.0.1/[::1]
+            // interchangeably (same scheme and port) so either URL works locally
+            $loopback = ['localhost', '127.0.0.1', '[::1]'];
+            $isLoopbackAlias = in_array($host, $loopback, true)
+                && in_array(parse_url($requestOrigin, PHP_URL_HOST), $loopback, true)
+                && parse_url($requestOrigin, PHP_URL_SCHEME) === ($secure ? 'https' : 'http')
+                && parse_url($requestOrigin, PHP_URL_PORT) === $port;
+            if ($requestOrigin !== $expected && !$isLoopbackAlias) {
                 Response::forbidden('Origin rejected');
             }
         }

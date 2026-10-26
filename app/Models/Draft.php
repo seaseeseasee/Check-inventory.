@@ -7,7 +7,7 @@ class Draft extends Model
 {
     protected string $table = 'refer_drafts';
     protected string $primaryKey = 'id';
-    protected array $fillable = ['id', 'car_id', 'nurse_id', 'car_name', 'nurse_name', 'shift_name', 'started_at'];
+    protected array $fillable = ['id', 'car_id', 'nurse_id', 'car_name', 'nurse_name', 'shift_name', 'check_date', 'shift_code', 'started_at', 'payload'];
     protected array $casts = [];
 
     public function getByVehicle(string $carId): ?array

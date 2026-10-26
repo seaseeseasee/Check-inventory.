@@ -92,6 +92,62 @@ VALUES ('usr-admin-001', 'admin', '<ค่า hash จากคำสั่ง�
         NOW(), NOW());
 ```
 
+## รันด้วย Docker
+
+แยกจาก XAMPP โดยสมบูรณ์ (ฐานข้อมูลอยู่ใน volume ของ Docker เอง) มี 3 containers ที่ทำงานประจำ:
+
+```
+Browser ─127.0.0.1:8080─▶ frontend (nginx) ── /assets/* เสิร์ฟเอง
+                              │ / และ /api/*  (network "edge")
+                              ▼
+                          backend (PHP 8.5 + Apache, Document Root = public/)
+                              │ (network "data" — internal)
+                              ▼
+                          db (MariaDB 10.4)
+```
+
+- `frontend` — container เดียวที่เปิด port; เสิร์ฟ CSS/JS/รูปจาก `resources/assets` และ proxy
+  หน้าเว็บ + API ไป backend (ต้องอยู่ origin เดียวกัน เพราะหน้าเว็บฝัง CSRF token จาก session
+  และ cookie เป็น `SameSite=Strict`) — ไฟล์อยู่ที่ `docker/frontend/`
+- `backend` — ไม่เปิด port ออก host; รับ IP จริงของผู้ใช้จาก nginx ผ่าน `mod_remoteip`
+- `db` — เข้าถึงได้จาก backend (และ phpMyAdmin) เท่านั้น
+- `phpmyadmin` — เครื่องมือ ไม่ใช่ส่วนของแอป อยู่ใน profile `tools` เปิดเฉพาะตอนใช้
+
+### 1. ตั้งค่า
+```bash
+cp .env.docker.example .env
+```
+แก้ใน `.env` อย่างน้อย:
+- `DB_PASSWORD` กับ `MYSQL_PASSWORD` — ต้องเป็นค่าเดียวกัน
+- `MYSQL_ROOT_PASSWORD`
+- `APP_PORT` / `PHPMYADMIN_PORT` ถ้า 8080/8081 ถูกใช้อยู่ (และแก้ `APP_URL`, `APP_ORIGIN` ให้ตรง port)
+- `DB_HOST` ต้องเป็น `db` (ชื่อ service) ไม่ใช่ `localhost`
+
+### 2. เริ่มระบบ
+```bash
+docker compose up -d --build
+docker compose ps        # frontend, backend, db ต้องขึ้น (healthy)
+```
+- เว็บ: http://localhost:8080
+- phpMyAdmin (เปิดเมื่อต้องการ): `docker compose --profile tools up -d phpmyadmin` แล้วเข้า
+  http://localhost:8081 (login ด้วย `MYSQL_USER` / `MYSQL_PASSWORD`); ปิดด้วย `docker compose stop phpmyadmin`
+- port ผูกกับ `127.0.0.1` เท่านั้น — เข้าได้จากเครื่องนี้เครื่องเดียว; `db` ไม่เปิด port ออกนอก Docker
+
+ครั้งแรกที่ volume ว่าง MariaDB จะรัน `database/schema.sql` แล้วตามด้วย `database/seed.sql`
+ให้อัตโนมัติ จากนั้นสร้างผู้ใช้แอดมินคนแรกตามข้อ 5 ด้านบน (ใช้ phpMyAdmin หรือ
+`docker compose exec db mariadb -u root -p refer_system`)
+
+### 3. ข้อควรรู้
+- **โค้ดถูก copy เข้า image ไม่ได้ mount** — แก้โค้ดแล้วต้อง `docker compose up -d --build` ทุกครั้ง
+  (build ทั้ง frontend และ backend พร้อมกัน — `?v=` ของ asset คำนวณจากไฟล์ใน backend)
+- **schema/seed รันแค่ตอน volume ว่าง** — แก้ `schema.sql`/`seed.sql` ทีหลังจะไม่มีผลกับฐานข้อมูลเดิม
+  ต้องรัน migration เองผ่าน phpMyAdmin หรือ reset ทั้งหมดด้วย `docker compose down -v`
+  (**ลบข้อมูลทั้งหมด**)
+- healthcheck ของ `backend` ใช้ `docker/healthcheck.php` (รันผ่าน CLI เช็คว่าเว็บตอบ และ login DB ได้);
+  `frontend` เช็คที่ `/healthz` ของ nginx
+- ดู log: `docker compose logs -f frontend backend`
+- หยุดระบบ: `docker compose down` (ข้อมูลยังอยู่ใน volume `db_data`)
+
 ## การพัฒนา
 
 ### โครงสร้าง Backend
@@ -110,6 +166,27 @@ VALUES ('usr-admin-001', 'admin', '<ค่า hash จากคำสั่ง�
 2. สร้าง View ใน `resources/views/pages/`
 3. เพิ่ม Route ใน `routes/web.php`
 4. เพิ่ม CSS/JS ตามต้องการ
+
+## ยอดอุปกรณ์บนรถ / ตรวจเช็คตามเวร / เติมของ (migration 010)
+
+ไม่มีคลังสต็อกกลางแล้ว (`/api/stock*` ถูกถอด; ตาราง `refer_stock_items`/`refer_stock_transactions` คงไว้แต่ไม่ถูกใช้)
+ทุกการเปลี่ยนยอดผ่าน `App\Services\VehicleStockService` ใน transaction เดียวกับงานนั้นเสมอ
+
+| ข้อมูล | ตาราง | หมายเหตุ |
+|---|---|---|
+| ประเภทอุปกรณ์ | `refer_items.item_type` | `box` กล่อง/Lot, `piece` รายชิ้น, `electric` เครื่องไฟฟ้า |
+| ยอดของสิ้นเปลือง | `refer_item_lots` | แหล่งข้อมูลหลัก; `refer_items.current_qty` = SUM(Lot) (sync อัตโนมัติ) |
+| เครื่องไฟฟ้า | `refer_item_units` | สถานะพร้อม/ไม่พร้อม + แบต 1-4 ขีด รายเครื่อง — ไม่ตัดสต๊อค |
+| Ledger | `refer_stock_movements` | INIT/USE/REFILL/ADJUST/REVERSAL ทุก Lot ที่ถูกแตะ |
+| รอบตรวจ | `refer_checks` | UNIQUE (รถ, `check_date`, `shift_code`) — เช้า 08-16 / บ่าย 16-24 / ดึก 00-08 |
+| ประวัติแก้รอบตรวจ | `refer_check_history` | สำเนาก่อนแก้ทุก revision |
+| การเติม 1 ครั้ง | `refer_refill_batches` | `client_token` UNIQUE กันกดซ้ำ |
+
+- ตรวจเช็ค: กรอก "ใช้ไป" → ยืนยัน "ครบถ้วน" หรือกรอก "นับได้จริง" + หมายเหตุ (= ผิดปกติ); ตัดยอดแบบ FEFO
+- แก้รอบเดิม: ย้อนผลจาก ledger แล้วคำนวณใหม่ → ไม่หักซ้ำ
+- เติมของ: ต้องระบุวันหมดอายุทุก Lot, ห้ามของหมดอายุ, ปิดยอดใน "รายการรอเติม" ของรถคันนั้นอัตโนมัติ
+- กระทบยอด: `VehicleStockService::reconcile()` (ถูกเรียกก่อน commit ทุกครั้ง — ไม่ตรงจะ rollback)
+- ย้อนกลับ migration: `database/migrations/010-rollback.sql` (สำรองฐานข้อมูลก่อนเสมอ)
 
 ## API Endpoints
 

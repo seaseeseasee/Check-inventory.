@@ -7,7 +7,7 @@ class Vehicle extends Model
 {
     protected string $table = 'refer_vehicles';
     protected string $primaryKey = 'id';
-    protected array $fillable = ['id', 'name', 'plate', 'brand_model', 'status', 'odometer_initial', 'notes'];
+    protected array $fillable = ['id', 'name', 'vehicle_color', 'plate', 'brand_model', 'status', 'odometer_initial', 'notes'];
     protected array $casts = [
         'odometer_initial' => 'int',
     ];

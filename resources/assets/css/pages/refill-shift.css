@@ -1,0 +1,192 @@
+/* ========================================
+   สีประจำรถ / ตรวจเช็คตามเวร / Lot วันหมดอายุ / เติมของเข้ารถโดยตรง
+   ======================================== */
+
+/* ---------- ใช้ร่วมทุกหน้า ---------- */
+.vehicle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-weight: 700;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.car-shifts { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+.shift-dot {
+  font-size: 0.72rem;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.shift-dot.done { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); font-weight: 700; }
+.type-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.72rem;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--info-soft);
+  color: var(--info);
+  vertical-align: middle;
+}
+.type-badge.type-box { background: var(--teal-50); color: var(--teal-800); }
+.type-badge.type-non_expiring { background: var(--warn-soft); color: var(--warn); }
+.readonly-field {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+}
+.color-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.color-row input[type="color"] { width: 56px; min-width: 56px; height: 44px; padding: 2px; cursor: pointer; }
+.color-row input[type="text"] { flex: 1 1 140px; min-width: 0; font-family: ui-monospace, monospace; }
+.sheet p.mb-4 { white-space: pre-line; }
+
+.lot-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.lot {
+  font-size: 0.8rem;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--ok-soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.lot b { margin-left: 4px; }
+.lot-soon { background: var(--warn-soft); border-color: var(--warn); }
+.lot-soon b { color: var(--warn); }
+.lot-expired { background: var(--bad-soft); border-color: var(--bad); }
+.lot-expired b { color: var(--bad); }
+.lot-unknown { background: var(--bg); color: var(--muted); border-style: dashed; }
+
+.result-chip { font-size: 0.75rem; padding: 3px 10px; border-radius: var(--radius-full); font-weight: 700; white-space: nowrap; }
+.result-pending { background: var(--bg); color: var(--muted); border: 1px dashed var(--line); }
+.result-complete { background: var(--ok-soft); color: var(--ok); }
+.result-needs_refill { background: var(--warn-soft); color: var(--warn); }
+.result-anomaly, .result-error { background: var(--bad-soft); color: var(--bad); }
+
+/* ---------- ตรวจเช็คตามเวร ---------- */
+.shift-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.shift-hint { min-height: 1.4em; margin: 6px 0 0; font-size: 0.85rem; color: var(--muted); }
+.shift-hint.is-done { color: var(--info); font-weight: 600; }
+.shift-badge { padding: 2px 10px; border-radius: var(--radius-full); background: var(--teal-100); color: var(--teal-800); font-weight: 700; }
+.top-info { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.mode-note { margin: 8px 0; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--info-soft); color: var(--info); font-size: 0.85rem; }
+.check-help { margin: 8px 0; font-size: 0.85rem; color: var(--muted); }
+.check-help summary { cursor: pointer; font-weight: 600; color: var(--teal-700); }
+.check-help ol { margin: 6px 0 0 18px; padding: 0; }
+
+.check-card, .refill-card, .request-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--card);
+}
+.check-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.check-sub { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+.qty-line { margin-top: 6px; font-size: 0.9rem; }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; margin-top: 6px; }
+.check-grid label, .mismatch-box label { font-size: 0.8rem; margin: 0; }
+.expected-box {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  background: var(--teal-50);
+  font-size: 0.85rem;
+}
+.expected-box b { font-size: 1.15rem; color: var(--teal-800); }
+.confirm-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.confirm-btn, .mismatch-btn { flex: 1 1 140px; margin: 0; min-height: 44px; background: var(--card); color: var(--ink); border: 2px solid var(--line); }
+.confirm-btn.on { background: var(--ok); border-color: var(--ok); color: #fff; }
+.mismatch-btn.on { background: var(--warn-soft); border-color: var(--warn); color: var(--ink); }
+.mismatch-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px; }
+.check-msg { margin: 6px 0 0; font-size: 0.8rem; color: var(--muted); }
+.check-msg.msg-error, .check-msg.msg-anomaly { color: var(--bad); font-weight: 600; }
+.check-msg.msg-needs_refill { color: var(--warn); font-weight: 600; }
+
+.unit-list { display: grid; gap: 8px; margin-top: 8px; }
+.unit-row { display: grid; gap: 6px; padding: 8px; border-radius: var(--radius-sm); background: var(--bg); }
+.unit-row.untouched { outline: 2px dashed var(--line); }
+.unit-name { font-weight: 700; font-size: 0.85rem; }
+.unit-row .seg { margin: 0; }
+.seg-btn.danger.on { background: var(--bad); color: #fff; }
+.battery-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.bat-btn { margin: 0; min-height: 40px; min-width: 64px; flex: 1 1 64px; background: var(--card); color: var(--ink); border: 2px solid var(--line); letter-spacing: 1px; }
+.bat-btn.on { background: var(--teal-600); border-color: var(--teal-600); color: #fff; }
+.unit-note { margin: 0; }
+
+/* ---------- เติมอุปกรณ์เข้ารถโดยตรง ---------- */
+.refill-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 12px 0 8px; }
+.req-badge { color: var(--warn); font-weight: 700; }
+.lot-input { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(140px, 1.3fr) auto; gap: 8px; align-items: center; margin: 6px 0; }
+.lot-input input, .lot-input select { margin: 0; min-width: 0; }
+.lot-input .small-btn { margin: 0; }
+.unit-input { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.lot-warn { grid-column: 1 / -1; color: var(--bad); font-size: 0.8rem; font-weight: 700; }
+.unit-existing { display: block; padding: 6px 8px; margin: 4px 0; border-radius: var(--radius-sm); background: var(--bg); font-size: 0.85rem; }
+.unit-existing.retired { text-decoration: line-through; color: var(--muted); }
+.request-lines { margin: 8px 0; padding-left: 18px; font-size: 0.85rem; }
+.status-PENDING, .status-IN_PROGRESS { background: var(--warn-soft); color: var(--warn); }
+.status-PARTIAL { background: var(--info-soft); color: var(--info); }
+.status-COMPLETED { background: var(--ok-soft); color: var(--ok); }
+.status-CANCELLED { background: var(--bg); color: var(--muted); }
+#refillNote { margin: 0; flex: 1 1 200px; }
+
+/* ---------- ล็อตย่อย (กดขยาย) / จัดการล็อต / ครุภัณฑ์ / ถัง O2 ---------- */
+.txt-bad { color: var(--bad); font-weight: 700; }
+.txt-warn { color: var(--warn); font-weight: 700; }
+.txt-info { color: var(--info); font-weight: 700; }
+.card-head-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.card-head-actions .small-btn { margin: 0; }
+.lot-details { margin: 8px 0; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px; background: var(--bg); }
+.lot-details summary { cursor: pointer; font-weight: 700; color: var(--teal-700); font-size: 0.85rem; }
+.lot-row { padding: 8px 0; border-top: 1px dashed var(--line); font-size: 0.85rem; }
+.lot-row:first-of-type { border-top: 0; }
+.lot-main { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.lot-state { font-weight: 700; }
+.lot-row.lot-expired .lot-state, .lot-row.lot-expired .lot-main span:nth-child(2) { color: var(--bad); }
+.lot-row.lot-soon .lot-state { color: var(--warn); }
+.lot-row.lot-unknown .lot-state { color: var(--muted); }
+.lot-meta { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+.lot-actions, .lot-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.lot-actions .small-btn, .lot-tools .small-btn { margin: 0; }
+.lot-inputs { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 6px; align-items: center; }
+.lot-inputs label { margin: 0; font-size: 0.8rem; display: flex; gap: 6px; align-items: center; }
+.lot-inputs input { margin: 0; width: 90px; min-height: 36px; }
+.lot-input-card { border: 1px dashed var(--teal-300); border-radius: var(--radius-sm); padding: 8px; margin: 8px 0; background: var(--teal-50); }
+.lot-input-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.lot-input-grid label { margin: 0; font-size: 0.8rem; }
+.lot-input-grid input, .lot-input-grid select { margin: 4px 0 0; }
+.lot-input-card > .small-btn { margin: 6px 0 0; }
+.lot-form label { display: block; margin: 8px 0 0; font-size: 0.85rem; }
+.condition-seg { margin: 8px 0; }
+.note-inline { display: block; margin-top: 8px; font-size: 0.8rem; }
+.psi-input { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 0.85rem; }
+.psi-input input { margin: 0; max-width: 140px; }
+.bat-btn.low:not(.on) { border-color: var(--bad-soft); color: var(--bad); }
+.table-scroll { overflow-x: auto; max-height: 60vh; }
+.mv-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.mv-table th, .mv-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.mv-table td.num { text-align: right; white-space: nowrap; }
+
+@media (max-width: 480px) {
+  .lot-input { grid-template-columns: 1fr 1fr; }
+  .lot-input .small-btn { grid-column: 1 / -1; }
+  .lot-input-grid { grid-template-columns: 1fr 1fr; }
+}

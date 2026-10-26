@@ -31,9 +31,11 @@ class NurseController extends Controller
 
         // Login usernames are admin-only info; staff use this list just to pick inspectors
         if ($this->roleMiddleware->isAdmin()) {
-            $logins = (new User())->getUsernamesByNurseIds(array_column($nurses, 'id'));
+            $accounts = (new User())->getAccountsByNurseIds(array_column($nurses, 'id'));
             foreach ($nurses as &$nurse) {
-                $nurse['login_username'] = $logins[(string)$nurse['id']] ?? null;
+                $account = $accounts[(string)$nurse['id']] ?? null;
+                $nurse['login_username'] = $account['username'] ?? null;
+                $nurse['account'] = $account;   // หน้าจัดการผู้ใช้: บทบาท/สถานะ/เข้าสู่ระบบล่าสุด
             }
             unset($nurse);
         }

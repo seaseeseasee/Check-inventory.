@@ -20,11 +20,12 @@ class VehiclesPage {
     this.currentVehicleId = null;
     this.currentVehicle = null;
     this.items = [];
-    this.showAddForm = false;
+    this.openItems = new Set();   // การ์ดอุปกรณ์ที่ขยายอยู่ (ค่าเริ่มต้น = ย่อทุกใบ)
     this.editingItemId = null;
     this.copyStaging = [];
     this.copySourceLabel = '';
     this._vehicleModal = null;
+    this._itemModal = null;
     this.init();
   }
 
@@ -64,10 +65,8 @@ class VehiclesPage {
 
     // Vehicle CRUD
     document.getElementById('btnEditVehicle')?.addEventListener('click', () => this.showEditVehicleForm());
+    document.getElementById('btnToggleVehicleStatus')?.addEventListener('click', () => this.handleToggleVehicleStatus());
     document.getElementById('btnDeleteVehicle')?.addEventListener('click', () => this.handleDeleteVehicle());
-
-    // Add item form
-    document.getElementById('stockAddForm')?.addEventListener('submit', (e) => this.handleAddItem(e));
 
     // Copy items from another vehicle
     document.getElementById('btnCopyStart')?.addEventListener('click', () => this.handleCopyStart());
@@ -125,6 +124,7 @@ class VehiclesPage {
   /** แถบสรุปข้อมูลรถที่เลือก — บอกสถานะ + สิ่งที่ผูกอยู่ (ใช้ตอนจะลบรถ) */
   renderVehicleMeta() {
     const el = document.getElementById('stockCarMeta');
+    this.updateToggleStatusButton();
     if (!el) return;
     const v = this.currentVehicle;
     if (!v) {
@@ -134,7 +134,8 @@ class VehiclesPage {
 
     const status = VEHICLE_STATUS_LABEL[v.status] || v.status || '-';
     const chip = VEHICLE_STATUS_CHIP[v.status] || 'chip-off';
-    const bits = [`<span class="chip ${chip}">${UI.escape(status)}</span>`];
+    window.vehicleRef.remember([v]);
+    const bits = [window.vehicleChip(v), `<span class="chip ${chip}">${UI.escape(status)}</span>`];
 
     if (v.active_item_count !== undefined) {
       bits.push(`<span class="chip chip-info">อุปกรณ์ใช้งาน ${UI.escape(String(v.active_item_count))} รายการ</span>`);
@@ -148,6 +149,79 @@ class VehiclesPage {
     }
 
     el.innerHTML = bits.join('');
+  }
+
+  /** ปุ่มเดียวสลับ "ปิดใช้งาน" ↔ "เปิดใช้งาน" ตามสถานะปัจจุบันของรถที่เลือก */
+  updateToggleStatusButton() {
+    const btn = document.getElementById('btnToggleVehicleStatus');
+    if (!btn) return;
+    const v = this.currentVehicle;
+    if (!v) {
+      btn.disabled = true;
+      btn.textContent = '🚫 ปิดใช้งานรถ';
+      return;
+    }
+    btn.disabled = false;
+    if (v.status === 'disabled') {
+      btn.textContent = '✅ เปิดใช้งานรถ';
+      btn.classList.remove('danger');
+    } else {
+      btn.textContent = '🚫 ปิดใช้งานรถ';
+      btn.classList.add('danger');
+    }
+  }
+
+  /**
+   * สลับสถานะรถแบบคลิกเดียว — ไม่ต้องเปิดฟอร์มแก้ไขทั้งหมดเพื่อแค่เปลี่ยนสถานะ
+   * เปิดใช้งานกลับ: ตั้งเป็น "พร้อมใช้งาน" ตรง ๆ
+   * ปิดใช้งาน: ใช้ endpoint เดียวกับปุ่มลบ (mode=disable) เพราะเซิร์ฟเวอร์ตรวจประวัติผูกให้แล้ว
+   */
+  async handleToggleVehicleStatus() {
+    const vehicle = this.currentVehicle;
+    const id = this.currentVehicleId;
+    if (!vehicle || !id) {
+      window.toast.warning('กรุณาเลือกรถก่อน');
+      return;
+    }
+
+    const label = vehiclePlate(vehicle);
+    const btn = document.getElementById('btnToggleVehicleStatus');
+
+    if (vehicle.status === 'disabled') {
+      const ok = await window.confirmDialog(
+        `เปิดใช้งานรถ "${label}" กลับหรือไม่? รถจะกลับมาเลือกตรวจเช็คได้ตามปกติ`,
+        { title: 'เปิดใช้งานรถ', confirmText: 'เปิดใช้งาน' }
+      );
+      if (!ok) return;
+
+      if (btn) UI.setLoading(btn, true);
+      try {
+        await window.vehicleApi.update(id, { status: 'available' });
+        window.toast.success(`เปิดใช้งานรถ "${label}" แล้ว`);
+        await this.loadVehicles();
+        this.currentVehicleId = id;
+        this.renderVehicleSelect();
+      } catch (error) {
+        window.toast.error('เปิดใช้งานไม่สำเร็จ: ' + (error.message || 'ไม่ทราบสาเหตุ'));
+      } finally {
+        if (btn) UI.setLoading(btn, false);
+      }
+      return;
+    }
+
+    const ok = await window.confirmDialog(
+      `ปิดใช้งานรถ "${label}" หรือไม่? รถจะหายจากเมนูเลือกสำหรับหน้าตรวจของผู้ใช้งานทั่วไป `
+      + 'แต่ประวัติเดิมยังอยู่ครบ และเปิดใช้งานกลับได้ทุกเมื่อ',
+      { title: 'ปิดใช้งานรถ', confirmText: 'ปิดใช้งาน' }
+    );
+    if (!ok) return;
+
+    if (btn) UI.setLoading(btn, true);
+    try {
+      await this.removeVehicle(label, 'disable');
+    } finally {
+      if (btn) UI.setLoading(btn, false);
+    }
   }
 
   async loadItems(vehicleId) {
@@ -195,19 +269,21 @@ class VehiclesPage {
       const counted = item.stock_updated_at ? String(item.stock_updated_at) : '';
       const stamp = counted
         ? `<span class="stock-stamp">ยอดล่าสุด ${UI.escape(this.fmtStamp(counted))}</span>`
-        : '<span class="stock-stamp">ยังไม่เคยตรวจนับ</span>';
+        : '<span class="stock-stamp">ยังไม่ได้จัดขึ้นรถ</span>';
 
-      // refer_items.expiry_text เป็นข้อความอิสระ (ข้อมูลจริงส่วนใหญ่ไม่ใช่ yyyy-mm-dd เช่น "10")
-      // ถ้าบังคับ type="date" กับค่าแบบนั้น ช่องจะแสดงว่าง แล้วการกด "บันทึก" ครั้งถัดไป
-      // จะส่ง expiry_text = "" ไปล้างค่าเดิมทิ้ง — จึงใช้ input วันที่เฉพาะค่าที่รูปแบบวันที่จริง
+      // ยอดคงเหลือ + วันหมดอายุมาจาก Lot / รายเครื่อง (แก้ผ่านการเติมของ/การตรวจเช็คเท่านั้น)
+      const type = item.item_type || (item.is_battery ? 'non_expiring' : 'individual');
+      const unitWord = item.has_pressure ? ' ถัง' : ' เครื่อง';
+      const viewLabel = type === 'non_expiring' ? (item.has_pressure ? '🔧 จัดการถัง' : '🔧 จัดการเครื่อง') : (type === 'individual' ? '📦 ดูรายชิ้น' : '📦 ดูล็อต');
       const expiry = String(item.expiry_text ?? '');
-      const isIsoDate = /^\d{4}-\d{2}-\d{2}$/.test(expiry);
-      const expiryInput = isIsoDate
-        ? `<input type="date" value="${UI.escape(expiry)}" data-item-id="${item.id}" data-field="expiry_text" aria-label="วันหมดอายุ">`
-        : `<input type="text" value="${UI.escape(expiry)}" data-item-id="${item.id}" data-field="expiry_text" placeholder="ข้อความวันหมดอายุ เช่น 10 / 15/12/2569">`;
+      const qtyText = counted
+        ? `${UI.escape(String(Math.round(Number(item.current_qty || 0) * 100) / 100))}${type === 'non_expiring' ? unitWord : ''}`
+        : 'ยังไม่ได้จัดขึ้นรถ';
 
       return `
       <article class="stock-card${item.active ? '' : ' is-off'}" data-item-id="${item.id}">
+        <details class="stock-collapse" data-item-id="${item.id}" ${this.openItems.has(item.id) ? 'open' : ''}>
+        ${this.renderItemSummary(item, type, counted, expiry, unitWord)}
         <div class="stock-top">
           <input type="text" class="stock-name-input" value="${UI.escape(item.name)}" data-item-id="${item.id}" data-field="name" aria-label="ชื่ออุปกรณ์">
           <span class="chip ${item.active ? 'chip-ok' : 'chip-off'}">
@@ -216,36 +292,62 @@ class VehiclesPage {
         </div>
         <div class="stock-fields">
           <div>
-            <label>จำนวนมาตรฐาน</label>
-            <input type="text" value="${UI.escape(item.standard)}" data-item-id="${item.id}" data-field="standard" placeholder="จำนวนมาตรฐาน">
+            <label for="std-${item.id}">ขั้นต่ำที่ต้องมี (มาตรฐาน)</label>
+            <input id="std-${item.id}" type="text" value="${UI.escape(item.standard)}" data-item-id="${item.id}" data-field="standard" placeholder="เช่น 5 หรือ 1 ชุด">
           </div>
           <div>
-            <label>วันหมดอายุ${isIsoDate ? '' : ' <span class="text-xs font-normal text-slate-500">(ข้อความเดิม)</span>'}</label>
-            ${expiryInput}
-          </div>
-          <div>
-            <label>ยอดคงเหลือบนรถ</label>
-            <input type="number" min="0" step="any" inputmode="decimal" value="${counted ? UI.escape(String(item.current_qty ?? '')) : ''}" data-item-id="${item.id}" data-field="onboard_qty" placeholder="${counted ? 'เว้นว่าง = ไม่แก้' : 'ยังไม่เคยตรวจนับ — กรอกเพื่อบันทึกยอด'}">
-          </div>
-          <div>
-            <label>เป็นแบตเตอรี่</label>
-            <select data-item-id="${item.id}" data-field="is_battery" style="min-height: 44px;">
-              <option value="false" ${!item.is_battery ? 'selected' : ''}>ไม่ใช่</option>
-              <option value="true" ${item.is_battery ? 'selected' : ''}>ใช่</option>
+            <label>ประเภท</label>
+            <select data-item-id="${item.id}" data-field="item_type" style="min-height: 44px;">
+              <option value="individual" ${type === 'individual' ? 'selected' : ''}>รายชิ้น (วันหมดอายุรายชิ้น)</option>
+              <option value="box" ${type === 'box' ? 'selected' : ''}>กล่อง/ล็อต (วันหมดอายุทั้งกล่อง)</option>
+              <option value="non_expiring" ${type === 'non_expiring' ? 'selected' : ''}>ไม่มีวันหมดอายุ (รายเครื่อง)</option>
             </select>
+          </div>
+          ${this.renderThresholdFields(item, type)}
+          ${type === 'non_expiring' ? `
+          <div class="flag-row">
+            <label><input type="checkbox" data-item-id="${item.id}" data-field="is_battery" ${item.is_battery ? 'checked' : ''}> 🔋 มีแบตเตอรี่</label>
+            <label><input type="checkbox" data-item-id="${item.id}" data-field="has_pressure" ${item.has_pressure ? 'checked' : ''}> 🫧 วัดแรงดัน (PSI)</label>
+          </div>` : ''}
+          ${type === 'non_expiring' ? `
+          <div>
+            <label>มีบนรถตอนนี้</label>
+            <div class="readonly-field">${qtyText} <small>(เพิ่ม/นำออก/อัปเดตที่ปุ่ม “${viewLabel}”)</small></div>
+          </div>` : `
+          <div>
+            <label for="onb-${item.id}">มีบนรถตอนนี้</label>
+            ${UI.stepper(`id="onb-${item.id}" min="0" data-item-id="${item.id}" data-field="onboard_qty" value="${counted ? UI.escape(String(Math.round(Number(item.current_qty || 0) * 100) / 100)) : ''}" placeholder="${counted ? '' : 'ยังไม่ได้จัด'}"`, 'ยอดบนรถ')}
+          </div>
+
+          <div class="add-dates" data-role="add-dates" data-item-id="${item.id}">${this.renderAddDates(item, 0)}</div>`}
+          <div>
+            <label>หมดอายุเร็วสุด</label>
+            <div class="readonly-field">${type === 'non_expiring' ? '—' : (expiry ? UI.escape(UI.formatDateThai(expiry)) : 'ไม่มีข้อมูล')}</div>
           </div>
         </div>
         <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">${stamp}</div>
-        <div style="display: flex; gap: 8px; margin-top: 8px;">
+        <div class="item-lots-actions">
+          <button type="button" class="small-btn secondary" data-action="lots" data-item-id="${item.id}" aria-expanded="false" data-label="${viewLabel}">${viewLabel}</button>
+        </div>
+        <div class="item-lots hidden" data-role="lots" aria-live="polite"></div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;">
           <button type="button" class="small-btn" data-action="save" data-item-id="${item.id}">บันทึก</button>
           <button type="button" class="small-btn gray" data-action="toggle" data-item-id="${item.id}">
             ${item.active ? 'พักใช้งาน' : 'เปิดใช้งาน'}
           </button>
           <button type="button" class="small-btn danger" data-action="delete" data-item-id="${item.id}">ลบ</button>
         </div>
+        </details>
       </article>
     `;
     }).join('') || '<p class="empty">ยังไม่มีอุปกรณ์ในรถคันนี้</p>';
+
+    // จำว่าเปิดการ์ดไหนไว้ — render ใหม่ (เช่น แก้ล็อต/พักใช้งาน) แล้วยังเปิดอยู่ (ปิดเองเมื่อบันทึกสำเร็จ)
+    container.querySelectorAll('details.stock-collapse').forEach(el => {
+      el.addEventListener('toggle', () => {
+        if (el.open) this.openItems.add(el.dataset.itemId); else this.openItems.delete(el.dataset.itemId);
+      });
+    });
 
     // Bind events
     container.querySelectorAll('[data-action="save"]').forEach(btn => {
@@ -256,9 +358,352 @@ class VehiclesPage {
       btn.addEventListener('click', () => this.toggleItemActive(btn.dataset.itemId));
     });
 
+    // ดูล็อต/รายชิ้น/เครื่อง = เปิดในการ์ดนี้เลย แก้ เพิ่ม นำออก ได้ที่นี่ (ไม่ย้ายหน้า)
+    container.querySelectorAll('[data-action="lots"]').forEach(btn => {
+      btn.addEventListener('click', () => this.toggleLots(btn));
+    });
+    // ยอดบนรถเพิ่มขึ้น → แสดงช่องวันหมดอายุ (กล่อง: 1 ช่อง | รายชิ้น: 1 ช่องต่อ 1 ชิ้นที่เพิ่ม)
+    container.querySelectorAll('[data-field="onboard_qty"]').forEach(input => {
+      input.addEventListener('input', () => this.refreshAddDates(input.dataset.itemId));
+    });
+    if (!container.dataset.boundDates) {   // container อยู่ถาวร — ผูกครั้งเดียว
+      container.dataset.boundDates = '1';
+      container.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="fill-dates"]');
+        if (!btn) return;
+        const inputs = [...btn.closest('[data-role="add-dates"]').querySelectorAll('input[type="date"]')];
+        const first = inputs.find(i => i.value);
+        if (first) inputs.forEach(i => { if (!i.value) i.value = first.value; });
+      });
+    }
+    // แก้/นำออกรายล็อต-รายชิ้น ในการ์ดเลย
+    container.querySelectorAll('[data-role="lots"]').forEach(box => {
+      box.addEventListener('click', (e) => this.onLotViewClick(e, box));
+    });
+    this.lotSheet = null;   // ข้อมูลล็อตโหลดใหม่ทุกครั้งที่ render รายการ (ยอดอาจเปลี่ยนจากการตรวจ/เติม)
+
     container.querySelectorAll('[data-action="delete"]').forEach(btn => {
       btn.addEventListener('click', () => this.deleteItem(btn.dataset.itemId));
     });
+  }
+
+  /** แถวย่อของการ์ดอุปกรณ์ (กดเพื่อขยาย): ชื่อ • ประเภท • ยอดบนรถ/ขั้นต่ำ • หมดอายุเร็วสุด */
+  renderItemSummary(item, type, counted, expiry, unitWord) {
+    const TYPE = { individual: '🧩 รายชิ้น', box: '📦 กล่อง', non_expiring: '🩺 ไม่มีวันหมดอายุ' };
+    const fmt = (n) => String(Math.round(Number(n || 0) * 100) / 100);
+    const unit = type === 'non_expiring' ? unitWord : (item.unit ? ' ' + item.unit : '');
+    const target = item.target_qty === null || item.target_qty === undefined || item.target_qty === '' ? null : Number(item.target_qty);
+    const short = counted && target !== null && Number(item.current_qty || 0) < target;
+    const qty = counted
+      ? `<span class="${short ? 'txt-bad' : ''}">บนรถ <b>${UI.escape(fmt(item.current_qty))}</b>${target !== null ? ' / ' + UI.escape(fmt(target)) : ''}${UI.escape(unit)}${short ? ' (ขาด)' : ''}</span>`
+      : '<span class="txt-bad">ยังไม่ได้จัดขึ้นรถ</span>';
+    let exp = '';
+    if (type !== 'non_expiring' && expiry) {
+      const today = this.todayIso();
+      const warnDays = item.expiry_warn_days === null || item.expiry_warn_days === undefined || item.expiry_warn_days === '' ? 30 : Number(item.expiry_warn_days);
+      const soon = new Date(today + 'T00:00:00');
+      soon.setDate(soon.getDate() + warnDays);
+      const soonIso = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, '0')}-${String(soon.getDate()).padStart(2, '0')}`;
+      const state = expiry < today ? ['txt-bad', '⛔ หมดอายุ '] : (expiry <= soonIso ? ['txt-warn', '⚠️ ใกล้หมดอายุ '] : ['', 'หมดอายุ ']);
+      exp = `<span class="${state[0]}">${state[1]}${UI.escape(UI.formatDateThai(expiry))}</span>`;
+    }
+    return `
+        <summary class="stock-summary">
+          <span class="stock-sum-name">${UI.escape(item.name)}</span>
+          ${item.active ? '' : '<span class="chip chip-off">พัก</span>'}
+          <span class="stock-sum-meta">
+            <span class="type-badge type-${UI.escape(type)}">${TYPE[type] || ''}</span>
+            ${qty}${exp}
+          </span>
+        </summary>`;
+  }
+
+  // ---------- ช่องวันหมดอายุของที่เพิ่ม (หน้ารถ) ----------
+  renderAddDates(item, add) {
+    if (!(add > 0)) {
+      return '<p class="text-sm text-slate-500">เพิ่มจำนวนที่ “มีบนรถตอนนี้” แล้วจะมีช่องให้ใส่วันหมดอายุ</p>';
+    }
+    if (item.item_type !== 'individual') {
+      return `<label for="onbexp-${item.id}">วันหมดอายุของที่เพิ่ม (${add}) *</label>
+        <input id="onbexp-${item.id}" type="date" min="${UI.escape(this.todayIso())}" data-item-id="${item.id}" data-field="onboard_expiry">`;
+    }
+    if (!Number.isInteger(add)) return '<p class="txt-bad">ของแบบชิ้นต้องเป็นจำนวนเต็ม</p>';
+    if (add > 50) return '<p class="txt-bad">เพิ่มได้ครั้งละไม่เกิน 50 ชิ้น</p>';
+    return `<p class="add-dates-title">วันหมดอายุของแต่ละชิ้นที่เพิ่ม (${add} ชิ้น) *</p>
+      <div class="add-dates-grid">${Array.from({ length: add }, (_, k) => `
+        <label for="pexp-${item.id}-${k}">ชิ้นที่ ${k + 1}
+          <input id="pexp-${item.id}-${k}" type="date" min="${UI.escape(this.todayIso())}" data-item-id="${item.id}" data-field="piece_expiry"></label>`).join('')}
+      </div>
+      ${add > 1 ? '<button type="button" class="small-btn gray" data-action="fill-dates">ใช้วันแรกกับช่องที่ว่าง</button>' : ''}`;
+  }
+
+  todayIso() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  /** จำนวนที่จะเพิ่มจากช่อง "มีบนรถตอนนี้" (0 ถ้าไม่เพิ่ม) */
+  addCountFor(itemId) {
+    const item = this.items.find(i => i.id === itemId) || {};
+    const el = document.querySelector(`[data-item-id="${itemId}"][data-field="onboard_qty"]`);
+    if (!el || el.value.trim() === '') return 0;
+    const current = String(item.stock_updated_at || '').trim() !== '' ? Number(item.current_qty || 0) : 0;
+    return Math.round((Number(el.value) - current) * 100) / 100;
+  }
+
+  refreshAddDates(itemId) {
+    const item = this.items.find(i => i.id === itemId);
+    const box = document.querySelector(`[data-role="add-dates"][data-item-id="${itemId}"]`);
+    if (!item || !box) return;
+    const keep = [...box.querySelectorAll('input[type="date"]')].map(i => i.value);   // ไม่ล้างวันที่กรอกไว้แล้ว
+    box.innerHTML = this.renderAddDates(item, this.addCountFor(itemId));
+    box.querySelectorAll('input[type="date"]').forEach((i, k) => { if (keep[k]) i.value = keep[k]; });
+  }
+
+  // ---------- ล็อต/รายชิ้น/เครื่องของอุปกรณ์ในการ์ด — แก้ไขและนำออกได้ที่นี่เลย ----------
+  async toggleLots(btn) {
+    const card = btn.closest('.stock-card');
+    const box = card?.querySelector('[data-role="lots"]');
+    if (!box) return;
+    const open = box.classList.contains('hidden');
+    box.classList.toggle('hidden', !open);
+    btn.setAttribute('aria-expanded', String(open));
+    btn.textContent = open ? '📦 ซ่อน' : (btn.dataset.label || '📦 ดูล็อต');
+    if (open) await this.loadLotView(box, btn.dataset.itemId);
+  }
+
+  async loadLotView(box, itemId, reload = false) {
+    box.innerHTML = '<p class="text-sm text-slate-500">กำลังโหลด…</p>';
+    try {
+      if (reload || !this.lotSheet || this.lotSheet.carId !== this.currentVehicleId) {
+        const res = await window.staffApi.getRefillSheet(this.currentVehicleId);
+        this.lotSheet = { carId: this.currentVehicleId, items: (res.data && res.data.items) || [] };
+      }
+      box.dataset.itemId = itemId;
+      box.innerHTML = this.renderLotView(this.lotSheet.items.find(i => i.id === itemId));
+    } catch (error) {
+      box.innerHTML = `<p class="txt-bad">โหลดไม่สำเร็จ — ${UI.escape(error.message)}</p>`;
+    }
+  }
+
+  renderLotView(item) {
+    if (!item) return '<p class="text-sm text-slate-500">ไม่พบข้อมูล (อุปกรณ์อาจถูกพักใช้งาน)</p>';
+    const fmt = (v) => String(Math.round(Number(v) * 100) / 100);
+    const unit = item.unit ? ' ' + UI.escape(item.unit) : '';
+    if (item.item_type === 'non_expiring') {
+      const word = item.has_pressure ? 'ถัง' : 'เครื่อง';
+      const label = { ready: '✅ พร้อมใช้', not_ready: '⛔ ไม่พร้อม', no_power: '🔋 เปิดไม่ติด', pending: '⏳ รอตรวจ' };
+      const rows = (item.units || []).map((u, i) => `
+        <li class="${u.status !== 'ready' ? 'lv-expired' : ''}" data-unit="${UI.escape(u.id)}">
+          <div><b>${UI.escape(u.label || `${word}ที่ ${i + 1}`)}</b> — ${label[u.status] || UI.escape(u.status)}
+            ${item.has_battery && u.battery_level !== null && u.battery_level !== undefined ? ` • แบต ${u.battery_level}/${item.battery_max_bars}` : ''}
+            ${item.has_pressure && u.pressure_psi !== null && u.pressure_psi !== undefined ? ` • ${u.pressure_psi} PSI` : ''}
+            ${u.note ? ` • ${UI.escape(u.note)}` : ''}</div>
+          <div class="lot-actions">
+            <button type="button" class="small-btn gray" data-unit-action="update">✏️ อัปเดตสถานะ${item.has_battery ? '/แบต' : ''}${item.has_pressure ? '/แรงดัน' : ''}</button>
+            <button type="button" class="small-btn danger" data-unit-action="retire">🗑 นำ${word}นี้ออก</button>
+          </div></li>`).join('');
+      return (rows ? `<ul class="lot-view">${rows}</ul>` : `<p class="text-sm text-slate-500">ยังไม่มี${word}บนรถ</p>`)
+        + `<button type="button" class="small-btn add-btn" data-unit-action="add">➕ เพิ่ม${word}</button>`;
+    }
+    const piece = item.item_type === 'individual';
+    const state = { expired: '⛔ หมดอายุแล้ว', soon: '⚠️ ใกล้หมดอายุ', unknown: '❓ ไม่ทราบวันหมดอายุ', ok: '', na: '' };
+    const rows = (item.lots || []).map((lot, i) => `
+      <li class="lv-${UI.escape(lot.state)}" data-lot="${UI.escape(lot.id)}">
+        <div><b>${piece ? 'ชิ้นที่' : 'ล็อต'} ${i + 1}${lot.lot_number ? ' · ' + UI.escape(lot.lot_number) : ''}</b>
+          — ${lot.expiry_date ? 'หมดอายุ ' + UI.escape(UI.formatDateThai(lot.expiry_date)) : 'ไม่ทราบวันหมดอายุ'}
+          ${piece ? '' : `• เหลือ <b>${fmt(lot.qty)}</b>${unit}`} ${state[lot.state] ? `<span class="lot-state">${state[lot.state]}</span>` : ''}</div>
+        <div class="lot-actions">
+          <button type="button" class="small-btn gray" data-lot-action="edit">✏️ แก้วันหมดอายุ</button>
+          ${piece ? '' : '<button type="button" class="small-btn gray" data-lot-action="adjust">🔢 แก้จำนวน</button>'}
+          ${lot.state === 'expired'
+            ? '<button type="button" class="small-btn danger" data-lot-action="expire">นำออก (หมดอายุ)</button>'
+            : `<button type="button" class="small-btn danger" data-lot-action="void">🗑 นำ${piece ? 'ชิ้นนี้' : 'ล็อตนี้'}ออก</button>`}
+        </div></li>`).join('');
+    return rows
+      ? `<ul class="lot-view">${rows}</ul><p class="text-sm">รวม <b>${fmt(item.current_qty || 0)}</b>${unit} • ทุกการแก้บันทึกในประวัติ</p>`
+      : '<p class="text-sm text-slate-500">ยังไม่มีของบนรถ — ตั้งจำนวนที่ช่อง “มีบนรถตอนนี้” แล้วกดบันทึก</p>';
+  }
+
+  /** หลังบันทึก: โหลดการ์ดใหม่ (ยอดรวมเปลี่ยน) แล้วเปิดรายการล็อต/เครื่องของอุปกรณ์เดิมค้างไว้ */
+  async reopenLotView(itemId) {
+    await this.loadItems(this.currentVehicleId);
+    const card = document.querySelector(`.stock-card[data-item-id="${CSS.escape(itemId)}"]`);
+    const btnView = card?.querySelector('[data-action="lots"]');
+    const box = card?.querySelector('[data-role="lots"]');
+    if (!btnView || !box) return;
+    box.classList.remove('hidden');
+    btnView.setAttribute('aria-expanded', 'true');
+    btnView.textContent = '📦 ซ่อน';
+    await this.loadLotView(box, itemId, true);
+  }
+
+  // ---------- ไม่มีวันหมดอายุ: เพิ่ม / อัปเดตสถานะ / นำเครื่องออก (บันทึกผ่าน API เดียวกับการเติมของ — กันบันทึกซ้ำด้วย token) ----------
+  async onUnitAction(btn, box) {
+    const item = (this.lotSheet?.items || []).find(i => i.id === box.dataset.itemId);
+    if (!item) return;
+    const word = item.has_pressure ? 'ถัง' : 'เครื่อง';
+    const action = btn.dataset.unitAction;
+    const unitId = btn.closest('[data-unit]')?.dataset.unit;
+    const unit = unitId ? (item.units || []).find(u => u.id === unitId) : null;
+    const name = unit ? (unit.label || word) : '';
+    let line;
+    if (action === 'retire') {
+      if (!(await window.confirmDialog(`นำ${word} "${name}" ออกจากรถ ${item.name}?\n(เก็บไว้ในประวัติ ไม่ลบข้อมูล)`, { confirmText: 'นำออก', danger: true }))) return;
+      line = { item_id: item.id, retire_unit_ids: [unit.id] };
+    } else {
+      const data = await this.unitForm(item, unit, word);
+      if (!data) return;
+      line = action === 'add'
+        ? { item_id: item.id, units: [{ label: data.label, ...data.reading }] }
+        : { item_id: item.id, unit_updates: [{ id: unit.id, ...data.reading }] };
+    }
+    try {
+      const token = (window.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '') : UI.uid() + UI.uid();
+      await window.staffApi.refill(this.currentVehicleId, { client_token: token, note: 'จัดการเครื่องจากหน้ารถ', lines: [line] });
+      window.toast.success({ add: `เพิ่ม${word}แล้ว`, update: 'อัปเดตสถานะแล้ว', retire: `นำ${word}ออกแล้ว` }[action]);
+      await this.reopenLotView(item.id);
+    } catch (error) {
+      window.toast.error(error.message, 8000);
+    }
+  }
+
+  unitForm(item, unit, word) {
+    return new Promise((resolve) => {
+      const statuses = [['ready', 'พร้อมใช้'], ['not_ready', 'ไม่พร้อมใช้']].concat(item.has_battery ? [['no_power', 'เปิดไม่ติด']] : []);
+      const bat = unit && unit.battery_level !== null && unit.battery_level !== undefined ? Number(unit.battery_level) : item.battery_max_bars;
+      const content = `<form class="lot-form">
+        ${unit ? `<p class="mb-2 text-sm font-semibold">${UI.escape(item.name)} — ${UI.escape(unit.label || word)}</p>`
+          : `<label>รหัส/เลข${word} <input name="label" maxlength="100" placeholder="เช่น ${word} 1"></label>`}
+        <label>สถานะ <select name="status">${statuses.map(([v, l]) => `<option value="${v}" ${(unit ? unit.status : 'ready') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        ${item.has_battery ? `<label>แบตเตอรี่ (ขีด) <select name="battery_level">${Array.from({ length: item.battery_max_bars + 1 }, (_, k) => item.battery_max_bars - k)
+          .map(l => `<option value="${l}" ${bat === l ? 'selected' : ''}>${l} จาก ${item.battery_max_bars}</option>`).join('')}</select></label>` : ''}
+        ${item.has_pressure ? `<label>แรงดัน (PSI) <input name="pressure_psi" type="number" min="0" max="10000" step="1" inputmode="numeric" value="${unit && unit.pressure_psi !== null && unit.pressure_psi !== undefined ? UI.escape(String(unit.pressure_psi)) : ''}"></label>` : ''}
+        <label>สาเหตุ/หมายเหตุ (จำเป็นเมื่อไม่พร้อมใช้) <input name="note" maxlength="200" value="${unit ? UI.escape(unit.note || '') : ''}"></label>
+      </form>`;
+      const modal = new Modal({
+        title: unit ? `อัปเดต${word}` : `เพิ่ม${word}`,
+        content,
+        size: 'sm',
+        onClose: () => resolve(null),
+      }).render();
+      const actions = modal.element.querySelector('.sheet-actions');
+      actions.innerHTML = `<button type="button" class="small-btn gray flex-1" data-action="cancel">ยกเลิก</button>
+        <button type="button" class="flex-1" data-action="ok">บันทึก</button>`;
+      actions.querySelector('[data-action="cancel"]').onclick = () => { resolve(null); modal.close(); };
+      actions.querySelector('[data-action="ok"]').onclick = () => {
+        const f = Object.fromEntries(new FormData(modal.element.querySelector('form')).entries());
+        if (f.status !== 'ready' && !String(f.note || '').trim()) {
+          window.toast.warning('ไม่พร้อมใช้ ต้องระบุสาเหตุ');
+          return;
+        }
+        if (item.has_pressure && (f.pressure_psi === '' || !(Number(f.pressure_psi) >= 0))) {
+          window.toast.warning('กรอกแรงดัน (PSI)');
+          return;
+        }
+        resolve({
+          label: String(f.label || '').trim(),
+          reading: {
+            status: f.status,
+            note: String(f.note || '').trim(),
+            battery_level: item.has_battery && f.status !== 'no_power' ? Number(f.battery_level) : null,
+            pressure_psi: item.has_pressure ? Number(f.pressure_psi) : null,
+          },
+        });
+        modal.close();
+      };
+      modal.open();
+    });
+  }
+
+  async onLotViewClick(event, box) {
+    const unitBtn = event.target.closest('[data-unit-action]');
+    if (unitBtn) {
+      await this.onUnitAction(unitBtn, box);
+      return;
+    }
+    const btn = event.target.closest('[data-lot-action]');
+    if (!btn) return;
+    const item = (this.lotSheet?.items || []).find(i => i.id === box.dataset.itemId);
+    const lot = item && (item.lots || []).find(l => l.id === btn.closest('[data-lot]').dataset.lot);
+    if (!lot) return;
+    const action = btn.dataset.lotAction;
+    const piece = item.item_type === 'individual';
+    const label = `${item.name} — ${piece ? 'ชิ้น' : 'ล็อต'}${lot.lot_number ? ' ' + lot.lot_number : ''}${lot.expiry_date ? ' (หมดอายุ ' + UI.formatDateThai(lot.expiry_date) + ')' : ''}`;
+    let payload;
+    if (action === 'expire') {
+      if (!(await window.confirmDialog(`นำของหมดอายุออกจากรถ?\n${label}\n(บันทึกในประวัติ ไม่ลบข้อมูล)`, { confirmText: 'นำออก' }))) return;
+      payload = {};
+    } else {
+      payload = await this.lotForm(lot, action, label, piece);
+      if (!payload) return;
+    }
+    try {
+      if (action === 'edit') await window.staffApi.editLot(lot.id, payload);
+      else await window.staffApi.lotAction(lot.id, action, payload);
+      window.toast.success({ edit: 'แก้วันหมดอายุแล้ว', adjust: 'แก้จำนวนแล้ว', void: 'นำออกจากรถแล้ว', expire: 'นำของหมดอายุออกแล้ว' }[action]);
+      await this.reopenLotView(item.id);   // ยอดรวม/วันหมดอายุเร็วสุดบนการ์ดเปลี่ยน
+    } catch (error) {
+      window.toast.error(error.message, 8000);
+    }
+  }
+
+  lotForm(lot, action, label, piece) {
+    return new Promise((resolve) => {
+      const fields = {
+        edit: `
+          <label>วันหมดอายุ <input name="expiry_date" type="date" value="${UI.escape(lot.expiry_date || '')}"></label>
+          ${piece ? '' : `<label>เลขล็อต <input name="lot_number" maxlength="100" value="${UI.escape(lot.lot_number || '')}"></label>`}
+          <label>เหตุผล * <input name="reason" maxlength="200" placeholder="เช่น กรอกวันผิด"></label>`,
+        adjust: `
+          <p class="text-sm">ตอนนี้ ${UI.escape(String(lot.qty))} — กรอกจำนวนที่มีจริงของล็อตนี้</p>
+          <label>จำนวนที่มีจริง <input name="qty" type="number" min="0" step="any" value="${UI.escape(String(lot.qty))}"></label>
+          <label>เหตุผล * <input name="reason" maxlength="200"></label>`,
+        void: `
+          <p class="text-sm">นำ${piece ? 'ชิ้นนี้' : `ล็อตนี้ (${UI.escape(String(lot.qty))})`}ออกจากรถ — ประวัติยังอยู่ ไม่ลบข้อมูล</p>
+          <label>เหตุผล * <input name="reason" maxlength="200" placeholder="เช่น ชำรุด, บันทึกผิด"></label>`,
+      }[action];
+      const modal = new Modal({
+        title: { edit: 'แก้วันหมดอายุ', adjust: 'แก้จำนวนในล็อต', void: piece ? 'นำชิ้นนี้ออก' : 'นำล็อตนี้ออก' }[action],
+        content: `<p class="mb-2 text-sm font-semibold">${UI.escape(label)}</p><form class="lot-form">${fields}</form>`,
+        size: 'sm',
+        onClose: () => resolve(null),
+      }).render();
+      const actions = modal.element.querySelector('.sheet-actions');
+      actions.innerHTML = `<button type="button" class="small-btn gray flex-1" data-action="cancel">ยกเลิก</button>
+        <button type="button" class="flex-1" data-action="ok">${action === 'void' ? 'ยืนยันนำออก' : 'บันทึก'}</button>`;
+      actions.querySelector('[data-action="cancel"]').onclick = () => { resolve(null); modal.close(); };
+      actions.querySelector('[data-action="ok"]').onclick = () => {
+        const data = Object.fromEntries(new FormData(modal.element.querySelector('form')).entries());
+        if (!String(data.reason || '').trim()) {
+          window.toast.warning('กรุณาระบุเหตุผล');
+          return;
+        }
+        resolve(data);
+        modal.close();
+      };
+      modal.open();
+    });
+  }
+
+  // เกณฑ์เตือนรายอุปกรณ์ (หน่วยงานกำหนด — ค่าว่าง = ไม่เตือน / ใช้ค่าระบบ)
+  renderThresholdFields(item, type) {
+    const val = (v) => (v === null || v === undefined ? '' : UI.escape(String(v)));
+    const field = (key, label, value, placeholder, attrs) => `
+          <div>
+            <label>${label}</label>
+            <input type="number" inputmode="numeric" step="1" ${attrs} data-item-id="${item.id}" data-field="${key}" value="${value}" placeholder="${placeholder}">
+          </div>`;
+    if (type === 'non_expiring') {
+      return (item.is_battery
+        ? field('battery_max_bars', 'แบตเต็มกี่ขีด', val(item.battery_max_bars ?? 4), '4', 'min="1" max="10"')
+          + field('battery_low_bars', 'เตือนเมื่อแบต ≤ (ขีด)', val(item.battery_low_bars), 'ว่าง = ไม่เตือน', 'min="0" max="10"') : '')
+        + (item.has_pressure ? field('o2_low_psi', 'เตือนเมื่อแรงดัน < (PSI)', val(item.o2_low_psi), 'ว่าง = ยังไม่กำหนดเกณฑ์', 'min="0" max="10000"') : '');
+    }
+    if (type === 'box' || type === 'individual') {
+      return field('expiry_warn_days', 'เตือนใกล้หมดอายุ (วัน)', val(item.expiry_warn_days), 'ว่าง = 30 วัน', 'min="0" max="3650"');
+    }
+    return '';
   }
 
   fmtStamp(raw) {
@@ -268,68 +713,317 @@ class VehiclesPage {
     return `${Number(m[3])}/${Number(m[2])}/${Number(m[1]) + 543} ${m[4]}:${m[5]}`;
   }
 
+  // ---------- เพิ่มอุปกรณ์: pop up แบบเดียวกับ "เพิ่มรถใหม่" ----------
+  itemFormFields() {
+    const types = [
+      ['individual', '🧩 รายชิ้น', 'แต่ละชิ้นมีวันหมดอายุของตัวเอง'],
+      ['box', '📦 กล่อง / ล็อต', 'ทั้งกล่องวันหมดอายุเดียวกัน'],
+      ['non_expiring', '🩺 ไม่มีวันหมดอายุ', 'ตรวจรายเครื่อง: สถานะ / แบต / แรงดัน'],
+    ];
+    return `
+      <p class="item-form-car">🚑 เพิ่มในรถ: ${window.vehicleChip(this.currentVehicle || { id: this.currentVehicleId })}</p>
+      <div class="grid gap-4">
+        <div>
+          <label for="itemName" class="!mt-0">ชื่ออุปกรณ์ <span class="text-red-500" aria-hidden="true">*</span></label>
+          <input id="itemName" type="text" maxlength="255" placeholder="เช่น Adrenaline 1 mg" autocomplete="off">
+          <p class="mt-1 hidden text-xs font-semibold text-red-600" id="itemNameError" role="alert"></p>
+        </div>
+        <div>
+          <label for="itemStandard">จำนวนมาตรฐาน (ขั้นต่ำที่ต้องมี) <span class="text-red-500" aria-hidden="true">*</span></label>
+          <input id="itemStandard" type="text" maxlength="100" placeholder="เช่น 10 หลอด หรือ 1 ชุด" autocomplete="off">
+          <p class="mt-1 hidden text-xs font-semibold text-red-600" id="itemStandardError" role="alert"></p>
+        </div>
+        <fieldset class="item-type-pick">
+          <legend>ประเภทอุปกรณ์</legend>
+          ${types.map(([value, label, hint], i) => `
+          <label class="item-type-opt">
+            <input type="radio" name="itemType" value="${value}" ${i === 0 ? 'checked' : ''}>
+            <span><b>${label}</b><small>${hint}</small></span>
+          </label>`).join('')}
+        </fieldset>
+        <div class="flag-row hidden" id="itemFlags">
+          <label><input type="checkbox" id="itemIsBattery"> 🔋 มีแบตเตอรี่</label>
+          <label><input type="checkbox" id="itemHasPressure"> 🫧 วัดแรงดัน (PSI)</label>
+        </div>
+        <fieldset class="item-details" id="itemDetails"></fieldset>
+      </div>
+    `;
+  }
+
+  /**
+   * รายละเอียดตามประเภท (กรอกต่อได้เลยในหน้าต่างเดียวกัน — ไม่กรอก = เพิ่มแค่รายการ ยังไม่มีของบนรถ)
+   *  กล่อง: จำนวน + วันหมดอายุ 1 วัน | รายชิ้น: จำนวน + วันหมดอายุทีละชิ้น | ไม่มีวันหมดอายุ: เกณฑ์แบต/แรงดัน + เครื่อง/ถังทีละตัว
+   * render ใหม่เมื่อเปลี่ยนประเภท/ธง/จำนวน โดยเก็บค่าที่กรอกไว้แล้ว (ตาม id ของช่อง)
+   */
+  renderItemDetails() {
+    const box = this._itemModal?.element.querySelector('#itemDetails');
+    if (!box) return;
+    const keep = {};
+    box.querySelectorAll('input, select').forEach(el => { if (el.id) keep[el.id] = el.value; });
+    const type = this.itemFormType();
+    const v = (id, dflt = '') => UI.escape(keep[id] ?? dflt);
+    const num = (id, label, attrs, placeholder = '') => `
+      <div><label for="${id}">${label}</label>
+        <input id="${id}" type="number" inputmode="numeric" step="1" ${attrs} value="${v(id)}" placeholder="${placeholder}"></div>`;
+
+    if (type !== 'non_expiring') {
+      const qty = Number(keep.itemOnboard || 0);
+      box.innerHTML = `<legend>รายละเอียด${type === 'individual' ? 'รายชิ้น' : 'กล่อง / ล็อต'} <small>(ไม่บังคับ — กรอกทีหลังได้)</small></legend>
+        <div><label for="itemOnboard">จำนวนที่มีบนรถตอนนี้</label>
+          ${UI.stepper(`id="itemOnboard" min="0" value="${v('itemOnboard')}" placeholder="0"`, 'จำนวนบนรถ')}</div>
+        <div class="add-dates" data-role="add-dates">${this.renderAddDates({ id: 'new', item_type: type }, qty)}</div>
+        ${num('itemWarnDays', 'เตือนใกล้หมดอายุ (วัน)', 'min="0" max="3650"', 'ว่าง = 30 วัน')}`;
+      box.querySelectorAll('input[type="date"]').forEach(i => { if (keep[i.id]) i.value = keep[i.id]; });
+      return;
+    }
+
+    const form = this._itemModal.element;
+    const battery = form.querySelector('#itemIsBattery')?.checked;
+    const pressure = form.querySelector('#itemHasPressure')?.checked;
+    const maxBars = Number(keep.itemBatMax) >= 1 && Number(keep.itemBatMax) <= 10 ? Number(keep.itemBatMax) : 4;
+    const count = Math.min(50, Math.max(0, Math.floor(Number(keep.itemUnitCount || 0))));
+    const units = Array.from({ length: count }, (_, k) => {
+      const id = (f) => `itemUnit-${k}-${f}`;
+      const status = keep[id('status')] || 'ready';
+      return `
+        <div class="lot-input-card">
+          <p class="lot-input-title">🩺 เครื่อง/ถังที่ ${k + 1}</p>
+          <div class="lot-input-grid">
+            <div><label for="${id('label')}">ชื่อ / เลขเครื่อง</label>
+              <input id="${id('label')}" type="text" maxlength="100" value="${v(id('label'))}" placeholder="เช่น ถัง O2 #1"></div>
+            <div><label for="${id('status')}">สถานะ</label>
+              <select id="${id('status')}" data-rerender>
+                ${[['ready', '✅ พร้อมใช้'], ['not_ready', '⛔ ไม่พร้อมใช้']].concat(battery ? [['no_power', '🔋 เปิดไม่ติด']] : [])
+                  .map(([val, label]) => `<option value="${val}" ${status === val ? 'selected' : ''}>${label}</option>`).join('')}
+              </select></div>
+            ${battery && status !== 'no_power' ? num(id('bat'), `แบตเตอรี่ (0-${maxBars} ขีด) *`, `min="0" max="${maxBars}"`) : ''}
+            ${pressure ? num(id('psi'), 'แรงดัน (PSI) *', 'min="0" max="10000"') : ''}
+            <div><label for="${id('note')}">หมายเหตุ${status !== 'ready' ? ' (สาเหตุ) *' : ''}</label>
+              <input id="${id('note')}" type="text" maxlength="200" value="${v(id('note'))}"></div>
+          </div>
+        </div>`;
+    }).join('');
+    box.innerHTML = `<legend>รายละเอียดเครื่อง / ถัง <small>(ไม่บังคับ — กรอกทีหลังได้)</small></legend>
+      ${battery ? num('itemBatMax', 'แบตเต็มกี่ขีด', 'min="1" max="10" data-rerender', '4') + num('itemBatLow', 'เตือนเมื่อแบต ≤ (ขีด)', `min="0" max="${maxBars}"`, 'ว่าง = ไม่เตือน') : ''}
+      ${pressure ? num('itemO2Low', 'เตือนเมื่อแรงดัน < (PSI)', 'min="0" max="10000"', 'ว่าง = ยังไม่กำหนดเกณฑ์') : ''}
+      <div><label for="itemUnitCount">จำนวนเครื่อง/ถังที่มีบนรถตอนนี้</label>
+        ${UI.stepper(`id="itemUnitCount" min="0" max="50" value="${v('itemUnitCount')}" placeholder="0"`, 'จำนวนเครื่อง')}</div>
+      ${units}`;
+  }
+
+  /** ค่ารายละเอียดจากหน้าต่างเพิ่มอุปกรณ์ → ฟิลด์ใน payload (ตรวจซ้ำที่ server) */
+  itemDetailsPayload(form, itemType) {
+    const val = (id) => (form.querySelector('#' + id)?.value || '').trim();
+    const out = {};
+    const errors = [];
+    const today = this.todayIso();
+    if (itemType !== 'non_expiring') {
+      if (val('itemWarnDays') !== '') out.expiry_warn_days = val('itemWarnDays');
+      const qty = Number(val('itemOnboard') || 0);
+      if (qty > 0) {
+        out.onboard_qty = String(qty);
+        if (itemType === 'individual') {
+          if (!Number.isInteger(qty) || qty > 50) errors.push('ของแบบชิ้นต้องเป็นจำนวนเต็ม ไม่เกิน 50 ชิ้น');
+          const dates = [...form.querySelectorAll('[data-field="piece_expiry"]')].map(i => i.value);
+          const missing = dates.map((d, k) => (d ? 0 : k + 1)).filter(Boolean);
+          if (missing.length) errors.push(`กรอกวันหมดอายุชิ้นที่ ${missing.join(', ')}`);
+          out.onboard_expiries = dates;
+        } else {
+          out.onboard_expiry = form.querySelector('[data-field="onboard_expiry"]')?.value || '';
+          if (!out.onboard_expiry) errors.push('กรอกวันหมดอายุของที่มีบนรถ');
+        }
+        if ([].concat(out.onboard_expiries || out.onboard_expiry).some(d => d && d < today)) errors.push('วันหมดอายุผ่านไปแล้ว — เพิ่มของหมดอายุไม่ได้');
+      }
+      return { out, errors };
+    }
+    const battery = form.querySelector('#itemIsBattery').checked;
+    const pressure = form.querySelector('#itemHasPressure').checked;
+    if (battery && val('itemBatMax') !== '') out.battery_max_bars = val('itemBatMax');
+    if (battery && val('itemBatLow') !== '') out.battery_low_bars = val('itemBatLow');
+    if (pressure && val('itemO2Low') !== '') out.o2_low_psi = val('itemO2Low');
+    const count = Math.min(50, Math.max(0, Math.floor(Number(val('itemUnitCount') || 0))));
+    out.units = Array.from({ length: count }, (_, k) => {
+      const f = (name) => val(`itemUnit-${k}-${name}`);
+      const status = f('status') || 'ready';
+      const label = `เครื่อง/ถังที่ ${k + 1}`;
+      if (battery && status !== 'no_power' && f('bat') === '') errors.push(`${label}: กรอกระดับแบตเตอรี่`);
+      if (pressure && f('psi') === '') errors.push(`${label}: กรอกแรงดัน (PSI)`);
+      if (status !== 'ready' && !f('note')) errors.push(`${label}: ไม่พร้อมใช้/เปิดไม่ติด ต้องระบุสาเหตุ`);
+      return {
+        label: f('label'), status, note: f('note'),
+        battery_level: battery && status !== 'no_power' ? Number(f('bat')) : null,
+        pressure_psi: pressure ? Number(f('psi')) : null,
+      };
+    });
+    if (!out.units.length) delete out.units;
+    return { out, errors };
+  }
+
   showAddItemForm() {
-    this.showAddForm = true;
-    document.getElementById('addItemForm').classList.remove('hidden');
-    document.getElementById('stockName').focus();
+    if (!this.currentVehicleId) {
+      window.toast.warning('กรุณาเลือกรถก่อน');
+      return;
+    }
+    this.hideAddItemForm();
+
+    const modal = new Modal({
+      title: 'เพิ่มอุปกรณ์ใหม่',
+      size: 'md',
+      content: `<form id="itemForm" novalidate>${this.itemFormFields()}</form>`,
+      onClose: () => { this._itemModal = null; },
+    }).render();
+    this._itemModal = modal;
+
+    const actions = modal.element.querySelector('.sheet-actions');
+    actions.innerHTML = `
+      <button type="button" class="small-btn gray flex-1" data-action="cancel">ยกเลิก</button>
+      <button type="button" class="flex-1" data-action="save">บันทึกอุปกรณ์ใหม่</button>
+    `;
+    actions.querySelector('[data-action="cancel"]').onclick = () => this.cancelItemForm();
+    actions.querySelector('[data-action="save"]').onclick = () => this.handleAddItem();
+
+    const form = modal.element.querySelector('#itemForm');
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      this.handleAddItem();
+    });
+    form.querySelector('#itemName')?.addEventListener('input', () => this.setItemFieldError('itemName', ''));
+    form.querySelector('#itemStandard')?.addEventListener('input', () => this.setItemFieldError('itemStandard', ''));
+    // แบต/แรงดัน มีเฉพาะประเภท "ไม่มีวันหมดอายุ" — เปลี่ยนประเภท/ธง = เปลี่ยนช่องรายละเอียด
+    form.querySelectorAll('input[name="itemType"], #itemIsBattery, #itemHasPressure').forEach(el => {
+      el.addEventListener('change', () => {
+        form.querySelector('#itemFlags')?.classList.toggle('hidden', this.itemFormType() !== 'non_expiring');
+        this.renderItemDetails();
+      });
+    });
+    const details = form.querySelector('#itemDetails');
+    // จำนวนเปลี่ยน → ช่องวันหมดอายุ/เครื่องเปลี่ยนตาม (render เฉพาะส่วนล่าง เคอร์เซอร์ยังอยู่ช่องจำนวน)
+    details.addEventListener('input', (e) => {
+      if (e.target.id === 'itemOnboard') {
+        const dates = details.querySelector('[data-role="add-dates"]');
+        const keep = [...dates.querySelectorAll('input[type="date"]')].map(i => i.value);
+        dates.innerHTML = this.renderAddDates({ id: 'new', item_type: this.itemFormType() }, Number(e.target.value || 0));
+        dates.querySelectorAll('input[type="date"]').forEach((i, k) => { if (keep[k]) i.value = keep[k]; });
+      }
+    });
+    details.addEventListener('change', (e) => {
+      if (e.target.id === 'itemUnitCount' || e.target.hasAttribute('data-rerender')) {
+        const focusId = e.target.id;
+        this.renderItemDetails();
+        form.querySelector('#' + CSS.escape(focusId))?.focus();
+      }
+    });
+    details.addEventListener('click', (e) => {
+      if (!e.target.closest('[data-action="fill-dates"]')) return;
+      const inputs = [...details.querySelectorAll('[data-role="add-dates"] input[type="date"]')];
+      const first = inputs.find(i => i.value);
+      if (first) inputs.forEach(i => { if (!i.value) i.value = first.value; });
+      else window.toast.warning('ใส่วันหมดอายุอย่างน้อย 1 ช่องก่อน');
+    });
+    this.renderItemDetails();
+
+    modal.open();
+    form.querySelector('#itemName')?.focus();
   }
 
   hideAddItemForm() {
-    this.showAddForm = false;
-    document.getElementById('addItemForm').classList.add('hidden');
-    document.getElementById('stockName').value = '';
-    document.getElementById('stockStandard').value = '';
-    document.getElementById('stockExpiry').value = '';
-    document.getElementById('stockBattery').value = 'false';
-    const onboardEl = document.getElementById('stockOnboard');
-    if (onboardEl) onboardEl.value = '';
-    const currentEl = document.getElementById('stockCurrent');
-    if (currentEl) currentEl.value = '';
-    const minEl = document.getElementById('stockMin');
-    if (minEl) minEl.value = '';
+    if (this._itemModal) {
+      try { this._itemModal.destroy(); } catch (e) { /* node ถูกลบไปแล้ว */ }
+      this._itemModal = null;
+    }
   }
 
-  async handleAddItem(event) {
-    event.preventDefault();
+  itemFormType() {
+    return this._itemModal?.element.querySelector('input[name="itemType"]:checked')?.value || 'individual';
+  }
 
-    const name = document.getElementById('stockName')?.value?.trim();
-    const standard = document.getElementById('stockStandard')?.value?.trim();
-    const expiry = document.getElementById('stockExpiry')?.value || '';
-    const isBattery = document.getElementById('stockBattery')?.value === 'true';
-    const onboard = document.getElementById('stockOnboard')?.value?.trim() ?? '';
-    const currentStock = document.getElementById('stockCurrent')?.value?.trim() ?? '';
-    const minStock = document.getElementById('stockMin')?.value?.trim() ?? '';
+  setItemFieldError(inputId, message) {
+    const form = this._itemModal?.element.querySelector('#itemForm');
+    const input = form?.querySelector('#' + inputId);
+    const errorEl = form?.querySelector('#' + inputId + 'Error');
+    if (input) {
+      if (message) input.setAttribute('aria-invalid', 'true');
+      else input.removeAttribute('aria-invalid');
+    }
+    if (errorEl) {
+      errorEl.textContent = message || '';
+      errorEl.classList.toggle('hidden', !message);
+    }
+  }
+
+  async cancelItemForm() {
+    const form = this._itemModal?.element.querySelector('#itemForm');
+    const hasInput = ['itemName', 'itemStandard'].some(id => (form?.querySelector('#' + id)?.value || '').trim() !== '');
+    if (hasInput) {
+      const ok = await window.confirmDialog('ต้องการยกเลิกและล้างข้อมูลที่กรอกไว้หรือไม่?', {
+        title: 'ยกเลิกการเพิ่มอุปกรณ์',
+        confirmText: 'ล้างข้อมูล',
+        cancelText: 'กรอกต่อ',
+      });
+      if (!ok) return;
+    }
+    this.hideAddItemForm();
+  }
+
+  async handleAddItem() {
+    const form = this._itemModal?.element.querySelector('#itemForm');
+    if (!form) return;
     const vehicleId = this.currentVehicleId;
+    const name = form.querySelector('#itemName').value.trim();
+    const standard = form.querySelector('#itemStandard').value.trim();
+    const itemType = this.itemFormType();
 
+    this.setItemFieldError('itemName', name ? '' : 'กรุณากรอกชื่ออุปกรณ์');
+    this.setItemFieldError('itemStandard', standard ? '' : 'กรุณากรอกจำนวนมาตรฐาน เช่น 10 หรือ 1 ชุด');
     if (!name || !standard) {
-      window.toast.error('กรอกชื่อและจำนวน');
+      form.querySelector(name ? '#itemStandard' : '#itemName')?.focus();
       return;
     }
-
     if (!vehicleId) {
-      window.toast.error('เลือกรถก่อน');
+      window.toast.error('กรุณาเลือกรถก่อน');
       return;
     }
 
-    // เดิมอ่าน stockExpiry แต่ไม่ส่งเข้า payload → วันหมดอายุที่กรอกหาย (แก้แล้ว)
-    const payload = { name, standard, is_battery: isBattery, expiry_text: expiry };
-    if (onboard !== '') payload.onboard_qty = Number(onboard);
-    if (currentStock !== '') payload.current_stock = Number(currentStock);
-    if (minStock !== '') payload.min_stock = Number(minStock);
+    const details = this.itemDetailsPayload(form, itemType);
+    if (details.errors.length) {
+      window.toast.warning(details.errors.join(' • '));
+      return;
+    }
+    const payload = { name, standard, item_type: itemType, ...details.out };
+    if (itemType === 'non_expiring') {
+      payload.is_battery = form.querySelector('#itemIsBattery').checked;
+      payload.has_pressure = form.querySelector('#itemHasPressure').checked;
+    }
 
+    const saveBtn = this._itemModal.element.querySelector('[data-action="save"]');
+    if (saveBtn) UI.setLoading(saveBtn, true);
     try {
       const res = await window.vehicleApi.addItem(vehicleId, payload);
       this.hideAddItemForm();
-      const stock = res?.data?.warehouse;
-      if (stock && stock.current_qty !== undefined) {
-        window.toast.success(`เพิ่มอุปกรณ์เรียบร้อย • คลัง “${stock.name}” = ${stock.current_qty}` + (Number(stock.min_qty) > 0 ? ` (ขั้นต่ำ ${stock.min_qty})` : ''));
-      } else {
-        window.toast.success('เพิ่มอุปกรณ์เรียบร้อย');
-      }
+      const stocked = payload.onboard_qty || payload.units;
+      window.toast.success(stocked ? `เพิ่ม “${name}” พร้อมของบนรถแล้ว` : `เพิ่ม “${name}” แล้ว — ใส่จำนวนบนรถและวันหมดอายุได้ที่การ์ดด้านล่าง`);
       await this.loadItems(vehicleId);
+      this.focusItemCard(res?.data?.id);
     } catch (error) {
-      window.toast.error('เพิ่มไม่สำเร็จ: ' + error.message);
+      const errs = error.data?.errors || {};
+      const first = (key) => (Array.isArray(errs[key]) ? errs[key][0] : errs[key]);
+      if (errs.name) this.setItemFieldError('itemName', first('name'));
+      if (errs.standard) this.setItemFieldError('itemStandard', first('standard'));
+      if (error.status === 409) this.setItemFieldError('itemName', error.message);   // ชื่อซ้ำในรถคันนี้
+      window.toast.error('เพิ่มอุปกรณ์ไม่สำเร็จ: ' + (error.message || 'ไม่ทราบสาเหตุ'));
+    } finally {
+      if (saveBtn) UI.setLoading(saveBtn, false);
     }
+  }
+
+  // พาไปที่การ์ดอุปกรณ์ที่เพิ่งเพิ่ม — ผู้ใช้เห็นทันทีว่าเพิ่มแล้ว และกรอกยอดบนรถต่อได้เลย
+  focusItemCard(itemId) {
+    if (!itemId) return;
+    const card = document.querySelector(`#stockTable .stock-card[data-item-id="${CSS.escape(String(itemId))}"]`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('is-focus');
+    setTimeout(() => card.classList.remove('is-focus'), 3000);
   }
 
   /**
@@ -361,22 +1055,70 @@ class VehiclesPage {
       if (v !== String(item.standard || '')) data.standard = v;
     }
 
-    const expiryEl = field('expiry_text');
-    // renderItems() เลือกชนิด input ตามค่าจริง (date เฉพาะค่ารูปแบบ yyyy-mm-dd)
-    // จึงไม่มีกรณี "input ว่างเพราะเบราว์เซอร์รับค่าข้อความอิสระไม่ได้" ที่ทำให้ค่าเดิมถูกล้าง
-    if (expiryEl && expiryEl.value !== String(item.expiry_text || '')) data.expiry_text = expiryEl.value;
+    const typeEl = field('item_type');
+    const currentType = item.item_type || (item.is_battery ? 'non_expiring' : 'individual');
+    if (typeEl && typeEl.value !== currentType) data.item_type = typeEl.value;
+    // ธงของประเภทไม่มีวันหมดอายุ: มีแบตเตอรี่ / วัดแรงดัน
+    ['is_battery', 'has_pressure'].forEach((key) => {
+      const el = field(key);
+      if (el && el.checked !== !!item[key]) data[key] = el.checked;
+    });
 
-    const batteryEl = field('is_battery');
-    if (batteryEl && (batteryEl.value === 'true') !== !!item.is_battery) data.is_battery = batteryEl.value === 'true';
+    // เกณฑ์เตือน: ส่งเฉพาะช่องที่แก้จริง ('' = ล้างเป็นค่าว่าง — server ตรวจช่วงค่าซ้ำ)
+    ['battery_max_bars', 'battery_low_bars', 'o2_low_psi', 'expiry_warn_days'].forEach((key) => {
+      const el = field(key);
+      if (!el) return;
+      const before = item[key] === null || item[key] === undefined ? '' : String(item[key]);
+      if (el.value.trim() !== before) data[key] = el.value.trim();
+    });
 
+    // ยอดบนรถ: ส่งเมื่อเปลี่ยนจริง (server ปรับผ่านล็อต + บันทึกเป็นรายการปรับยอด)
     const onboardEl = field('onboard_qty');
     if (onboardEl && onboardEl.value.trim() !== '') {
       const n = Number(onboardEl.value);
       if (!Number.isFinite(n) || n < 0) {
-        window.toast.error('ยอดคงเหลือบนรถต้องเป็นตัวเลขไม่ติดลบ');
+        window.toast.error('ยอดบนรถต้องเป็นตัวเลขไม่ติดลบ');
         return null;
       }
-      data.onboard_qty = Math.round(n * 100) / 100;
+      const counted = String(item.stock_updated_at || '').trim() !== '';
+      const current = Math.round(Number(item.current_qty || 0) * 100) / 100;
+      if (!counted || Math.round(n * 100) / 100 !== current) {
+        data.onboard_qty = Math.round(n * 100) / 100;
+        if (item.item_type === 'individual' && !Number.isInteger(data.onboard_qty)) {
+          window.toast.error('ของแบบชิ้นต้องเป็นจำนวนเต็ม');
+          return null;
+        }
+        if (data.onboard_qty > current) {
+          const today = this.todayIso();
+          if (item.item_type === 'individual') {
+            // 1 ช่อง = 1 ชิ้น — ทุกชิ้นต้องมีวันหมดอายุ
+            const inputs = [...document.querySelectorAll(`[data-item-id="${itemId}"][data-field="piece_expiry"]`)];
+            const empty = inputs.find(i => !i.value);
+            if (!inputs.length || empty) {
+              window.toast.error('กรุณาใส่วันหมดอายุให้ครบทุกชิ้นที่เพิ่ม');
+              (empty || field('onboard_qty'))?.focus();
+              return null;
+            }
+            if (inputs.some(i => i.value < today)) {
+              window.toast.error('มีชิ้นที่หมดอายุแล้ว — เพิ่มของหมดอายุไม่ได้');
+              return null;
+            }
+            data.onboard_expiries = inputs.map(i => i.value);
+          } else {
+            const exp = field('onboard_expiry');
+            if (!exp || !exp.value) {
+              window.toast.error('กรุณาระบุวันหมดอายุของที่เพิ่ม');
+              exp?.focus();
+              return null;
+            }
+            if (exp.value < today) {
+              window.toast.error('วันหมดอายุผ่านไปแล้ว — เพิ่มของหมดอายุไม่ได้');
+              return null;
+            }
+            data.onboard_expiry = exp.value;
+          }
+        }
+      }
     }
 
     return data;
@@ -390,15 +1132,30 @@ class VehiclesPage {
       return;
     }
 
+    if (data.onboard_qty !== undefined) {
+      const item = this.items.find(i => i.id === itemId) || {};
+      const before = Math.round(Number(item.current_qty || 0) * 100) / 100;
+      const ok = await window.confirmDialog(
+        `ตั้งยอดบนรถ ${item.name}: ${before} → ${data.onboard_qty}?\n` +
+        (data.onboard_qty > before
+          ? (data.onboard_expiries
+            ? `เพิ่ม ${data.onboard_expiries.length} ชิ้น หมดอายุ: ${data.onboard_expiries.map(d => UI.formatDateThai(d)).join(', ')}`
+            : `ของที่เพิ่มหมดอายุ ${UI.formatDateThai(data.onboard_expiry)}`)
+          : 'ตัดยอดจากล็อตที่หมดอายุก่อน') + '\n(บันทึกในประวัติเป็นการปรับยอด)',
+        { confirmText: 'บันทึกยอด' }
+      );
+      if (!ok) return;
+    }
+
     const btn = document.querySelector(`[data-action="save"][data-item-id="${itemId}"]`);
     if (btn) UI.setLoading(btn, true);
     try {
       const res = await window.vehicleApi.updateItem(itemId, data);
-      const warehouse = res?.data?.warehouse;
-      let message = 'อัปเดตเรียบร้อย';
-      if (data.standard) message += ' • คำนวณจำนวนเป้าหมายใหม่จากมาตรฐานแล้ว';
-      if (warehouse && warehouse.current_qty !== undefined) message += ` • คลัง “${warehouse.name}” = ${warehouse.current_qty}`;
+      let message = 'บันทึกสำเร็จ';
+      if (data.standard) message += ' • ปรับขั้นต่ำแล้ว';
+      if (res?.data?.onboard) message += ` • ยอดบนรถ ${res.data.onboard.after}`;
       window.toast.success(message);
+      this.openItems.delete(itemId);   // บันทึกแล้ว → ย่อกลับเป็นรายการ
       await this.loadItems(this.currentVehicleId);
     } catch (error) {
       window.toast.error('อัปเดตไม่สำเร็จ: ' + error.message);
@@ -491,6 +1248,8 @@ class VehiclesPage {
         standard: item.standard || '',
         expiry_text: item.expiry_text || '',
         is_battery: !!item.is_battery,
+        item_type: item.item_type || '',
+        has_pressure: !!item.has_pressure,
         active: item.active !== false && item.active !== 0,
         // ยอดคงเหลือติดมาเฉพาะแถวที่ต้นทาง "เคยตรวจนับจริง" — แถวที่ไม่เคยนับต้องว่างไว้
         // เพราะ 0 กับ "ยังไม่เคยตรวจนับ" ความหมายคนละอย่างบนหน้ารอเติม
@@ -503,7 +1262,7 @@ class VehiclesPage {
     this.renderCopyPreview();
     window.toast.info(
       `ดึงรายการจาก ${sourceLabel} จำนวน ${sourceItems.length} รายการ `
-      + `— คัดลอกยอดคงเหลือบนรถมา ${stockCount} รายการ (ตรวจสอบก่อนกดยืนยัน)`
+      + '— คัดลอกเฉพาะรายการ/มาตรฐาน/ประเภท (ไม่คัดลอกยอดคงเหลือ เพราะของจริงไม่ได้ย้ายรถ)'
     );
   }
 
@@ -515,7 +1274,7 @@ class VehiclesPage {
         content: `
           <p class="mb-2">คุณต้องการคัดลอกรายการอุปกรณ์จากรถคัน <strong>${UI.escape(sourceLabel)}</strong> ใช่หรือไม่?</p>
           <p class="mb-2">ระบบจะนำอุปกรณ์ทั้งหมด <strong>${count} รายการ</strong> มาแสดงในรถคัน <strong>${UI.escape(targetLabel)}</strong> เพื่อให้ตรวจสอบ/แก้ไขก่อนบันทึก — ยังไม่มีการบันทึกจนกว่าจะกด “ยืนยันคัดลอก”</p>
-          <p class="mb-2 text-sm">สิ่งที่คัดลอกมาด้วย: จำนวนมาตรฐาน, วันหมดอายุ, สถานะใช้งาน/พัก, แบตเตอรี่ และ <strong>ยอดคงเหลือบนรถ ${stockCount} รายการ</strong> (รายการที่ต้นทางยังไม่เคยตรวจนับจะปล่อยว่าง ไม่ใส่เป็น 0)</p>
+          <p class="mb-2 text-sm">สิ่งที่คัดลอกมาด้วย: ชื่อ, จำนวนมาตรฐาน, ประเภทอุปกรณ์ และสถานะใช้งาน/พัก — <strong>ไม่คัดลอกยอดคงเหลือ/Lot</strong> (รถปลายทางเริ่มเป็น "ยังไม่เคยตรวจนับ" จนกว่าจะเติมของหรือตรวจนับ)</p>
           ${replacing ? '<p class="mb-2 text-sm" style="color: var(--warn);">⚠️ มีรายการรอคัดลอกอยู่ก่อนแล้ว — รายการชุดใหม่นี้จะแทนที่ชุดเดิม</p>' : ''}
         `,
         onClose: () => resolve(false),
@@ -689,17 +1448,18 @@ class VehiclesPage {
           standard: String(row.standard).trim(),
           expiry_text: String(row.expiry_text || '').trim(),
           is_battery: !!row.is_battery,
+          item_type: row.item_type || '',
+          has_pressure: !!row.has_pressure,
           active: row.active !== false,
           // null = ไม่มีข้อมูลตรวจนับ → ฝั่งเซิร์ฟเวอร์จะปล่อย "ยังไม่เคยตรวจนับ" ไว้
           current_qty: String(row.current_qty ?? '').trim() === '' ? null : String(row.current_qty).trim(),
         })),
       });
       const created = res.data?.created ?? this.copyStaging.length;
-      const stockCopied = Number(res.data?.stock_copied ?? 0);
       const inactiveCopied = Number(res.data?.inactive_copied ?? 0);
       this.clearCopyStaging();
       window.toast.success(
-        `คัดลอกอุปกรณ์แล้ว ${created} รายการ • พร้อมยอดคงเหลือบนรถ ${stockCopied} รายการ`
+        `คัดลอกรายชื่ออุปกรณ์แล้ว ${created} รายการ (ไม่รวมของบนรถ)`
         + (inactiveCopied > 0 ? ` • พักใช้งาน ${inactiveCopied} รายการ` : '')
       );
       await this.loadItems(this.currentVehicleId);
@@ -743,9 +1503,9 @@ class VehiclesPage {
       <div class="md:col-span-2">
         <label for="vehItemSource">รายการอุปกรณ์เริ่มต้นของรถคันใหม่</label>
         <select id="vehItemSource">
-          <option value="default" selected>ชุดอุปกรณ์มาตรฐาน (แนะนำ)</option>
-          <option value="copy">คัดลอกจาก รถคันอื่นที่มีอยู่แล้ว</option>
-          <option value="none">ไม่สร้างรายการเริ่มต้น</option>
+          <option value="none" selected>รถว่าง — เพิ่มอุปกรณ์เองทีหลัง</option>
+          <option value="default">ใช้รายชื่อชุดอุปกรณ์มาตรฐาน</option>
+          <option value="copy">คัดลอกรายชื่อจากรถคันอื่น</option>
         </select>
         <div id="vehCopyWrap" class="hidden">
           <label for="vehCopySource" class="!mt-2">เลือกรถต้นทาง</label>
@@ -783,6 +1543,16 @@ class VehiclesPage {
             value="${v.odometer_initial === null || v.odometer_initial === undefined ? '' : UI.escape(String(v.odometer_initial))}"
             placeholder="เช่น 45000">
           <p class="mt-1 hidden text-xs font-semibold text-red-600" id="vehOdometerError" role="alert"></p>
+        </div>
+        <div class="md:col-span-2">
+          <label for="vehColor">สีประจำรถ</label>
+          <div class="color-row">
+            <input id="vehColor" type="color" value="${UI.escape(/^#[0-9A-Fa-f]{6}$/.test(v.vehicle_color || '') ? v.vehicle_color : window.VEHICLE_DEFAULT_COLOR)}" aria-describedby="vehColorPreview">
+            <input id="vehColorHex" type="text" maxlength="7" value="${UI.escape(v.vehicle_color || '')}" placeholder="${window.VEHICLE_DEFAULT_COLOR} (เริ่มต้น)" aria-label="รหัสสี #RRGGBB" autocomplete="off" spellcheck="false">
+            <button type="button" id="vehColorReset" class="small-btn gray">ใช้สีเริ่มต้น</button>
+          </div>
+          <p class="mt-1 text-xs text-slate-500">ตัวอย่าง: <span id="vehColorPreview"></span> — ใช้แสดงรถคันนี้ในหน้าแรก ตรวจเช็ค และเติมอุปกรณ์</p>
+          <p class="mt-1 hidden text-xs font-semibold text-red-600" id="vehColorHexError" role="alert"></p>
         </div>
         <div class="md:col-span-2">
           <label for="vehNotes">หมายเหตุเพิ่มเติม</label>
@@ -838,6 +1608,7 @@ class VehiclesPage {
     });
     form.querySelector('#vehPlate')?.addEventListener('input', () => this.setVehicleFieldError('vehPlate', ''));
     form.querySelector('#vehOdometer')?.addEventListener('input', () => this.setVehicleFieldError('vehOdometer', ''));
+    this.bindColorFields(form);
 
     if (!isEdit) {
       const source = form.querySelector('#vehItemSource');
@@ -847,19 +1618,18 @@ class VehiclesPage {
 
       const updateSeedNote = async () => {
         if (!note) return;
-        const mode2 = source ? source.value : 'default';
+        const mode2 = source ? source.value : 'none';
         if (mode2 === 'none') {
-          note.textContent = 'สร้างรถโดยไม่มีรายการอุปกรณ์ — ต้องเพิ่มเองทีหลัง';
+          note.textContent = 'รถคันใหม่ยังไม่มีอุปกรณ์ — เพิ่มรายการที่หน้ารถ แล้วจัดของขึ้นรถที่ “เติมของ”';
           return;
         }
         if (mode2 !== 'copy') {
-          note.textContent = 'ใช้ชุดอุปกรณ์มาตรฐานกลาง จึงยังไม่มี "ยอดคงเหลือบนรถ" ของคันใด — ต้องตรวจนับจริงบนคันใหม่'
-            + ' (เลือก "คัดลอกจาก รถคันอื่นที่มีอยู่แล้ว" ถ้าต้องการยกยอดมาด้วย)';
+          note.textContent = 'คัดลอกเฉพาะรายชื่ออุปกรณ์จากชุดมาตรฐาน — ไม่มีของบนรถ ต้องจัดของขึ้นรถที่ “เติมของ”';
           return;
         }
         const id = copySel ? copySel.value : '';
         if (!id) {
-          note.textContent = 'เลือกรถต้นทางเพื่อพรีวิวจำนวนรายการและยอดคงเหลือที่จะคัดลอก';
+          note.textContent = 'เลือกรถต้นทางเพื่อดูจำนวนรายการที่จะคัดลอก';
           return;
         }
         note.textContent = 'กำลังโหลดข้อมูลรถต้นทาง…';
@@ -867,12 +1637,10 @@ class VehiclesPage {
           const isAdmin = window.auth && typeof window.auth.isAdmin === 'function' && window.auth.isAdmin();
           const res = isAdmin ? await window.adminApi.getVehicle(id) : await window.vehicleApi.get(id);
           const items = res.data?.items || [];
-          const withStock = items.filter(i => String(i.stock_updated_at || '').trim() !== '').length;
           const resting = items.filter(i => i.active === false || i.active === 0).length;
           note.textContent = `จะคัดลอก ${items.length} รายการ`
-            + ` • มียอดคงเหลือบนรถติดมา ${withStock} รายการ`
             + (resting > 0 ? ` • สถานะ พักใช้งาน ${resting} รายการ` : '')
-            + ' — ตัวเลขที่ยกมาเป็นการคัดลอก ไม่ใช่การนับของจริงบนคันใหม่ ควรตรวจนับอีกครั้ง';
+            + ' — คัดลอกเฉพาะรายชื่อ ไม่คัดลอกของบนรถ';
         } catch (error) {
           note.textContent = 'โหลดข้อมูลรถต้นทางไม่สำเร็จ — ระบบจะคัดลอกตามข้อมูลจริงเมื่อเซิร์ฟเวอร์ทำรายการสำเร็จ';
         }
@@ -900,6 +1668,38 @@ class VehiclesPage {
 
   getVehicleFormEl() {
     return this._vehicleModal?.element.querySelector('#vehicleForm') || null;
+  }
+
+  // ช่องเลือกสี (color picker) + ช่องรหัส #RRGGBB + ตัวอย่างป้ายทะเบียนก่อนบันทึก
+  bindColorFields(form) {
+    const picker = form.querySelector('#vehColor');
+    const hex = form.querySelector('#vehColorHex');
+    const preview = form.querySelector('#vehColorPreview');
+    const plateInput = form.querySelector('#vehPlate');
+    const paint = () => {
+      const value = (hex.value || '').trim().toUpperCase();
+      const color = /^#[0-9A-F]{6}$/.test(value) ? value : window.VEHICLE_DEFAULT_COLOR;
+      const label = UI.escape(plateInput?.value?.trim() || 'ทะเบียนรถ');
+      preview.innerHTML = `<span class="vehicle-chip" style="background:${color};color:${window.vehicleTextColor(color)}">🚑 ${label}</span>`;
+    };
+    picker?.addEventListener('input', () => {
+      hex.value = picker.value.toUpperCase();
+      this.setVehicleFieldError('vehColorHex', '');
+      paint();
+    });
+    hex?.addEventListener('input', () => {
+      const value = hex.value.trim();
+      if (/^#[0-9A-Fa-f]{6}$/.test(value)) picker.value = value.toLowerCase();
+      this.setVehicleFieldError('vehColorHex', '');
+      paint();
+    });
+    form.querySelector('#vehColorReset')?.addEventListener('click', () => {
+      hex.value = '';
+      picker.value = window.VEHICLE_DEFAULT_COLOR.toLowerCase();
+      paint();
+    });
+    plateInput?.addEventListener('input', paint);
+    paint();
   }
 
   setVehicleFieldError(inputId, message) {
@@ -944,7 +1744,7 @@ class VehiclesPage {
       this.setVehicleFieldError('vehOdometer', '');
     }
 
-    const itemSource = mode === 'edit' ? '' : (form.querySelector('#vehItemSource')?.value || 'default');
+    const itemSource = mode === 'edit' ? '' : (form.querySelector('#vehItemSource')?.value || 'none');
     const copySource = mode === 'edit' ? '' : (form.querySelector('#vehCopySource')?.value || '');
     if (itemSource === 'copy' && copySource === '') {
       window.toast.error('กรุณาเลือกรถต้นทางที่จะคัดลอกรายการอุปกรณ์');
@@ -964,7 +1764,12 @@ class VehiclesPage {
       brand_model: value('vehBrand'),
       status: form.querySelector('#vehStatus')?.value || 'available',
       notes: value('vehNotes'),
+      vehicle_color: (value('vehColorHex') || '').toUpperCase(),
     };
+    if (payload.vehicle_color && !/^#[0-9A-F]{6}$/.test(payload.vehicle_color)) {
+      this.setVehicleFieldError('vehColorHex', 'สีต้องอยู่ในรูปแบบ #RRGGBB เช่น #2563EB');
+      return null;
+    }
 
     // โหมด edit: ส่งเฉพาะฟิลด์ที่เปลี่ยนจริง (เซิร์ฟเวอร์ตรวจว่า "ไม่มีข้อมูลที่ต้องแก้ไข")
     if (mode === 'edit') {
@@ -975,6 +1780,7 @@ class VehiclesPage {
       if (payload.brand_model !== (v.brand_model || '')) patch.brand_model = payload.brand_model;
       if (payload.status !== (v.status || '')) patch.status = payload.status;
       if (payload.notes !== (v.notes || '')) patch.notes = payload.notes;
+      if (payload.vehicle_color !== String(v.vehicle_color || '').toUpperCase()) patch.vehicle_color = payload.vehicle_color;
       if (odometerRaw !== '' && Number(odometerRaw) !== Number(v.odometer_initial ?? -1)) {
         patch.odometer_initial = Number(odometerRaw);
       }
@@ -1014,14 +1820,13 @@ class VehiclesPage {
       const res = await window.vehicleApi.create(payload);
       const created = res.data || {};
       const items = Number(created.items_created || 0);
-      const stockCopied = Number(created.stock_copied || 0);
       const inactive = Number(created.items_inactive || 0);
       const sourceLabel = created.item_source_label || '';
       window.toast.success(
         `เพิ่มรถใหม่แล้ว: ${created.name || created.plate || payload.plate}`
         + (items > 0
           ? ` — สร้างรายการอุปกรณ์ ${items} รายการ (${sourceLabel})`
-            + ` • คัดลอกยอดคงเหลือบนรถ ${stockCopied} รายการ`
+
             + (inactive > 0 ? ` • พักใช้งาน ${inactive}` : '')
           : ' — ยังไม่มีรายการอุปกรณ์เริ่มต้น')
       );

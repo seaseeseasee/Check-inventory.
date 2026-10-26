@@ -7,6 +7,7 @@ use App\Config\Database;
 use App\Exceptions\ApiException;
 use App\Models\Item;
 use App\Models\Metadata;
+use App\Models\StockMovement;
 use App\Models\Vehicle;
 
 /**
@@ -46,14 +47,130 @@ class VehicleService
     private Vehicle $vehicleModel;
     private Item $itemModel;
     private Metadata $metadata;
-    private StockService $stockService;
+
+    /** สีเริ่มต้นเมื่อรถยังไม่กำหนดสี (ฝั่งหน้าจอใช้ค่าเดียวกันใน core/vehicle.js) */
+    public const DEFAULT_COLOR = '#475569';
 
     public function __construct()
     {
         $this->vehicleModel = new Vehicle();
         $this->itemModel = new Item();
         $this->metadata = new Metadata();
-        $this->stockService = new StockService();
+    }
+
+    /** สีรถ: '#RRGGBB' เท่านั้น ('' / null = ล้างกลับเป็นสีเริ่มต้น) */
+    private function color(mixed $raw): ?string
+    {
+        if ($raw === null || trim((string)$raw) === '') {
+            return null;
+        }
+        $value = strtoupper(trim((string)$raw));
+        if (!preg_match('/^#[0-9A-F]{6}$/', $value)) {
+            throw new ApiException('สีรถต้องอยู่ในรูปแบบ #RRGGBB เช่น #2563EB', 422,
+                ['errors' => ['vehicle_color' => ['สีรถต้องอยู่ในรูปแบบ #RRGGBB']]]);
+        }
+        return $value;
+    }
+
+    /** ประเภทอุปกรณ์ box / individual / non_expiring (ชื่อเดิมก่อน migration 012 แปลงให้อัตโนมัติ) */
+    private function itemTypeInput(mixed $raw, bool $isBatteryFallback): string
+    {
+        if ($raw === null || $raw === '') {
+            return $isBatteryFallback ? VehicleStockService::TYPE_NON_EXPIRING : VehicleStockService::TYPE_INDIVIDUAL;
+        }
+        $type = VehicleStockService::LEGACY_TYPES[(string)$raw] ?? (string)$raw;
+        if (!in_array($type, VehicleStockService::ITEM_TYPES, true)) {
+            throw new ApiException('ประเภทอุปกรณ์ต้องเป็น กล่อง / ชิ้น / ไม่มีวันหมดอายุ', 422,
+                ['errors' => ['item_type' => ['ประเภทอุปกรณ์ไม่ถูกต้อง']]]);
+        }
+        return $type;
+    }
+
+    /** ยอดบนรถเปลี่ยนได้ผ่านการตรวจเช็ค/การเติมของเท่านั้น (ต้องมี Lot + ledger รองรับ) */
+    private function rejectDirectStock(array $input): void
+    {
+        // ช่องของคลังกลางเดิม (ยกเลิกแล้ว) — ส่วนยอดบนรถ (onboard_qty) ตั้งได้ผ่าน applyOnboardQty ซึ่งลง ledger
+        foreach (['current_stock', 'min_stock'] as $key) {
+            if (array_key_exists($key, $input) && trim((string)$input[$key]) !== '') {
+                throw new ApiException('คลังสต็อกกลางถูกยกเลิกแล้ว', 422, ['errors' => [$key => ['คลังกลางถูกยกเลิกแล้ว']]]);
+            }
+        }
+    }
+
+    /**
+     * ตั้ง "ยอดบนรถตอนนี้" จากหน้าตั้งค่ารถ (admin) — ไม่เขียน current_qty ตรง ๆ แต่ผ่านล็อต + ledger:
+     *  เพิ่ม → ล็อตใหม่ (วันหมดอายุถ้ามี; ไม่ใส่ = "ไม่ทราบวันหมดอายุ" ให้ทบทวน) | ลด → ตัดแบบ FEFO
+     * ทุกครั้งเป็นรายการ ADJUST ที่ย้อนดูได้ (ต้องอยู่ใน transaction ของผู้เรียก — แถวอุปกรณ์ถูกล็อกแล้ว)
+     * @return ?array{before: ?float, after: float} null = ไม่ได้ส่งยอดมา
+     */
+    private function applyOnboardQty(array $item, array $input, ?array $actor): ?array
+    {
+        if (!array_key_exists('onboard_qty', $input) || trim((string)$input['onboard_qty']) === '') {
+            return null;
+        }
+        if (VehicleStockService::usesUnits($item)) {
+            throw new ApiException('อุปกรณ์ไม่มีวันหมดอายุนับเป็นรายเครื่อง — เพิ่มหรือปลดเครื่องที่ปุ่ม "เติมของ"', 422,
+                ['errors' => ['onboard_qty' => ['ใช้ปุ่มเติมของ']]]);
+        }
+        $raw = $input['onboard_qty'];
+        if (!is_numeric($raw) || (float)$raw < 0 || (float)$raw > InspectionService::MAX_QTY) {
+            throw new ApiException('ยอดบนรถต้องเป็นตัวเลขไม่ติดลบ', 422, ['errors' => ['onboard_qty' => ['ต้องเป็นตัวเลขไม่ติดลบ']]]);
+        }
+        $new = round((float)$raw, 2);
+        $stock = new VehicleStockService();
+        $before = Item::countedQty($item);
+        $current = $before ?? 0.0;
+        $delta = round($new - $current, 2);
+        $ctx = [
+            'by_user_id' => $actor['id'] ?? null,
+            'by_name' => (string)($actor['full_name'] ?? ''),
+            'at' => $this->now(),
+            'reason' => 'ตั้งยอดจากหน้าตั้งค่ารถ',
+        ];
+        if ($delta > 0) {
+            $isPiece = VehicleStockService::itemType($item) === VehicleStockService::TYPE_INDIVIDUAL;
+            if ($isPiece && floor($delta) != $delta) {
+                throw new ApiException('ของแบบชิ้นต้องเป็นจำนวนเต็ม', 422, ['errors' => ['onboard_qty' => ['ต้องเป็นจำนวนเต็ม']]]);
+            }
+            // ของแบบชิ้น: วันหมดอายุรายชิ้น (onboard_expiries) จำนวนต้องเท่ากับที่เพิ่ม; หรือวันเดียวใช้กับทุกชิ้น
+            $list = $input['onboard_expiries'] ?? null;
+            if ($isPiece && is_array($list) && $list) {
+                $expiries = array_map(fn($e) => trim((string)$e), array_values($list));
+                if (count($expiries) !== (int)$delta) {
+                    throw new ApiException(sprintf('เพิ่ม %d ชิ้น แต่ระบุวันหมดอายุ %d ชิ้น — จำนวนต้องตรงกัน', (int)$delta, count($expiries)), 422,
+                        ['errors' => ['onboard_expiries' => ['จำนวนวันหมดอายุไม่ตรงกับจำนวนชิ้น']]]);
+                }
+            } else {
+                $expiries = array_fill(0, $isPiece ? (int)$delta : 1, trim((string)($input['onboard_expiry'] ?? '')));
+            }
+            foreach ($expiries as $expiry) {
+                if ($expiry === '') {
+                    throw new ApiException('กรุณาระบุวันหมดอายุของที่เพิ่ม', 422, ['errors' => ['onboard_expiry' => ['ต้องระบุวันหมดอายุ']]]);
+                }
+                if (!VehicleStockService::validDate($expiry)) {
+                    throw new ApiException('วันหมดอายุไม่ถูกต้อง', 422, ['errors' => ['onboard_expiry' => ['วันหมดอายุไม่ถูกต้อง']]]);
+                }
+                if ($expiry < VehicleStockService::today()) {
+                    throw new ApiException('วันหมดอายุผ่านไปแล้ว — ไม่อนุญาตให้เพิ่มของหมดอายุ', 422, ['errors' => ['onboard_expiry' => ['หมดอายุแล้ว']]]);
+                }
+            }
+            $meta = ['received_date' => VehicleStockService::today()];
+            if ($isPiece) {
+                $stock->addPieces($item, $expiries, 'ADJUST', StockMovement::TYPE_ADJUST, $ctx, $meta);
+            } else {
+                $stock->addLot($item, $delta, $expiries[0], 'ADJUST', StockMovement::TYPE_ADJUST, $ctx, $meta);
+            }
+        } elseif ($delta < 0) {
+            $stock->consume($item, -$delta, StockMovement::TYPE_ADJUST, $ctx);
+        } else {
+            $stock->syncItemTotal($item, $ctx['at']);   // ยอดเท่าเดิม: ประทับว่าตรวจนับแล้ว
+        }
+        $issues = $stock->reconcile((string)$item['car_id']);
+        if ($issues) {
+            error_log('reconcile failed after onboard set ' . $item['id'] . ': ' . json_encode($issues, JSON_UNESCAPED_UNICODE));
+            throw new \RuntimeException('ยอดคงเหลือไม่สอดคล้องกันหลังคำนวณ ระบบยกเลิกการบันทึกเพื่อป้องกันข้อมูลผิด');
+        }
+        return ['before' => $before, 'after' => $new];
     }
 
     /**
@@ -171,9 +288,9 @@ class VehicleService
      * เพิ่มรถใหม่ + สร้างชุดอุปกรณ์มาตรฐานให้ใน transaction เดียว
      *
      * แหล่งรายการอุปกรณ์ (item_source):
-     *   'default' (ค่าเริ่มต้น) → แม่แบบ refer_metadata['default_items'] → ถ้าไม่มีใช้รถที่มีรายการอุปกรณ์มากที่สุดในระบบ
+     *   'none' (ค่าเริ่มต้น)    → รถว่าง ไม่สร้างรายการ — เพิ่มอุปกรณ์เองแล้วจัดของขึ้นรถที่หน้าเติมของ
+     *   'default'               → แม่แบบ refer_metadata['default_items'] → ถ้าไม่มีใช้รถที่มีรายการอุปกรณ์มากที่สุดในระบบ
      *   'copy'                  → จากรถที่ระบุใน copy_source_vehicle_id
-     *   'none'                  → ไม่สร้างรายการ (ผู้ดูแลตั้งใจกรอกเองทีหลัง)
      */
     public function createVehicle(array $input, ?array $actor): array
     {
@@ -183,6 +300,7 @@ class VehicleService
         $notes = $this->text($input, 'notes', 500, 'หมายเหตุ');
         $status = $this->status($input['status'] ?? '');
         $odometer = $this->odometer($input['odometer_initial'] ?? null);
+        $color = $this->color($input['vehicle_color'] ?? null);
 
         if ($plate === '') {
             throw new ApiException('กรุณากรอกทะเบียนรถ', 422, ['errors' => ['plate' => ['กรุณากรอกทะเบียนรถ']]]);
@@ -211,6 +329,7 @@ class VehicleService
             $this->vehicleModel->create([
                 'id' => $id,
                 'name' => $name,
+                'vehicle_color' => $color,
                 'plate' => $plate,
                 'brand_model' => $brand !== '' ? $brand : null,
                 'status' => $status,
@@ -253,7 +372,7 @@ class VehicleService
      */
     private function resolveSeedItems(array $input): array
     {
-        $source = strtolower(trim((string)($input['item_source'] ?? 'default')));
+        $source = strtolower(trim((string)($input['item_source'] ?? 'none')));
         if (!in_array($source, ['default', 'copy', 'none'], true)) {
             $source = 'default';
         }
@@ -371,6 +490,8 @@ class VehicleService
                 'standard' => $standard,
                 'expiry_text' => trim((string)($row['expiry_text'] ?? '')),
                 'is_battery' => !empty($row['is_battery']),
+                'item_type' => $row['item_type'] ?? null,
+                'has_pressure' => !empty($row['has_pressure']),
                 // แม่แบบใน refer_metadata ไม่มีคอลัมน์ active → ถือว่าใช้อยู่
                 'active' => array_key_exists('active', $row) ? !empty($row['active']) : true,
                 'current_qty' => self::copiedQty($row),
@@ -423,25 +544,27 @@ class VehicleService
         $params = [];
         foreach ($rows as $row) {
             $target = self::deriveTarget($row['standard']);
-            $qty = self::parseQty($row['current_qty'] ?? null);
             $active = array_key_exists('active', $row) ? !empty($row['active']) : true;
-            $values[] = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+            $type = VehicleStockService::itemType(['item_type' => $row['item_type'] ?? '', 'is_battery' => $row['is_battery'] ?? 0]);
+            $values[] = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)';
             $params[] = 'itm-' . substr(generate_id(), 0, 12);
             $params[] = $carId;
             $params[] = $row['name'];
             $params[] = $row['standard'];
-            $params[] = $row['expiry_text'] ?? '';
-            $params[] = !empty($row['is_battery']) ? 1 : 0;
+            $params[] = $type;
+            $params[] = ($type === VehicleStockService::TYPE_NON_EXPIRING && !empty($row['is_battery'])) ? 1 : 0;
+            $params[] = ($type === VehicleStockService::TYPE_NON_EXPIRING && !empty($row['has_pressure'])) ? 1 : 0;
             $params[] = $target['qty'];
             $params[] = $target['unit'];
             $params[] = $active ? 1 : 0;
-            $params[] = $qty ?? 0;
-            // ไม่แต่ง stamp ให้แถวที่ไม่มีข้อมูลตรวจนับ
-            $params[] = $qty === null ? null : $stamp;
+            $params[] = '';
+            // ไม่คัดลอกยอดคงเหลือข้ามรถ: ของจริงไม่ได้ย้ายมาด้วย — รถใหม่ "ยังไม่เคยตรวจนับ"
+            // จนกว่าจะเติมของ (มี Lot + วันหมดอายุ) หรือตรวจนับในเวรแรก
         }
+        unset($stamp);
 
         $stmt = $db->prepare(
-            "INSERT INTO {$table} (id, car_id, name, standard, expiry_text, is_battery, target_qty, unit, active, current_qty, stock_updated_at)
+            "INSERT INTO {$table} (id, car_id, name, standard, item_type, is_battery, has_pressure, target_qty, unit, active, expiry_text, current_qty, stock_updated_at)
              VALUES " . implode(', ', $values)
         );
         $stmt->execute($params);
@@ -526,6 +649,8 @@ class VehicleService
                 'standard' => $standard,
                 'expiry_text' => $expiry,
                 'is_battery' => !empty($item['is_battery']),
+                'item_type' => $item['item_type'] ?? null,
+                'has_pressure' => !empty($item['has_pressure']),
                 'active' => $active,
                 'current_qty' => $qty,
             ];
@@ -606,6 +731,10 @@ class VehicleService
             if (array_key_exists('notes', $input)) {
                 $notes = $this->text($input, 'notes', 500, 'หมายเหตุ');
                 $data['notes'] = $notes !== '' ? $notes : null;
+            }
+
+            if (array_key_exists('vehicle_color', $input)) {
+                $data['vehicle_color'] = $this->color($input['vehicle_color']);
             }
 
             if (empty($data)) {
@@ -725,10 +854,48 @@ class VehicleService
     // ==================== อุปกรณ์: เพิ่ม / แก้ / ลบ ====================
 
     /**
-     * เพิ่มอุปกรณ์ประจำรถ
-     *  input: name*, standard*, expiry_text, is_battery,
-     *         onboard_qty (ยอดบนรถวันนี้ — จะเขียน stamp ว่าตรวจนับแล้ว),
-     *         current_stock/min_stock (คลังกลางตามชื่อ)
+     * เกณฑ์เตือนรายอุปกรณ์ (หน่วยงานเป็นผู้กำหนด — ค่าว่าง = ไม่เตือน/ใช้ค่าระบบ) — คืนเฉพาะฟิลด์ที่ส่งมา
+     * $item = แถวเดิม (ใช้หาจำนวนขีดแบตเต็มเมื่อไม่ได้ส่ง battery_max_bars มาด้วย)
+     */
+    private function thresholdData(array $input, array $item): array
+    {
+        $int = function (string $key, int $min, int $max, string $label, bool $nullable = true) use ($input): ?int {
+            $raw = trim((string)($input[$key] ?? ''));
+            if ($raw === '') {
+                if (!$nullable) {
+                    throw new ApiException($label . ' ห้ามว่าง', 422, ['errors' => [$key => [$label . ' ห้ามว่าง']]]);
+                }
+                return null;
+            }
+            if (!preg_match('/^\d+$/', $raw) || (int)$raw < $min || (int)$raw > $max) {
+                throw new ApiException(sprintf('%s ต้องเป็นจำนวนเต็ม %d-%d', $label, $min, $max), 422, ['errors' => [$key => [$label . ' ไม่ถูกต้อง']]]);
+            }
+            return (int)$raw;
+        };
+        $data = [];
+        if (array_key_exists('battery_max_bars', $input)) {
+            $data['battery_max_bars'] = $int('battery_max_bars', 1, 10, 'จำนวนขีดแบตเมื่อเต็ม', false);
+        }
+        if (array_key_exists('battery_low_bars', $input)) {
+            $max = $data['battery_max_bars'] ?? VehicleStockService::batteryMax($item);
+            $data['battery_low_bars'] = $int('battery_low_bars', 0, $max, 'เกณฑ์แบตต่ำ');
+        }
+        if (array_key_exists('o2_low_psi', $input)) {
+            $data['o2_low_psi'] = $int('o2_low_psi', 0, VehicleStockService::MAX_PSI, 'เกณฑ์แรงดัน O2 ต่ำ (PSI)');
+        }
+        if (array_key_exists('expiry_warn_days', $input)) {
+            $data['expiry_warn_days'] = $int('expiry_warn_days', 0, 3650, 'จำนวนวันเตือนใกล้หมดอายุ');
+        }
+        return $data;
+    }
+
+    /**
+     * เพิ่มอุปกรณ์ประจำรถ — กรอกรายละเอียดตามประเภทได้ในครั้งเดียว (ไม่ส่ง = เพิ่มแค่รายการ ยังไม่มีของบนรถ)
+     *  input: name*, standard*, item_type, is_battery, has_pressure,
+     *         เกณฑ์เตือน: expiry_warn_days | battery_max_bars, battery_low_bars, o2_low_psi
+     *         กล่อง/รายชิ้น: onboard_qty + onboard_expiry (กล่อง) / onboard_expiries[] (รายชิ้น 1 วันต่อ 1 ชิ้น)
+     *         ไม่มีวันหมดอายุ: units[] = [{label, status, battery_level, pressure_psi, note}]
+     *  ทั้งหมดอยู่ใน transaction เดียว — ข้อมูลส่วนไหนผิด จะไม่สร้างอุปกรณ์เลย
      */
     public function addItem(string $carId, array $input, ?array $actor): array
     {
@@ -746,10 +913,8 @@ class VehicleService
             throw new ApiException('กรุณากรอกจำนวนมาตรฐาน เช่น 10 หรือ 1 ชุด', 422,
                 ['errors' => ['standard' => ['กรุณากรอกจำนวนมาตรฐาน']]]);
         }
-        $expiry = $this->text($input, 'expiry_text', 100, 'วันหมดอายุ');
-        $isBattery = !empty($input['is_battery']);
-        $onboard = $this->qty($input['onboard_qty'] ?? null, 'ยอดคงเหลือบนรถ', 'onboard_qty');
-        [$warehouseCurrent, $warehouseMin] = $this->warehouseInputs($input);
+        $this->rejectDirectStock($input);
+        $itemType = $this->itemTypeInput($input['item_type'] ?? null, !empty($input['is_battery']));
 
         // ชื่ออุปกรณ์ซ้ำในรถคันเดียวกัน (แถวที่ยังใช้งาน) → ปฏิเสธก่อนเขียน
         $dupStmt = Database::getConnection()->prepare(
@@ -760,40 +925,57 @@ class VehicleService
             throw new ApiException('อุปกรณ์ชื่อ "' . $name . '" มีอยู่ในรถคันนี้แล้ว', 409);
         }
 
+        $isUnitType = $itemType === VehicleStockService::TYPE_NON_EXPIRING;
+        $flags = [
+            'is_battery' => ($isUnitType && !empty($input['is_battery'])) ? 1 : 0,
+            'has_pressure' => ($isUnitType && !empty($input['has_pressure'])) ? 1 : 0,
+        ];
+        // เกณฑ์เตือนรับเฉพาะที่ตรงประเภท (เช่น กล่องไม่มีแบต) — ค่าที่ไม่เกี่ยวถูกตัดทิ้ง
+        $allowed = $isUnitType
+            ? array_merge($flags['is_battery'] ? ['battery_max_bars', 'battery_low_bars'] : [], $flags['has_pressure'] ? ['o2_low_psi'] : [])
+            : ['expiry_warn_days'];
+        $thresholds = $this->thresholdData(array_intersect_key($input, array_flip($allowed)), $flags);
+        $units = $isUnitType ? array_values(array_filter((array)($input['units'] ?? []), 'is_array')) : [];
+        if (count($units) > 50) {
+            throw new ApiException('เพิ่มเครื่อง/ถังได้ครั้งละไม่เกิน 50', 422);
+        }
+
         $itemId = 'itm-' . substr(generate_id(), 0, 12);
         $target = self::deriveTarget($standard);
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
-            $this->itemModel->create([
+            $this->itemModel->create($thresholds + [
                 'id' => $itemId,
                 'car_id' => $carId,
                 'name' => $name,
                 'standard' => $standard,
                 'target_qty' => $target['qty'],
                 'unit' => $target['unit'],
-                'expiry_text' => $expiry,
-                'is_battery' => $isBattery,
+                'expiry_text' => '',
+                'item_type' => $itemType,
+                'is_battery' => $flags['is_battery'],
+                'has_pressure' => $flags['has_pressure'],
                 'active' => true,
             ]);
-
-            if ($onboard !== null) {
-                $this->itemModel->updateStock($itemId, $onboard, $this->now());
+            // ไม่ได้กรอกของบนรถ = "ยังไม่เคยตรวจนับ" — ยอดเกิดจากการเติมของ (Lot + วันหมดอายุ) หรือการตรวจนับเวรแรก
+            if ($isUnitType && $units) {
+                $item = $this->itemModel->lockById($itemId);
+                $ctx = ['by_user_id' => $actor['id'] ?? null, 'by_name' => (string)($actor['full_name'] ?? ''), 'at' => $this->now()];
+                $stock = new VehicleStockService();
+                foreach ($units as $u) {
+                    $stock->addUnit($item, VehicleStockService::parseUnitInput($u, $item, (string)($u['label'] ?? '')), $ctx);
+                }
+            } elseif (!$isUnitType) {
+                $this->applyOnboardQty($this->itemModel->lockById($itemId), $input, $actor);
             }
-
-            // คลังกลางผูกกับ "ชื่อ" อุปกรณ์ — ตัด transaction เดียวกับอุปกรณ์
-            // (StockService::setStockForItemName รู้จัก joining outer transaction จึงไม่ commit ซ้ำ)
-            $warehouse = $this->applyWarehouse($name, $warehouseCurrent, $warehouseMin, $actor, $vehicle);
-
             $db->commit();
         } catch (\Throwable $e) {
             $db->rollBack();
             throw $e;
         }
 
-        $item = $this->itemModel->find($itemId) ?? [];
-        $item['warehouse'] = $warehouse;
-        return $item;
+        return $this->itemModel->find($itemId) ?? [];
     }
 
     /**
@@ -846,49 +1028,56 @@ class VehicleService
                 $data['unit'] = $target['unit'];
             }
 
-            if (array_key_exists('expiry_text', $input)) {
-                $data['expiry_text'] = $this->text($input, 'expiry_text', 100, 'วันหมดอายุ');
-            }
+            // วันหมดอายุมาจาก Lot แล้ว (expiry_text เป็นค่าที่ระบบเขียนเอง) จึงไม่รับจากหน้าตั้งค่า
+            $this->rejectDirectStock($input);
 
-            if (array_key_exists('is_battery', $input)) {
-                $data['is_battery'] = !empty($input['is_battery']);
+            if (array_key_exists('item_type', $input)) {
+                $newType = $this->itemTypeInput($input['item_type'], false);
+                $oldType = VehicleStockService::itemType($existing);
+                if ($newType !== $oldType) {
+                    // กล่อง (ล็อตมีจำนวน) / รายชิ้น (1 แถว = 1 ชิ้น) / รายเครื่อง เก็บข้อมูลคนละแบบ — เปลี่ยนได้เฉพาะตอนยังไม่มีของบนรถ
+                    $stmt = $db->prepare(
+                        "SELECT (SELECT COUNT(*) FROM refer_item_lots WHERE item_id = ? AND qty_remaining > 0)
+                              + (SELECT COUNT(*) FROM refer_item_units WHERE item_id = ? AND active = 1)"
+                    );
+                    $stmt->execute([$itemId, $itemId]);
+                    if ((int)$stmt->fetchColumn() > 0) {
+                        throw new ApiException('เปลี่ยนประเภทไม่ได้ขณะที่ยังมีของ/เครื่องบนรถ — นำของออกก่อน หรือสร้างรายการใหม่', 409);
+                    }
+                }
+                $data['item_type'] = $newType;
+            }
+            // ธงของประเภทไม่มีวันหมดอายุ: มีแบตเตอรี่ / วัดแรงดัน (PSI)
+            $finalType = $data['item_type'] ?? VehicleStockService::itemType($existing);
+            foreach (['is_battery', 'has_pressure'] as $flag) {
+                if (array_key_exists($flag, $input)) {
+                    $data[$flag] = (!empty($input[$flag]) && $finalType === VehicleStockService::TYPE_NON_EXPIRING) ? 1 : 0;
+                } elseif (isset($data['item_type']) && $finalType !== VehicleStockService::TYPE_NON_EXPIRING) {
+                    $data[$flag] = 0;
+                }
             }
 
             if (array_key_exists('active', $input)) {
-                $data['active'] = !empty($input['active']);
+                $data['active'] = !empty($input['active']) ? 1 : 0;   // PDO ส่ง false เป็น '' ซึ่ง MariaDB strict ปฏิเสธ
             }
 
-            $onboard = array_key_exists('onboard_qty', $input)
-                ? $this->qty($input['onboard_qty'], 'ยอดคงเหลือบนรถ', 'onboard_qty')
-                : null;
+            $data += $this->thresholdData($input, $existing);
 
-            [$warehouseCurrent, $warehouseMin] = $this->warehouseInputs($input);
-
-            if (empty($data) && $onboard === null && $warehouseCurrent === null && $warehouseMin === null) {
+            $wantsOnboard = array_key_exists('onboard_qty', $input) && trim((string)$input['onboard_qty']) !== '';
+            if (empty($data) && !$wantsOnboard) {
                 throw new ApiException('ไม่มีข้อมูลที่ต้องแก้ไข', 422);
             }
 
-            if (!empty($data)) {
+            if ($data) {
                 $this->itemModel->update($itemId, $data);
             }
-
-            // เขียนยอดบนรถ = ถือว่า "ตรวจนับแล้ว" ต้องมี stamp เวลา มิฉะนั้นหน้าจออื่น
-            // จะยังแสดง "ยังไม่เคยตรวจนับ" ตามข้อตกลงข้อ 1
-            if ($onboard !== null) {
-                $this->itemModel->updateStock($itemId, $onboard, $this->now());
-            }
-
-            $stockName = $renamed ? (string)$data['name'] : $oldName;
-            $warehouse = ($warehouseCurrent !== null || $warehouseMin !== null)
-                ? $this->applyWarehouse($stockName, $warehouseCurrent, $warehouseMin, $actor,
-                    $this->vehicleModel->find((string)$existing['car_id']) ?? [])
-                : null;
-
+            // ยอดบนรถคำนวณหลังอัปเดตประเภท/มาตรฐาน (อ่านแถวที่ล็อกไว้ใหม่)
+            $onboard = $wantsOnboard ? $this->applyOnboardQty($this->itemModel->lockById($itemId), $input, $actor) : null;
             $db->commit();
 
             $result = $this->itemModel->find($itemId) ?? [];
-            $result['warehouse'] = $warehouse;
             $result['updated_fields'] = array_keys($data);
+            $result['onboard'] = $onboard;
             return $result;
         } catch (\Throwable $e) {
             $db->rollBack();
@@ -978,45 +1167,6 @@ class VehicleService
     }
 
     // ==================== ช่วย: ตรวจค่า / สต็อก / เวลา ====================
-
-    /**
-     * @return array{current: ?float, min: ?float}
-     */
-    private function warehouseInputs(array $input): array
-    {
-        $current = array_key_exists('current_stock', $input) && (string)$input['current_stock'] !== ''
-            ? $this->qty($input['current_stock'], 'สต็อกปัจจุบันในคลัง', 'current_stock')
-            : null;
-        $min = array_key_exists('min_stock', $input) && (string)$input['min_stock'] !== ''
-            ? $this->qty($input['min_stock'], 'จุดเตือนขั้นต่ำ', 'min_stock')
-            : null;
-        return [$current, $min];
-    }
-
-    private function applyWarehouse(string $name, ?float $current, ?float $min, ?array $actor, array $vehicle): ?array
-    {
-        if ($current === null && $min === null) {
-            return null;
-        }
-        $vehicleLabel = trim((string)($vehicle['name'] ?? '') . ' ' . (string)($vehicle['plate'] ?? ''));
-        $item = $this->stockService->setStockForItemName(
-            $name,
-            $current,
-            $min,
-            $actor['id'] ?? null,
-            (string)($actor['full_name'] ?? ''),
-            $vehicleLabel !== '' ? 'รถ ' . $vehicleLabel : ''
-        );
-        if ($item === null) {
-            return null;
-        }
-        return [
-            'name' => $item['name'],
-            'current_qty' => $item['current_qty'],
-            'min_qty' => $item['min_qty'],
-            'status' => $item['status'] ?? null,
-        ];
-    }
 
     /**
      * สกัด "จำนวนเป้าหมาย + หน่วย" จากข้อความมาตรฐาน

@@ -9,57 +9,106 @@
 
 <!-- Inspection/Check Tab -->
 <div id="tabContentCheck" class="hidden">
-  <!-- Step 1: Car & Nurse Selection View -->
-  <div class="card" id="inspectionLoginPage">
-    <h2>เริ่มตรวจเช็ครถ</h2>
-    <form id="inspectionStartForm">
-      <div class="car-grid" aria-label="เลือกรถรีเฟอร์" id="inspectionCarGrid"></div>
+  <!-- ตรวจเช็กแบบทีละขั้น: 1 เลือกรถ → 2 ผู้ตรวจ/เวร → 3 ตรวจทีละหมวด → 4 สรุป → เสร็จ -->
+  <div class="card wiz" id="inspectionWizard" data-help-tel="<?= escape(env('HELP_PHONE', '')) ?>">
+    <div class="wiz-top">
+      <button type="button" class="gray wiz-back" id="inspectionBackBtn" onclick="inspectionBack()">← ย้อนกลับ</button>
+      <button type="button" class="wiz-help" onclick="openInspectionHelp()">📞 ขอความช่วยเหลือ</button>
+    </div>
+    <div class="wiz-progress">
+      <p class="wiz-step-text" id="inspectionStepText" aria-live="polite"></p>
+      <ol class="wiz-dots" id="inspectionStepDots" aria-hidden="true"><li></li><li></li><li></li><li></li></ol>
+    </div>
 
-      <label for="inspectionNurse">ชื่อผู้ตรวจ (พยาบาล)</label>
-      <select id="inspectionNurse">
-        <option value="">-- เลือกรายชื่อพยาบาล --</option>
-      </select>
-      <p id="inspectionNurseLock" class="mt-1 hidden text-xs font-semibold" role="status"></p>
+    <!-- ขั้นที่ 1: เลือกรถ -->
+    <section class="wiz-step" id="inspectionStepCar">
+      <h2>🚑 วันนี้ตรวจรถคันไหน?</h2>
+      <p class="wiz-sub">แตะที่รถที่ต้องการตรวจ</p>
+      <div class="car-grid" aria-label="เลือกรถ" id="inspectionCarGrid"></div>
+    </section>
 
-      <label for="inspectionShift">เวร</label>
-      <select id="inspectionShift">
-        <option value="">-- เลือกเวร --</option>
-        <option value="เช้า">เช้า (08:00 - 16:00)</option>
-        <option value="บ่าย">บ่าย (16:00 - 24:00)</option>
-        <option value="ดึก">ดึก (24:00 - 08:00)</option>
-      </select>
+    <!-- ขั้นที่ 2: ผู้ตรวจ วันที่ และเวร -->
+    <section class="wiz-step hidden" id="inspectionStepWho">
+      <form id="inspectionStartForm">
+        <h2>👤 ใครเป็นผู้ตรวจ?</h2>
+        <div class="wiz-picked" id="inspectionPickedCar"></div>
 
-      <button type="submit">เริ่มตรวจเช็ค</button>
-    </form>
+        <input type="hidden" id="inspectionNurse">
+        <p id="inspectionNurseLock" class="wiz-lock hidden" role="status"></p>
+        <div id="inspectionNursePicker">
+          <label for="inspectionNurseSearch">🔍 พิมพ์ชื่อเพื่อค้นหา</label>
+          <input type="search" id="inspectionNurseSearch" autocomplete="off" placeholder="เช่น สมศรี">
+          <div class="pick-list" id="inspectionNurseList" role="group" aria-label="รายชื่อผู้ตรวจ"></div>
+        </div>
+
+        <p class="step-label">⏰ เวรที่ตรวจ</p>
+        <input type="hidden" id="inspectionShift">
+        <div class="seg wiz-shift" role="group" aria-label="เลือกเวร">
+          <button type="button" class="seg-btn" data-shift="morning" aria-pressed="false">เช้า<small>08–16 น.</small></button>
+          <button type="button" class="seg-btn" data-shift="afternoon" aria-pressed="false">บ่าย<small>16–24 น.</small></button>
+          <button type="button" class="seg-btn" data-shift="night" aria-pressed="false">ดึก<small>00–08 น.</small></button>
+        </div>
+        <details class="wiz-date">
+          <summary>📅 วันที่ <b id="inspectionDateText"></b> (แตะเพื่อเปลี่ยน)</summary>
+          <label for="inspectionDate">วันที่ตรวจ</label>
+          <input type="date" id="inspectionDate" required>
+        </details>
+        <p id="inspectionShiftHint" class="shift-hint" role="status" aria-live="polite"></p>
+
+        <div class="save-bar wiz-bar">
+          <button type="submit" id="inspectionStartBtn">เริ่มตรวจ →</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ขั้นที่ 3: ตรวจทีละหมวด -->
+    <section class="wiz-step hidden" id="inspectionStepCheck">
+      <div class="top-info" id="inspectionLoginInfo"></div>
+      <p id="inspectionModeNote" class="mode-note hidden" role="status"></p>
+      <h2 id="inspectionGroupTitle"></h2>
+      <p class="wiz-sub" id="inspectionGroupSub" role="status" aria-live="polite"></p>
+      <button type="button" class="wiz-all-ok hidden" id="inspectionPageNoneBtn" onclick="checkAllInspection()">✅ หน้านี้ไม่ได้ใช้ ไม่มีหาย ทั้งหมด</button>
+
+      <div id="inspectionItemTable" class="list"></div>
+
+      <p class="autosave-note" id="inspectionAutosaveNote" role="status" aria-live="polite"></p>
+      <div class="save-bar wiz-bar">
+        <p id="inspectionSaveHint" class="save-hint"></p>
+        <button type="button" id="inspectionNextBtn" onclick="inspectionNext()">ถัดไป →</button>
+      </div>
+    </section>
+
+    <!-- ขั้นที่ 4: สรุปก่อนส่ง -->
+    <section class="wiz-step hidden" id="inspectionStepSummary">
+      <h2>📋 ตรวจสอบอีกครั้งก่อนส่ง</h2>
+      <div class="top-info" id="inspectionSummaryInfo"></div>
+      <div id="inspectionSummary"></div>
+      <div class="save-bar wiz-bar">
+        <button id="inspectionSubmitBtn" type="button" class="secondary" onclick="submitInspection()">✅ ยืนยันส่งผลการตรวจ</button>
+      </div>
+    </section>
+
+    <!-- เสร็จแล้ว -->
+    <section class="wiz-step hidden" id="inspectionStepDone">
+      <div class="wiz-done">
+        <div class="wiz-done-icon" aria-hidden="true">✅</div>
+        <h2>บันทึกผลการตรวจเรียบร้อยแล้ว</h2>
+        <p id="inspectionDoneText"></p>
+      </div>
+      <div class="wiz-done-actions">
+        <button type="button" onclick="switchTab('dashboard')">🏠 กลับหน้าแรก</button>
+        <button type="button" class="gray" onclick="inspectionRestart()">🚑 ตรวจรถคันอื่น</button>
+      </div>
+    </section>
   </div>
 
-  <!-- Step 2: The Active Inspection Form -->
-  <div class="card hidden" id="inspectionCheckPage">
-    <h2>แบบฟอร์มตรวจสอบอุปกรณ์</h2>
-    <div class="top-info" id="inspectionLoginInfo"></div>
-
-    <div class="check-sticky">
-      <div class="progress-wrap">
-        <div class="progress-track"><div class="progress-fill" id="inspectionProgressFill"></div></div>
-        <div class="progress-text" id="inspectionProgressText"></div>
-      </div>
-      <div class="filter-chips" role="group" aria-label="กรองรายการตรวจ">
-        <button type="button" class="chip-btn on" id="inspectionChipAll" onclick="setInspectionFilter('all')">ทั้งหมด <b id="inspectionCntAll"></b></button>
-        <button type="button" class="chip-btn" id="inspectionChipPending" onclick="setInspectionFilter('pending')">ยังไม่ตรวจ <b id="inspectionCntPending"></b></button>
-        <button type="button" class="chip-btn" id="inspectionChipAttn" onclick="setInspectionFilter('attn')">ต้องติดตาม <b id="inspectionCntAttn"></b></button>
-      </div>
-    </div>
-
-    <div class="btn-row">
-      <button type="button" onclick="checkAllInspection()">✅ ตรวจครบทั้งหมด</button>
-      <button type="button" class="gray" onclick="cancelInspection()">ยกเลิก</button>
-    </div>
-
-    <div id="inspectionItemTable" class="list"></div>
-
-    <div class="save-bar">
-      <p id="inspectionSaveHint" class="save-hint"></p>
-      <button id="inspectionSubmitBtn" type="button" class="secondary" onclick="submitInspection()">💾 บันทึกผลตรวจ</button>
+  <!-- หน้าต่างช่วยเหลือ -->
+  <div id="inspectionHelp" class="hidden sheet-overlay" role="dialog" aria-modal="true" aria-labelledby="inspectionHelpTitle" onclick="if (event.target === this) closeInspectionHelp()">
+    <div class="sheet">
+      <h3 id="inspectionHelpTitle">📞 ขอความช่วยเหลือ</h3>
+      <div id="inspectionHelpBody"></div>
+      <a class="wiz-call hidden" id="inspectionHelpCall" href="#">📞 โทรหาเจ้าหน้าที่</a>
+      <button type="button" class="gray" onclick="closeInspectionHelp()">ปิดหน้าต่างนี้</button>
     </div>
   </div>
 </div>
@@ -67,13 +116,33 @@
 <!-- Restock Tab -->
 <div id="tabContentRestock" class="hidden">
   <div class="card">
-    <h2>รายการเติมอุปกรณ์</h2>
+    <h2>เติมของ</h2>
+    <p class="step-label">เลือกรถ</p>
+    <div class="car-grid" aria-label="เลือกรถที่จะเติมของ" id="refillCarGrid"></div>
+    <div id="refillSheet" class="hidden">
+      <div class="refill-head" id="refillHead"></div>
+      <div class="filter-chips" role="group" aria-label="กรองรายการ">
+        <button type="button" class="chip-btn on" id="refillFilterNeed" onclick="setRefillFilter('need')">ต้องเติม <b id="refillCntNeed"></b></button>
+        <button type="button" class="chip-btn" id="refillFilterAll" onclick="setRefillFilter('all')">ทั้งหมด <b id="refillCntAll"></b></button>
+        <button type="button" class="chip-btn" id="refillFilterExp" onclick="setRefillFilter('expiry')">หมดอายุ <b id="refillCntExp"></b></button>
+      </div>
+      <div id="refillItems" class="list"></div>
+      <label for="refillNote">หมายเหตุ (ถ้ามี)</label>
+      <input type="text" id="refillNote" maxlength="200">
+      <div class="save-bar">
+        <p id="refillSummary" class="save-hint" role="status" aria-live="polite"></p>
+        <button id="refillSubmitBtn" type="button" class="secondary" onclick="submitRefill()">💾 บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>รายการรอเติม</h3>
     <div class="filter-chips" role="group" aria-label="กรองสถานะ" style="margin-bottom: 12px;">
-      <button type="button" class="chip-btn on" id="restockFilterAll" onclick="setRestockFilter('all')">ทั้งหมด</button>
-      <button type="button" class="chip-btn" id="restockFilterPending" onclick="setRestockFilter('PENDING')">รอเติม</button>
-      <button type="button" class="chip-btn" id="restockFilterProgress" onclick="setRestockFilter('IN_PROGRESS')">กำลังเติม</button>
-      <button type="button" class="chip-btn" id="restockFilterPartial" onclick="setRestockFilter('PARTIAL')">เติมไม่ครบ</button>
+      <button type="button" class="chip-btn on" id="restockFilterOpen" onclick="setRestockFilter('open')">ยังไม่ครบ</button>
       <button type="button" class="chip-btn" id="restockFilterCompleted" onclick="setRestockFilter('COMPLETED')">เติมครบ</button>
+      <button type="button" class="chip-btn" id="restockFilterCancelled" onclick="setRestockFilter('CANCELLED')">ยกเลิก</button>
+      <button type="button" class="chip-btn" id="restockFilterAll" onclick="setRestockFilter('all')">ทั้งหมด</button>
     </div>
     <div id="restockList"></div>
   </div>
@@ -115,38 +184,12 @@
       </div>
       <div class="vehicle-pick-actions">
         <button type="button" id="btnEditVehicle" class="small-btn secondary">✏️ แก้ไขข้อมูลรถ</button>
+        <button type="button" id="btnToggleVehicleStatus" class="small-btn">🚫 ปิดใช้งานรถ</button>
         <button type="button" id="btnDeleteVehicle" class="small-btn danger">🗑 ลบรถ</button>
       </div>
     </div>
     <p id="stockCarMeta" class="vehicle-meta">จำนวนและวันหมดอายุแยกตามรถแต่ละคัน</p>
 
-    <div id="addItemForm" class="hidden">
-      <h3>เพิ่มอุปกรณ์ใหม่</h3>
-      <form id="stockAddForm">
-        <div class="editor">
-          <div><label for="stockName">ชื่ออุปกรณ์</label><input id="stockName" placeholder="ชื่ออุปกรณ์" required></div>
-          <div><label for="stockStandard">จำนวนมาตรฐาน</label><input id="stockStandard" placeholder="จำนวนมาตรฐาน เช่น 10 หรือ 1 ชุด" required></div>
-          <div><label for="stockExpiry">วันหมดอายุ</label><input id="stockExpiry" type="date"></div>
-          <div><label for="stockBattery">เป็นแบตเตอรี่</label><select id="stockBattery"><option value="false">ไม่ใช่</option><option value="true">ใช่</option></select></div>
-          <div>
-            <label for="stockOnboard">ยอดคงเหลือบนรถ (ชิ้น)</label>
-            <input id="stockOnboard" type="number" min="0" step="any" inputmode="decimal" placeholder="เว้นว่าง = ยังไม่ตรวจนับ">
-          </div>
-          <div>
-            <label for="stockCurrent">สต็อกปัจจุบันในคลัง</label>
-            <input id="stockCurrent" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 20 (เว้นว่าง = ไม่แตะคลัง)">
-          </div>
-          <div>
-            <label for="stockMin">จุดเตือนขั้นต่ำ (Minimum)</label>
-            <input id="stockMin" type="number" min="0" step="any" inputmode="decimal" placeholder="เช่น 5 (เตือนเมื่อต่ำกว่านี้)">
-          </div>
-          <button type="submit">เพิ่มอุปกรณ์</button>
-          <button type="button" class="gray" onclick="hideAddItemForm()">ยกเลิก</button>
-        </div>
-        <p class="text-xs text-slate-500">คลังสต็อกกลางนับรวมตามชื่ออุปกรณ์ (ใช้ร่วมกันทุกรถ) — กำหนดสต็อกปัจจุบัน/ขั้นต่ำได้ที่นี่ หรือที่เมนู “คลังสต็อกกลาง”</p>
-      </form>
-    </div>
-    
     <div class="stock-toolbar">
       <button type="button" class="small-btn secondary" onclick="showAddVehicleForm()">🚚 เพิ่มรถใหม่</button>
       <button type="button" class="small-btn" onclick="showAddItemForm()">+ เพิ่มอุปกรณ์</button>
@@ -179,62 +222,13 @@
   </div>
 </div>
 
-<!-- Warehouse Tab (คลังสต็อกกลาง) -->
-<div id="tabContentWarehouse" class="hidden">
-  <div class="card">
-    <div class="wh-head">
-      <div>
-        <h2>🏬 คลังสต็อกกลาง</h2>
-        <p>สต็อกใช้ร่วมกันทุกรถตามชื่ออุปกรณ์ — ระบบตัดให้อัตโนมัติเมื่อบันทึกผลตรวจสถานะ “ใช้ไป” และแจ้งเตือนเมื่อคงเหลือต่ำกว่าจำนวนขั้นต่ำ</p>
-      </div>
-      <button type="button" id="whRefreshBtn" class="small-btn gray">↻ รีเฟรช</button>
-    </div>
-
-    <div class="wh-stats">
-      <div class="wh-stat"><span class="wh-stat-num" id="whStatTotal">–</span><span class="wh-stat-label">รายการทั้งหมด</span></div>
-      <div class="wh-stat is-ok"><span class="wh-stat-num" id="whStatOk">–</span><span class="wh-stat-label">ปกติ</span></div>
-      <div class="wh-stat is-low"><span class="wh-stat-num" id="whStatLow">–</span><span class="wh-stat-label">ต่ำกว่าขั้นต่ำ</span></div>
-      <div class="wh-stat is-out"><span class="wh-stat-num" id="whStatOut">–</span><span class="wh-stat-label">หมดสต็อก</span></div>
-    </div>
-
-    <div id="whAlertBanner" class="wh-alert hidden" role="alert">
-      <span id="whAlertText"></span>
-      <button type="button" class="small-btn" id="whAlertFilterBtn">ดูรายการที่ต้องเติม</button>
-    </div>
-
-    <div class="wh-toolbar">
-      <input type="search" id="whSearch" placeholder="ค้นหาชื่ออุปกรณ์…" aria-label="ค้นหาอุปกรณ์ในคลัง">
-      <div class="wh-filters" role="group" aria-label="กรองตามสถานะ">
-        <button type="button" class="wh-filter-btn active" data-wh-filter="all">ทั้งหมด</button>
-        <button type="button" class="wh-filter-btn" data-wh-filter="alert">ต้องเติม</button>
-        <button type="button" class="wh-filter-btn" data-wh-filter="ok">ปกติ</button>
-        <button type="button" class="wh-filter-btn" data-wh-filter="unset">ยังไม่กำหนด</button>
-      </div>
-    </div>
-
-    <div id="whTable" class="wh-table"></div>
-  </div>
-
-  <div class="card">
-    <div class="wh-log-head">
-      <h3>📜 ประวัติการเคลื่อนไหวสต็อก (Stock Transaction Log)</h3>
-      <select id="whTxLimit" aria-label="จำนวนรายการประวัติที่แสดง">
-        <option value="50">ล่าสุด 50</option>
-        <option value="100" selected>ล่าสุด 100</option>
-        <option value="200">ล่าสุด 200</option>
-      </select>
-    </div>
-    <div id="whTxList" class="wh-log-list"></div>
-  </div>
-</div>
-
 <!-- Nurses Tab -->
 <div id="tabContentNurses" class="hidden">
   <div class="card">
     <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
       <div>
-        <h2>จัดการพยาบาลเวร Refer</h2>
-        <p>ทะเบียนนี้จัดเก็บในฐานข้อมูลของระบบ เพิ่มหรือแก้ไขได้โดยไม่ต้องแก้โค้ด</p>
+        <h2>จัดการผู้ใช้</h2>
+        <p>พยาบาลเวร Refer และบัญชีเข้าใช้งานระบบทั้งหมดในหน้าเดียว — เพิ่ม/แก้ไขพยาบาล บัญชี บทบาท และสถานะ</p>
       </div>
       <button type="button" id="wardManagerBtn" class="m-0 inline-flex w-auto min-h-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-200 hover:bg-slate-100 focus:outline-none focus:ring-4 focus:ring-slate-200">
         🏥 จัดการวอร์ด <span id="wardManagerCount" class="rounded-full bg-slate-100 px-1.5 text-[11px] font-bold text-slate-600"></span>
@@ -367,38 +361,46 @@
     </div>
     
     <div class="search-box flex flex-wrap items-center gap-2">
-      <input type="text" id="nurseSearch" placeholder="🔍 ค้นหาด้วย ชื่อ, สกุล หรือหน่วยงาน..." class="min-w-0 flex-1">
+      <input type="text" id="nurseSearch" placeholder="🔍 ค้นหาด้วย ชื่อ, สกุล, ชื่อบัญชี หรือหน่วยงาน..." class="min-w-0 flex-1">
       <select id="nurseDeptFilter" aria-label="กรองรายชื่อตามวอร์ด" class="w-auto min-w-0 shrink-0 whitespace-nowrap"></select>
+      <select id="userRoleFilter" aria-label="กรองตามประเภท/บทบาท" class="w-auto min-w-0 shrink-0 whitespace-nowrap">
+        <option value="">ทุกประเภท</option>
+        <option value="nurse">พยาบาลทั้งหมด</option>
+        <option value="nurse-noaccount">พยาบาลที่ยังไม่มีบัญชี</option>
+        <option value="admin">ผู้ดูแลระบบ (Admin)</option>
+        <option value="staff">เจ้าหน้าที่ (Staff)</option>
+        <option value="other">บัญชีที่ไม่ใช่พยาบาล</option>
+      </select>
+      <select id="userStatusFilter" aria-label="กรองตามสถานะ" class="w-auto min-w-0 shrink-0 whitespace-nowrap">
+        <option value="">ทุกสถานะ</option>
+        <option value="active">ใช้งาน / ปฏิบัติงาน</option>
+        <option value="inactive">ปิดใช้งาน / พักใช้งาน</option>
+      </select>
     </div>
     <p id="nurseFilterNote" class="hidden mb-2 text-xs font-semibold text-teal-700"></p>
-    
-    <div id="nurseDirectoryTable" class="list"></div>
-  </div>
-</div>
 
-<!-- Users Tab (Admin only) -->
-<div id="tabContentUsers" class="hidden">
-  <div class="card">
-    <h2>จัดการผู้ใช้ระบบ</h2>
-    <p>สร้างบัญชีผู้ใช้สำหรับเข้าสู่ระบบ กำหนดบทบาท Admin หรือ Staff</p>
-    
-    <form id="userForm">
-      <h3 id="userFormTitle">เพิ่มผู้ใช้ใหม่</h3>
-      <div class="editor" id="userEditor">
-        <div><label for="uUsername">ชื่อผู้ใช้ (Username)</label><input id="uUsername" placeholder="เช่น staff01"></div>
-        <div><label for="uPassword">รหัสผ่าน</label><input id="uPassword" type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)"></div>
-        <div><label for="uFullName">ชื่อ–นามสกุล</label><input id="uFullName" placeholder="ชื่อ–นามสกุล"></div>
-        <div><label for="uRole">บทบาท</label><select id="uRole"><option value="staff">Staff (เจ้าหน้าที่ปฏิบัติงาน)</option><option value="admin">Admin (ผู้ดูแลระบบ)</option></select></div>
-        <div><label for="uNurse">พยาบาลที่เชื่อมโยง (ถ้ามี)</label><select id="uNurse"><option value="">-- ไม่เชื่อมโยง --</option></select></div>
-        <button type="submit">เพิ่มผู้ใช้</button>
-        <button type="button" class="gray">ล้างช่องกรอก</button>
-      </div>
-    </form>
-    
-    <div class="search-box">
-      <input type="text" id="userSearch" placeholder="🔍 ค้นหาผู้ใช้...">
-    </div>
-    
+    <h3 class="user-section-title">👩‍⚕️ พยาบาลและบัญชีเข้าใช้งาน</h3>
+    <div id="nurseDirectoryTable" class="list"></div>
+
+    <h3 class="user-section-title">👥 บัญชีผู้ใช้อื่น (ไม่ได้ผูกกับรายชื่อพยาบาล)</h3>
+    <p class="text-xs text-slate-500">เช่น ผู้ดูแลระบบ หรือเจ้าหน้าที่ที่ไม่อยู่ในทะเบียนพยาบาล — บัญชีของพยาบาลแสดงในการ์ดของพยาบาลด้านบน</p>
     <div id="userDirectoryTable" class="list"></div>
+
+    <details id="userFormWrap" class="user-form-wrap">
+      <summary>+ เพิ่ม / แก้ไขบัญชีผู้ใช้ที่ไม่ใช่พยาบาล</summary>
+      <form id="userForm">
+        <h3 id="userFormTitle">เพิ่มผู้ใช้ใหม่</h3>
+        <div class="editor" id="userEditor">
+          <div><label for="uUsername">ชื่อผู้ใช้ (Username)</label><input id="uUsername" placeholder="เช่น staff01" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+          <div><label for="uPassword">รหัสผ่าน</label><input id="uPassword" type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)" autocomplete="new-password"></div>
+          <div><label for="uFullName">ชื่อ–นามสกุล</label><input id="uFullName" placeholder="ชื่อ–นามสกุล"></div>
+          <div><label for="uRole">บทบาท</label><select id="uRole"><option value="staff">Staff (เจ้าหน้าที่ปฏิบัติงาน)</option><option value="admin">Admin (ผู้ดูแลระบบ)</option></select></div>
+          <div><label for="uNurse">ผูกกับรายชื่อพยาบาล (ถ้ามี)</label><select id="uNurse"><option value="">-- ไม่ผูก --</option></select></div>
+          <button type="submit">เพิ่มผู้ใช้</button>
+          <button type="button" class="gray">ล้างช่องกรอก</button>
+        </div>
+        <p class="text-xs text-slate-500">บัญชีของพยาบาลสร้าง/แก้ได้ในฟอร์มพยาบาลด้านบน (ส่วน "บัญชีเข้าใช้งานระบบ") — พยาบาล 1 คนมีได้ 1 บัญชี</p>
+      </form>
+    </details>
   </div>
 </div>

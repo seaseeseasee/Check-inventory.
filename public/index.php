@@ -121,8 +121,8 @@ if ($path === '/setup-admin.php') {
 }
 
 // Page-specific styles and scripts
-$pageStyles = ['dashboard', 'login', 'inspections', 'restock', 'nurses', 'history', 'vehicles', 'users', 'admin', 'warehouse'];
-$pageScripts = ['dashboard', 'inspections', 'restock', 'nurses', 'history', 'vehicles', 'users', 'warehouse'];
+$pageStyles = ['dashboard', 'inspections', 'restock', 'refill-shift', 'nurses', 'history', 'vehicles', 'users', 'admin'];
+$pageScripts = ['dashboard', 'inspections', 'restock', 'nurses', 'history', 'vehicles', 'users'];
 
 // Serve the SPA for all other routes
 require_once __DIR__ . '/../routes/web.php';

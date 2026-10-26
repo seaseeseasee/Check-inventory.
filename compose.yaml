@@ -1,0 +1,122 @@
+name: emer
+
+# Three always-on containers:
+#   frontend (nginx)        — the only one published to the host; serves UI assets,
+#                             proxies the app shell + /api/* to the backend
+#   backend  (PHP + Apache) — routes, controllers, auth/session, talks to the db
+#   db       (MariaDB)      — reachable from the backend only
+# phpMyAdmin is an on-demand tool (profile "tools"), not part of the app:
+#   docker compose --profile tools up -d phpmyadmin
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    ports:
+      # Bound to 127.0.0.1 only for this local-test phase (not exposed to the
+      # network/internet). Widen to "0.0.0.0:${APP_PORT}:80" only in a later,
+      # explicitly-approved step when actually sharing a link with testers.
+      - "127.0.0.1:${APP_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - edge
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    # No "ports:" — reachable only through the frontend on the "edge" network.
+    expose:
+      - "80"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - edge
+      - data
+    volumes:
+      # Persist what the app may write at runtime without baking it into the image.
+      - storage_data:/var/www/html/storage
+    healthcheck:
+      # CLI script outside public/ — checks Apache answers and the DB login works
+      # (see docker/healthcheck.php for why /api/health is not used here).
+      test: ["CMD", "php", "/var/www/html/docker/healthcheck.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  db:
+    image: mariadb:10.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    networks:
+      - data
+    volumes:
+      - db_data:/var/lib/mysql
+      # Runs once, only when the data volume is empty (fresh DB) — alphabetical
+      # order matters here, which is exactly why schema.sql + seed.sql are used
+      # instead of the raw migrations/ folder (see report: 001-add-restock.sql
+      # sorts before 001-initial.sql alphabetically and would fail on a fresh DB).
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      # schema.sql already contains migrations 001-009; 010+ are applied on top
+      - ./database/migrations/010-lots-shifts-colors.sql:/docker-entrypoint-initdb.d/03-migration-010.sql:ro
+      - ./database/migrations/011-lot-details-equipment-types.sql:/docker-entrypoint-initdb.d/04-migration-011.sql:ro
+      - ./database/migrations/012-three-item-types.sql:/docker-entrypoint-initdb.d/05-migration-012.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    # No "ports:" here on purpose — the database is reachable only from other
+    # containers on the internal "data" network (service name "db"), never from the host.
+    restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin:5.2
+    profiles: ["tools"]
+    environment:
+      PMA_HOST: db
+      PMA_ABSOLUTE_URI: http://localhost:${PHPMYADMIN_PORT:-8081}/
+    ports:
+      - "127.0.0.1:${PHPMYADMIN_PORT:-8081}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - data
+      # "data" is internal (no host port publishing), so the published port needs
+      # a normal network too — a separate one, so phpMyAdmin never sees the app.
+      - admin
+    restart: "no"
+
+networks:
+  # frontend <-> backend
+  edge:
+  # backend/phpMyAdmin <-> db — internal: no route to or from outside Docker
+  data:
+    internal: true
+  admin:
+
+volumes:
+  # Same keys as before -> same volumes (emer_db_data, emer_storage_data); data kept.
+  db_data:
+  storage_data:

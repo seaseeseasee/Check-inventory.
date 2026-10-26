@@ -42,6 +42,44 @@ class User extends Model
      * @param string[] $nurseIds
      * @return array<string, string>
      */
+    /**
+     * บัญชีที่ผูกกับพยาบาลแต่ละคน (ไม่รวม password_hash) — ใช้แสดงในหน้าจัดการผู้ใช้หน้าเดียว
+     * @return array<string, array{id:string, username:string, role:string, active:bool, last_login_at:?string}>
+     */
+    public function getAccountsByNurseIds(array $nurseIds): array
+    {
+        if (empty($nurseIds)) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($nurseIds), '?'));
+        $stmt = $this->db->prepare(
+            "SELECT id, nurse_id, username, role, active, last_login_at FROM {$this->table}
+              WHERE nurse_id IN ($placeholders) ORDER BY active DESC, created_at"
+        );
+        $stmt->execute(array_values($nurseIds));
+        $map = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $key = (string)$row['nurse_id'];
+            if (!isset($map[$key])) {   // ถ้าข้อมูลเก่ามีหลายบัญชี ใช้บัญชีที่ใช้งานอยู่ก่อน
+                $map[$key] = [
+                    'id' => (string)$row['id'],
+                    'username' => (string)$row['username'],
+                    'role' => (string)$row['role'],
+                    'active' => (bool)$row['active'],
+                    'last_login_at' => $row['last_login_at'],
+                ];
+            }
+        }
+        return $map;
+    }
+
+    /** จำนวนผู้ดูแลระบบที่ยังใช้งานอยู่ (กันปิด/ลดสิทธิ์ admin คนสุดท้าย) */
+    public function countActiveAdmins(): int
+    {
+        $stmt = $this->db->query("SELECT COUNT(*) FROM {$this->table} WHERE role = 'admin' AND active = 1");
+        return (int)$stmt->fetchColumn();
+    }
+
     public function getUsernamesByNurseIds(array $nurseIds): array
     {
         if (empty($nurseIds)) {

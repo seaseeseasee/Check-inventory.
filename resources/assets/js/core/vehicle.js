@@ -35,6 +35,7 @@ window.vehicleRef = (function () {
         name: text(vehicle.name),
         plate: text(vehicle.plate),
         status: text(vehicle.status),
+        color: text(vehicle.vehicle_color),
       });
     }
   }
@@ -65,7 +66,7 @@ window.vehicleRef = (function () {
   function rowFor(ref) {
     if (ref && typeof ref === 'object') {
       const id = text(ref.id);
-      const hint = { id: id, name: text(ref.name), plate: text(ref.plate), status: text(ref.status) };
+      const hint = { id: id, name: text(ref.name), plate: text(ref.plate), status: text(ref.status), color: text(ref.vehicle_color) };
       const cached = id ? byId.get(id) : null;
       if (!cached) return hint;
       // object ที่หน้าส่งมาอาจมีแค่บางฟิลด์ (เช่น car_id + car_name) — ที่ว่างจึงใช้ของ cache แทน
@@ -74,10 +75,11 @@ window.vehicleRef = (function () {
         name: hint.name || cached.name,
         plate: hint.plate || cached.plate,
         status: hint.status || cached.status,
+        color: hint.color || cached.color,
       };
     }
     const id = text(ref);
-    return byId.get(id) || { id: id, name: '', plate: '', status: '' };
+    return byId.get(id) || { id: id, name: '', plate: '', status: '', color: '' };
   }
 
   // ลำดับการแสดงผล: plate จากฐานข้อมูล → ทะเบียนเดิมของ 3 คันแรก → name → ไม่แสดง id
@@ -96,4 +98,35 @@ window.vehicleRef = (function () {
 // Global helper ที่ทุกหน้าเรียก: รับ object รถหรือ car_id ก็ได้
 window.vehiclePlate = function (ref) {
   return window.vehicleRef.plate(ref);
+};
+
+// ---------- สีประจำรถ (กำหนดที่หน้าทะเบียนรถ — refer_vehicles.vehicle_color) ----------
+// สีเริ่มต้นต้องตรงกับ VehicleService::DEFAULT_COLOR ฝั่ง server
+window.VEHICLE_DEFAULT_COLOR = '#475569';
+
+window.vehicleColor = function (ref) {
+  const color = window.vehicleRef.rowFor(ref).color;
+  return /^#[0-9A-Fa-f]{6}$/.test(color || '') ? color.toUpperCase() : window.VEHICLE_DEFAULT_COLOR;
+};
+
+// ตัวอักษรขาว/ดำที่อ่านง่ายบนพื้นสีนั้น (WCAG relative luminance — เลือกค่าที่ contrast สูงกว่า)
+window.vehicleTextColor = function (hex) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+  if (!m) return '#FFFFFF';
+  const lum = [m[1], m[2], m[3]]
+    .map((h) => parseInt(h, 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+  const L = 0.2126 * lum[0] + 0.7152 * lum[1] + 0.0722 * lum[2];
+  const contrastWhite = 1.05 / (L + 0.05);
+  const contrastBlack = (L + 0.05) / 0.05;
+  return contrastWhite >= contrastBlack ? '#FFFFFF' : '#0F172A';
+};
+
+// ป้ายทะเบียนพื้นสีประจำรถ (HTML ที่ escape แล้ว) — ใช้ใน dashboard / ตรวจเช็ค / เติมของ / ทะเบียนรถ
+window.vehicleChip = function (ref, extraClass) {
+  const bg = window.vehicleColor(ref);
+  const fg = window.vehicleTextColor(bg);
+  const label = String(window.vehiclePlate(ref))
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return `<span class="vehicle-chip ${extraClass || ''}" style="background:${bg};color:${fg}">🚑 ${label}</span>`;
 };
