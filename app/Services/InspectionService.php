@@ -135,20 +135,12 @@ class InspectionService
         return ['check_date' => $at->format('Y-m-d'), 'shift_code' => $code];
     }
 
-    /** รอบตรวจนี้เป็นของเวรที่กำลังดำเนินอยู่ตอนนี้หรือไม่ (วันที่ + เวร ตรงกับเวลาปัจจุบัน) */
-    public static function isCurrentShift(array $check): bool
-    {
-        $now = self::currentShift();
-        return (string)($check['check_date'] ?? '') === $now['check_date']
-            && (string)($check['shift_code'] ?? '') === $now['shift_code'];
-    }
-
     public static function shiftName(?string $code): string
     {
         return self::SHIFTS[$code ?? '']['name'] ?? '';
     }
 
-    /** ตรวจ/ปรับวันที่+เวรจาก client — ห้ามวันในอนาคต และย้อนหลังได้ไม่เกิน 7 วัน */
+    /** ตรวจ/ปรับวันที่+เวรจาก client — ห้ามวันในอนาคต (ย้อนหลังได้ไม่จำกัด ตามที่ผู้ใช้ต้องการ) */
     public static function normalizeShift(array $input): array
     {
         $code = (string)($input['shift_code'] ?? '');
@@ -173,10 +165,6 @@ class InspectionService
         $today = VehicleStockService::today();
         if ($date > $today) {
             throw new ApiException('ไม่สามารถบันทึกการตรวจของวันในอนาคตได้', 422);
-        }
-        $oldest = (new \DateTimeImmutable($today))->modify('-7 days')->format('Y-m-d');
-        if ($date < $oldest) {
-            throw new ApiException('ย้อนหลังได้ไม่เกิน 7 วัน', 422);
         }
         return ['check_date' => $date, 'shift_code' => $code];
     }
@@ -208,39 +196,36 @@ class InspectionService
     // ==================== เริ่ม/ร่าง ====================
 
     /**
-     * เริ่มตรวจ: ถ้าเวรนี้ของรถนี้บันทึกไปแล้ว → เปิดรอบเดิมเพื่อแก้ไข (mode=edit)
-     * ถ้ามีร่างของคน/เวรเดียวกัน → ทำต่อ (mode=draft) / ร่างของคนอื่น → 409 ให้ยืนยันแทนที่
+     * เริ่มตรวจ — ไม่มีเงื่อนไขขัดแย้ง (ไม่ตอบ 409): staff คนไหนก็เริ่ม/แก้เวรไหนก็ได้ ทุกเวลา
+     *  - เวรนี้ของรถนี้บันทึกไปแล้ว → เปิดรอบเดิมเพื่อแก้ไข (mode=edit) ใครก็แก้ได้ (เก็บประวัติก่อนแก้ทุกครั้ง)
+     *  - มีร่างของเวรเดียวกัน (ของใครก็ได้) → ทำต่อจากร่างนั้น (mode=draft) โดยโอนร่างมาเป็นชื่อผู้ที่กดเริ่ม
+     *  - มีร่างของเวรอื่นค้างอยู่ → แทนที่ด้วยร่างใหม่ทันที (ร่างไม่กระทบยอดคงเหลือ)
+     * $replace คงไว้ให้ client รุ่นเก่าที่ยังส่งมา — ไม่มีผลแล้ว
      */
     public function start(array $vehicle, array $nurse, array $shift, bool $replace, ?array $user): array
     {
         $carId = (string)$vehicle['id'];
         $existing = $this->findCheckByShift($carId, $shift['check_date'], $shift['shift_code']);
         if ($existing) {
-            $this->assertCanEditCheck($existing, $user);
             return $this->sessionPayload('edit', $existing, $this->buildForm($carId, null, (string)$existing['id']));
         }
 
         $draft = $this->draftModel->getByVehicle($carId);
-        $sameOwner = $draft
-            && (string)$draft['nurse_id'] === (string)$nurse['id']
+        $sameShift = $draft
             && (string)($draft['check_date'] ?? '') === $shift['check_date']
             && (string)($draft['shift_code'] ?? '') === $shift['shift_code'];
-        if ($draft && $sameOwner) {
+        if ($sameShift) {
+            if ((string)$draft['nurse_id'] !== (string)$nurse['id']) {
+                // คนที่กดเริ่มล่าสุดเป็นผู้ตรวจที่จะส่งผล — ค่าที่กรอกไว้ในร่างยังอยู่ครบ
+                $this->draftModel->update((string)$draft['id'], [
+                    'nurse_id' => (string)$nurse['id'],
+                    'nurse_name' => (string)$nurse['name'],
+                ]);
+                $draft['nurse_id'] = (string)$nurse['id'];
+                $draft['nurse_name'] = (string)$nurse['name'];
+            }
             $payload = json_decode((string)($draft['payload'] ?? ''), true);
             return $this->sessionPayload('draft', $draft, $this->buildForm($carId, is_array($payload) ? $payload : null, null));
-        }
-        if ($draft && !$replace) {
-            throw new ApiException(
-                sprintf('มีร่างการตรวจของ %s (%s %s) ค้างอยู่', $draft['nurse_name'], $draft['check_date'] ?? '', self::shiftName($draft['shift_code'] ?? null) ?: $draft['shift_name']),
-                409,
-                ['code' => 'DRAFT_EXISTS', 'draft' => [
-                    'nurse_id' => $draft['nurse_id'],
-                    'nurse_name' => $draft['nurse_name'],
-                    'shift_name' => self::shiftName($draft['shift_code'] ?? null) ?: $draft['shift_name'],
-                    'check_date' => $draft['check_date'] ?? null,
-                    'started_at' => $draft['started_at'],
-                ]]
-            );
         }
 
         $db = Database::getConnection();
@@ -297,7 +282,6 @@ class InspectionService
         if (!$draft) {
             throw new ApiException('ไม่พบร่างการตรวจของรถคันนี้ (อาจถูกบันทึกหรือแทนที่ไปแล้ว)', 404);
         }
-        $this->assertDraftOwner($draft, $user);
         $clean = [];
         foreach (array_slice($lines, 0, 500) as $line) {
             if (!is_array($line) || !isset($line['id'])) {
@@ -316,32 +300,6 @@ class InspectionService
             ];
         }
         $this->draftModel->update((string)$draft['id'], ['payload' => json_encode($clean, JSON_UNESCAPED_UNICODE)]);
-    }
-
-    private function assertDraftOwner(array $draft, ?array $user): void
-    {
-        if (($user['role'] ?? '') === 'staff' && (string)($user['nurse_id'] ?? '') !== (string)$draft['nurse_id']) {
-            throw new ApiException('ร่างการตรวจนี้เป็นของ ' . $draft['nurse_name'] . ' กรุณาเริ่มการตรวจในชื่อของท่าน', 403);
-        }
-    }
-
-    /**
-     * แก้รอบตรวจที่บันทึกแล้ว: admin ทุกรอบ / ผู้ตรวจเดิม (ย้อนหลังตามกติกาเวร)
-     * / พยาบาลคนอื่นเช็คซ้ำได้เฉพาะระหว่างเวรนั้นยังไม่หมด
-     */
-    private function assertCanEditCheck(array $check, ?array $user): void
-    {
-        if (($user['role'] ?? '') === 'admin') {
-            return;
-        }
-        if ((string)($user['nurse_id'] ?? '') === (string)$check['nurse_id'] || self::isCurrentShift($check)) {
-            return;
-        }
-        throw new ApiException(
-            sprintf('เวรนี้ถูกตรวจและบันทึกแล้วโดย %s — หมดเวรแล้ว แก้ไขได้เฉพาะผู้ตรวจเดิมหรือผู้ดูแลระบบ', $check['nurse_name']),
-            409,
-            ['code' => 'SHIFT_ALREADY_CHECKED']
-        );
     }
 
     // ==================== สร้างข้อมูลฟอร์ม ====================
@@ -524,7 +482,7 @@ class InspectionService
             $flags = $item ?: ['name' => $name, 'is_battery' => $form['has_battery'], 'has_pressure' => $form['has_pressure'], 'battery_max_bars' => $form['battery_max_bars']];
             $units = [];
             $notReady = [];
-            $low = 0;
+            $low = [];   // เครื่องพร้อมใช้แต่แบต/แรงดันต่ำกว่าเกณฑ์ → ต้องชาร์จ/เติม (ส่งเข้ารายการรอเติม)
             foreach ($form['units'] as $unit) {
                 $input = $byId[$unit['id']] ?? null;
                 if ($input === null) {
@@ -534,10 +492,12 @@ class InspectionService
                 $units[] = ['id' => $unit['id'], 'label' => $unit['label']] + $parsed;
                 if ($parsed['status'] !== ItemUnit::STATUS_READY) {
                     $notReady[] = trim(($unit['label'] ?: 'เครื่อง') . ': ' . $parsed['note']);
-                } elseif ($form['has_battery'] && $form['battery_low_bars'] !== null && $parsed['battery_level'] <= $form['battery_low_bars']) {
-                    $low++;
-                } elseif ($form['has_pressure'] && $form['o2_low_psi'] !== null && $parsed['pressure_psi'] < $form['o2_low_psi']) {
-                    $low++;
+                    continue;
+                }
+                $reasons = VehicleStockService::unitLowReasons($parsed, $form['has_battery'], $form['battery_low_bars'],
+                    $form['has_pressure'], $form['o2_low_psi'], $form['battery_max_bars']);
+                if ($reasons) {
+                    $low[] = trim(($unit['label'] ?: 'เครื่อง') . ': ' . implode(', ', $reasons));
                 }
             }
             $count = (float)count($form['units']);
@@ -549,7 +509,7 @@ class InspectionService
             return [
                 // ไม่พร้อมใช้ = ผิดปกติ (สร้างรายการ "ตรวจสอบ/เปลี่ยน" ไม่มีจำนวนเติม) | ขาดจำนวน/แบตหรือแรงดันต่ำ = ต้องดำเนินการ
                 'result' => $notReady ? self::RESULT_ANOMALY : (($short > 0 || $low) ? self::RESULT_REFILL : self::RESULT_COMPLETE),
-                'units' => $units, 'note' => $note, 'replace' => $notReady,
+                'units' => $units, 'note' => $note, 'replace' => $notReady, 'low' => $low,
                 'before' => $count, 'used' => null, 'expected' => null, 'actual' => $count, 'discrepancy' => null,
                 'refill' => $short,
             ];
@@ -625,7 +585,6 @@ class InspectionService
                 if (!$header || (string)$header['car_id'] !== $carId) {
                     throw new ApiException('ไม่พบรอบตรวจที่ต้องการแก้ไข', 404);
                 }
-                $this->assertCanEditCheck($header, $user);
                 $expectedRevision = isset($input['revision']) ? (int)$input['revision'] : null;
                 if ($expectedRevision !== null && $expectedRevision !== (int)$header['revision']) {
                     throw new ApiException('รอบตรวจนี้ถูกแก้ไขโดยผู้อื่นระหว่างที่ท่านกำลังแก้ กรุณาเปิดใหม่เพื่อดูข้อมูลล่าสุด', 409, ['code' => 'STALE_REVISION']);
@@ -660,7 +619,6 @@ class InspectionService
                     }
                     throw new ApiException('ไม่พบร่างการตรวจนี้ (อาจถูกแทนที่) กรุณาเริ่มตรวจใหม่', 404);
                 }
-                $this->assertDraftOwner($draft, $user);
                 try {
                     $this->inspectionModel->create([
                         'id' => $checkId,
@@ -786,10 +744,18 @@ class InspectionService
 
             // ส่งรายการที่ขาดไปหน้าเติมของทันที (ไม่มีขั้นขอเบิก/อนุมัติ):
             //   refill  = จำนวนที่ขาดจริง (ทุกประเภท — รวมเครื่องที่จำนวนไม่ครบ)
-            //   replace = อุปกรณ์ไม่พร้อมใช้ที่ไม่มีจำนวนขาด → "ตรวจสอบ/เปลี่ยน" (ไม่สร้างจำนวนเติม)
+            //   replace = ไม่มีจำนวนขาด แต่มีเครื่องไม่พร้อมใช้ หรือแบต/แรงดันต่ำกว่าเกณฑ์ → "ตรวจสอบ/เปลี่ยน/ชาร์จ/เติม"
+            //             (ปิดเองเมื่อหน้าเติมของอัปเดตจนทุกเครื่องพร้อมใช้และไม่ต่ำกว่าเกณฑ์)
             $refillLines = [];
             foreach ($lines as $line) {
-                $why = !empty($line['replace']) ? 'ไม่พร้อมใช้: ' . implode(' • ', $line['replace']) : '';
+                $whyParts = [];
+                if (!empty($line['replace'])) {
+                    $whyParts[] = 'ไม่พร้อมใช้: ' . implode(' • ', $line['replace']);
+                }
+                if (!empty($line['low'])) {
+                    $whyParts[] = 'แบต/แรงดันต่ำ ต้องชาร์จ/เติม: ' . implode(' • ', $line['low']);
+                }
+                $why = implode(' | ', $whyParts);
                 if ($line['refill'] > 0) {
                     // 1 บรรทัดต่ออุปกรณ์ (PK request+item) — ถ้ามีเครื่องไม่พร้อมใช้ด้วย แนบเหตุผลไว้ในบรรทัดเติม
                     $refillLines[] = ['item' => $line['item'], 'refill' => $line['refill'], 'actual' => $line['actual'], 'before' => $line['before'],
@@ -845,9 +811,8 @@ class InspectionService
             $statusText = [ItemUnit::STATUS_READY => 'พร้อมใช้', ItemUnit::STATUS_NOT_READY => 'ไม่พร้อมใช้', 'no_power' => 'เปิดไม่ติด'];
             $parts = [];
             foreach ($line['units'] ?? [] as $u) {
-                $reading = $u['pressure_psi'] !== null
-                    ? ' ' . $u['pressure_psi'] . ' PSI'
-                    : ($u['battery_level'] !== null ? ' แบต ' . $u['battery_level'] . '/' . $form['battery_max_bars'] : '');
+                $reading = ($u['battery_level'] !== null ? ' แบต ' . $u['battery_level'] . '/' . $form['battery_max_bars'] : '')
+                    . ($u['pressure_psi'] !== null ? ' ' . $u['pressure_psi'] . ' PSI' : '');
                 $parts[] = trim(($u['label'] ?: 'เครื่อง') . ' ' . ($statusText[$u['status']] ?? $u['status']) . $reading);
             }
             return implode(' • ', $parts) ?: (string)($line['note'] ?? '');

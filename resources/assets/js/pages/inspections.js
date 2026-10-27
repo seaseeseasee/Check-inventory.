@@ -303,7 +303,7 @@ class InspectionPage {
     }
     const done = this.doneFor(this.selectedCarId)[shift];
     if (done) {
-      hint.textContent = `✅ ${SHIFT_LABEL[shift]}ตรวจแล้วโดย ${done.nurse_name} — พยาบาลในเวรนี้กดปุ่มด้านล่างเพื่อเช็คซ้ำ/แก้ไขผลได้`;
+      hint.textContent = `✅ ${SHIFT_LABEL[shift]}ตรวจแล้วโดย ${done.nurse_name} — กดปุ่มด้านล่างเพื่อเช็คซ้ำ/แก้ไขผลได้`;
       hint.className = 'shift-hint is-done';
       if (btn) btn.textContent = '✏️ เช็คซ้ำ / แก้ไขผลการตรวจ →';
     } else {
@@ -576,7 +576,8 @@ class InspectionPage {
           : { result: 'pending', text: `ยังไม่มี${word}บนรถ — ระบุหมายเหตุ` };
       }
       const notReady = [];
-      let low = 0;
+      let lowBattery = 0;
+      let lowPressure = 0;
       for (const u of item.units) {
         const name = u.label || word;
         if (!item.unitTouched[u.id] || !['ready', 'not_ready', 'no_power'].includes(u.status)) {
@@ -591,15 +592,19 @@ class InspectionPage {
         if (u.status !== 'ready') {
           if (!String(u.note || '').trim()) return { result: 'error', text: `${name}: ไม่พร้อมใช้ ต้องระบุสาเหตุ` };
           notReady.push(name);
-        } else if (item.has_battery && item.battery_low_bars !== null && u.battery_level <= item.battery_low_bars) {
-          low++;
-        } else if (item.has_pressure && item.o2_low_psi !== null && Number(u.pressure_psi) < item.o2_low_psi) {
-          low++;
+          continue;
         }
+        // ตรวจแบตและแรงดันแยกกัน (เครื่องเดียวต่ำได้ทั้งสองอย่าง) — กติกาเดียวกับ VehicleStockService::unitLowReasons()
+        if (item.has_battery && item.battery_low_bars !== null && u.battery_level <= item.battery_low_bars) lowBattery++;
+        if (item.has_pressure && item.o2_low_psi !== null && Number(u.pressure_psi) < item.o2_low_psi) lowPressure++;
       }
+      const low = lowBattery + lowPressure;
       if (notReady.length) return { result: 'anomaly', short, notReady, text: `ไม่พร้อมใช้ ${notReady.length} ${word} → ตรวจสอบ/เปลี่ยน` };
       if (short > 0) return { result: 'needs_refill', short, text: `${word}ไม่ครบ ขาด ${this.fmt(short)}` };
-      if (low) return { result: 'needs_refill', low, text: item.has_pressure ? `แรงดันต่ำ ${low} ถัง` : `แบตเตอรี่ต่ำ ${low} เครื่อง` };
+      if (low) {
+        const parts = [lowBattery && `แบตต่ำ ${lowBattery} ${word}`, lowPressure && `แรงดันต่ำ ${lowPressure} ${word}`].filter(Boolean);
+        return { result: 'needs_refill', low, text: `${parts.join(' · ')} → ส่งไปเติม/ชาร์จ` };
+      }
       return { result: 'complete', text: 'พร้อมใช้' };
     }
 

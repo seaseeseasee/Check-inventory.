@@ -14,6 +14,131 @@ const VEHICLE_STATUS_CHIP = {
   disabled: 'chip-off',
 };
 
+// [ค่าที่ส่ง server, ป้ายในหน้าจอ, คำที่รับได้ในไฟล์นำเข้า]
+const VEHICLE_ITEM_TYPES = [
+  ['individual', '🧩 รายชิ้น', ['รายชิ้น', 'ชิ้น', 'individual']],
+  ['box', '📦 กล่อง / ล็อต', ['กล่อง', 'ล็อต', 'กล่อง/ล็อต', 'box']],
+  ['non_expiring', '🩺 ไม่มีวันหมดอายุ', ['ไม่มีวันหมดอายุ', 'non_expiring']],
+];
+
+// คอลัมน์ไฟล์นำเข้าอุปกรณ์ (ไฟล์ต้นแบบใช้หัวคอลัมน์ตามลำดับนี้ — ตอนอ่านจับคู่จากชื่อหัว ไม่สนลำดับ)
+const ITEM_IMPORT_COLUMNS = [
+  { key: 'name', header: 'ชื่ออุปกรณ์', required: true },
+  { key: 'standard', header: 'จำนวนมาตรฐาน', required: true },
+  { key: 'item_type', header: 'ประเภท (รายชิ้น/กล่อง/ไม่มีวันหมดอายุ)' },
+  { key: 'is_battery', header: 'มีแบตเตอรี่ (ใช่/ไม่ใช่)' },
+  { key: 'has_pressure', header: 'วัดแรงดัน (ใช่/ไม่ใช่)' },
+  { key: 'active', header: 'สถานะ (ใช้งาน/พักใช้งาน)' },
+  { key: 'stock_qty', header: 'จำนวนที่จะจัดขึ้นรถ' },
+  { key: 'stock_expiry', header: 'วันหมดอายุ (วว/ดด/ปปปป)' },
+];
+
+const STAGING_KEY = 'emer.vehicleItemStaging';
+
+/**
+ * วันที่จากไฟล์ → YYYY-MM-DD (คืน '' ถ้าว่าง, null ถ้าอ่านไม่ได้)
+ * รับ: Date (เซลล์วันที่ใน Excel), YYYY-MM-DD, วว/ดด/ปปปป หรือ วว-ดด-ปปปป ทั้ง พ.ศ. (>2400) และ ค.ศ.
+ */
+function parseImportDate(value) {
+  const pad = (n) => String(n).padStart(2, '0');
+  if (value instanceof Date) {
+    return isNaN(value) ? null : `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+  }
+  const text = String(value ?? '').trim();
+  if (text === '') return '';
+  let y, m, d;
+  let match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text);
+  if (match) [, y, m, d] = match.map(Number);
+  else if ((match = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(text))) [, d, m, y] = match.map(Number);
+  else return null;
+  if (y > 2400) y -= 543;   // พ.ศ. → ค.ศ.
+  const date = new Date(y, m - 1, d);
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d ? `${y}-${pad(m)}-${pad(d)}` : null;
+}
+
+/**
+ * แปลงตาราง (แถวแรก = หัวคอลัมน์) เป็นรายการอุปกรณ์
+ * ข้ามแถวว่างและแถวที่ชื่อขึ้นต้นด้วย "ตัวอย่าง" (แถวตัวอย่างในไฟล์ต้นแบบ)
+ */
+function parseItemImportTable(table) {
+  const norm = (v) => String(v ?? '').replace(/\s+/g, '').toLowerCase();
+  const header = (table[0] || []).map(h => norm(h).replace(/\(.*\)/, '').replace(/\*/g, ''));
+  const colOf = {};
+  ITEM_IMPORT_COLUMNS.forEach(col => {
+    const want = norm(col.header).replace(/\(.*\)/, '');
+    const i = header.findIndex(h => h === want);
+    if (i >= 0) colOf[col.key] = i;
+  });
+  const missing = ITEM_IMPORT_COLUMNS.filter(c => c.required && colOf[c.key] === undefined);
+  if (missing.length) {
+    return { rows: [], skipped: 0, errors: [`ไม่พบคอลัมน์: ${missing.map(c => c.header).join(', ')} — แถวแรกต้องเป็นหัวคอลัมน์ตามไฟล์ต้นแบบ`] };
+  }
+
+  const yes = ['ใช่', 'มี', 'yes', 'y', 'true', '1', '✓'];
+  const no = ['ไม่ใช่', 'ไม่', 'ไม่มี', 'no', 'n', 'false', '0', ''];
+  const rows = [];
+  const errors = [];
+  let skipped = 0;
+  table.slice(1).forEach((cells, i) => {
+    const line = i + 2;   // เลขแถวตามที่เห็นใน Excel
+    const raw = (key) => (colOf[key] === undefined ? '' : cells[colOf[key]]);
+    const get = (key) => {
+      const v = raw(key);
+      return v instanceof Date ? parseImportDate(v) : String(v ?? '').trim();
+    };
+    if (cells.every(c => String(c ?? '').trim() === '') || /^ตัวอย่าง/.test(get('name'))) {
+      skipped++;
+      return;
+    }
+    const bool = (key, label) => {
+      const v = norm(get(key));
+      if (yes.includes(v)) return true;
+      if (no.includes(v)) return false;
+      errors.push(`แถว ${line}: ${label} ต้องเป็น "ใช่" หรือ "ไม่ใช่" (ได้ "${get(key)}")`);
+      return false;
+    };
+
+    const name = get('name');
+    const standard = get('standard');
+    if (!name) errors.push(`แถว ${line}: ไม่มีชื่ออุปกรณ์`);
+    if (!standard) errors.push(`แถว ${line}: ไม่มีจำนวนมาตรฐาน${name ? ` (${name})` : ''}`);
+
+    const typeText = norm(get('item_type'));
+    const type = typeText === '' ? 'individual'
+      : (VEHICLE_ITEM_TYPES.find(([, , words]) => words.some(w => norm(w) === typeText)) || [])[0];
+    if (!type) errors.push(`แถว ${line}: ประเภท "${get('item_type')}" ไม่รู้จัก — ใช้ รายชิ้น / กล่อง / ไม่มีวันหมดอายุ`);
+
+    const status = norm(get('active'));
+    if (!['', 'ใช้งาน', 'พักใช้งาน'].includes(status)) {
+      errors.push(`แถว ${line}: สถานะต้องเป็น "ใช้งาน" หรือ "พักใช้งาน" (ได้ "${get('active')}")`);
+    }
+
+    const stockQty = get('stock_qty');
+    const stockExpiry = parseImportDate(raw('stock_expiry'));
+    if (stockQty !== '' && !(Number(stockQty) > 0)) {
+      errors.push(`แถว ${line}: จำนวนที่จะจัดขึ้นรถต้องเป็นตัวเลขมากกว่า 0 (ได้ "${stockQty}")`);
+    }
+    if (stockExpiry === null) {
+      errors.push(`แถว ${line}: วันหมดอายุ "${get('stock_expiry')}" อ่านไม่ได้ — ใช้ วว/ดด/ปปปป เช่น 31/12/2569`);
+    }
+    if (stockQty !== '' && type === 'non_expiring') {
+      errors.push(`แถว ${line}: ประเภทไม่มีวันหมดอายุ จัดเครื่องขึ้นรถที่แท็บ "เติมของ" (เว้นช่องจำนวนว่างไว้)`);
+    }
+
+    rows.push({
+      name,
+      standard,
+      item_type: type || 'individual',
+      is_battery: bool('is_battery', 'มีแบตเตอรี่'),
+      has_pressure: bool('has_pressure', 'วัดแรงดัน'),
+      active: status !== 'พักใช้งาน',
+      stock_qty: stockQty,
+      stock_expiry: stockExpiry || '',   // ขาดได้ — กรอก/เลือกในรายการก่อนบันทึก
+    });
+  });
+  return { rows, errors, skipped };
+}
+
 class VehiclesPage {
   constructor() {
     this.vehicles = [];
@@ -72,6 +197,16 @@ class VehiclesPage {
     document.getElementById('btnCopyStart')?.addEventListener('click', () => this.handleCopyStart());
     document.getElementById('btnCopyConfirm')?.addEventListener('click', () => this.handleCopyConfirm());
     document.getElementById('btnCopyCancel')?.addEventListener('click', () => this.handleCopyCancel());
+
+    // Import items from a CSV / Excel file (เข้าคิวรายการเดียวกับการคัดลอก แล้วยืนยันด้วยปุ่มเดิม)
+    const importInput = document.getElementById('itemImportFile');
+    document.getElementById('btnItemImport')?.addEventListener('click', () => importInput?.click());
+    importInput?.addEventListener('change', () => {
+      const file = importInput.files?.[0];
+      importInput.value = '';   // เลือกไฟล์เดิมซ้ำได้หลังแก้ไฟล์
+      if (file) this.handleItemImport(file);
+    });
+    document.getElementById('btnItemTemplate')?.addEventListener('click', () => this.downloadItemTemplate());
   }
 
   renderVehicleSelect() {
@@ -112,10 +247,11 @@ class VehiclesPage {
     const hadStaging = this.copyStaging.length > 0;
     this.currentVehicleId = vehicleId;
     this.currentVehicle = this.vehicles.find(v => String(v.id) === String(vehicleId)) || null;
-    this.clearCopyStaging();
     if (hadStaging) {
-      window.toast.info('สลับรถแล้ว — ล้างรายการรอคัดลอกที่ค้างอยู่');
+      this.clearCopyStaging();   // ผู้ใช้สลับรถเอง → ทิ้งรายการที่ค้าง (รวมที่เก็บในเบราว์เซอร์)
+      window.toast.info('สลับรถแล้ว — ล้างรายการรอเพิ่มลงรถที่ค้างอยู่');
     }
+    // ไม่มีรายการค้างในหน้า: อย่าแตะที่เก็บในเบราว์เซอร์ — loadItems() จะกู้คืนให้ถ้าเป็นรถคันเดิม (เช่น หลังเข้าสู่ระบบใหม่)
     this.renderCopySourceSelect();
     this.renderVehicleMeta();
     await this.loadItems(vehicleId);
@@ -247,6 +383,7 @@ class VehiclesPage {
         this.items = res.data?.items || [];
       }
       this.renderItems();
+      this.restoreStagingDraft(vehicleId);
     } catch (error) {
       console.error('Failed to load items:', error);
       try {
@@ -1241,24 +1378,18 @@ class VehiclesPage {
     );
     if (!confirmed) return;
 
-    this.copyStaging = sourceItems.map(item => {
-      const counted = String(item.stock_updated_at || '').trim() !== '';
-      return {
-        name: item.name || '',
-        standard: item.standard || '',
-        expiry_text: item.expiry_text || '',
-        is_battery: !!item.is_battery,
-        item_type: item.item_type || '',
-        has_pressure: !!item.has_pressure,
-        active: item.active !== false && item.active !== 0,
-        // ยอดคงเหลือติดมาเฉพาะแถวที่ต้นทาง "เคยตรวจนับจริง" — แถวที่ไม่เคยนับต้องว่างไว้
-        // เพราะ 0 กับ "ยังไม่เคยตรวจนับ" ความหมายคนละอย่างบนหน้ารอเติม
-        current_qty: counted ? String(item.current_qty ?? '') : '',
-        counted,
-        stock_stamp: counted ? this.fmtStamp(item.stock_updated_at) : '',
-      };
-    });
-    this.copySourceLabel = sourceLabel;
+    // ไม่คัดลอกยอดบนรถข้ามคัน (ของจริงไม่ได้ย้ายมา) — กรอก "จำนวนที่จะจัดขึ้นรถ + วันหมดอายุ" เองในรายการได้
+    this.copyStaging = sourceItems.map(item => ({
+      name: item.name || '',
+      standard: item.standard || '',
+      is_battery: !!item.is_battery,
+      item_type: item.item_type || (item.is_battery ? 'non_expiring' : 'individual'),
+      has_pressure: !!item.has_pressure,
+      active: item.active !== false && item.active !== 0,
+      stock_qty: '',
+      stock_expiry: '',
+    }));
+    this.copySourceLabel = `จากรถคัน ${sourceLabel}`;
     this.renderCopyPreview();
     window.toast.info(
       `ดึงรายการจาก ${sourceLabel} จำนวน ${sourceItems.length} รายการ `
@@ -1273,7 +1404,7 @@ class VehiclesPage {
         size: 'sm',
         content: `
           <p class="mb-2">คุณต้องการคัดลอกรายการอุปกรณ์จากรถคัน <strong>${UI.escape(sourceLabel)}</strong> ใช่หรือไม่?</p>
-          <p class="mb-2">ระบบจะนำอุปกรณ์ทั้งหมด <strong>${count} รายการ</strong> มาแสดงในรถคัน <strong>${UI.escape(targetLabel)}</strong> เพื่อให้ตรวจสอบ/แก้ไขก่อนบันทึก — ยังไม่มีการบันทึกจนกว่าจะกด “ยืนยันคัดลอก”</p>
+          <p class="mb-2">ระบบจะนำอุปกรณ์ทั้งหมด <strong>${count} รายการ</strong> มาแสดงในรถคัน <strong>${UI.escape(targetLabel)}</strong> เพื่อให้ตรวจสอบ/แก้ไขก่อนบันทึก — ยังไม่มีการบันทึกจนกว่าจะกด “ยืนยันเพิ่ม…ลงรถ”</p>
           <p class="mb-2 text-sm">สิ่งที่คัดลอกมาด้วย: ชื่อ, จำนวนมาตรฐาน, ประเภทอุปกรณ์ และสถานะใช้งาน/พัก — <strong>ไม่คัดลอกยอดคงเหลือ/Lot</strong> (รถปลายทางเริ่มเป็น "ยังไม่เคยตรวจนับ" จนกว่าจะเติมของหรือตรวจนับ)</p>
           ${replacing ? '<p class="mb-2 text-sm" style="color: var(--warn);">⚠️ มีรายการรอคัดลอกอยู่ก่อนแล้ว — รายการชุดใหม่นี้จะแทนที่ชุดเดิม</p>' : ''}
         `,
@@ -1310,19 +1441,40 @@ class VehiclesPage {
     if (this.copyStaging.length === 0) {
       panel.classList.add('hidden');
       list.innerHTML = '';
+      this.saveStagingDraft();
       return;
     }
 
     const existing = new Set(this.items.map(i => String(i.name || '').trim().toLowerCase()));
+    const today = this.todayIso();
+    const yesNo = (field, on) => `<select data-copy-field="${field}">
+                <option value="false" ${!on ? 'selected' : ''}>ไม่ใช่</option>
+                <option value="true" ${on ? 'selected' : ''}>ใช่</option>
+              </select>`;
     list.innerHTML = this.copyStaging.map((row, idx) => {
       const dup = existing.has(row.name.trim().toLowerCase());
+      const type = row.item_type || 'individual';
+      // กล่อง/รายชิ้น: จัดของขึ้นรถได้เลยพร้อมวันหมดอายุ | ไม่มีวันหมดอายุ: แบต/แรงดัน (เพิ่มเครื่องที่หน้าเติมของ)
+      const typeFields = type === 'non_expiring'
+        ? `<div><label>มีแบตเตอรี่</label>${yesNo('is_battery', row.is_battery)}</div>
+            <div><label>วัดแรงดัน (PSI)</label>${yesNo('has_pressure', row.has_pressure)}</div>
+            <p class="copy-row-hint copy-row-wide">🩺 ไม่มีวันหมดอายุ — เพิ่มเครื่อง/ถังพร้อมค่าแบต/แรงดันที่แท็บ “เติมของ” หลังบันทึก</p>`
+        : `<div>
+              <label for="cpq-${idx}">จำนวนที่จะจัดขึ้นรถ</label>
+              <input id="cpq-${idx}" type="number" min="0" step="${type === 'individual' ? 1 : 'any'}" inputmode="decimal"
+                data-copy-field="stock_qty" value="${UI.escape(String(row.stock_qty ?? ''))}" placeholder="เว้นว่าง = ยังไม่จัดของ">
+            </div>
+            <div>
+              <label for="cpe-${idx}">วันหมดอายุ</label>
+              <input id="cpe-${idx}" type="date" min="${today}" data-copy-field="stock_expiry" value="${UI.escape(row.stock_expiry || '')}">
+            </div>`;
       return `
         <div class="copy-row" data-idx="${idx}">
           <div class="copy-row-top">
             <span class="copy-row-no">${idx + 1}</span>
             <input type="text" data-copy-field="name" value="${UI.escape(row.name)}" placeholder="ชื่ออุปกรณ์" aria-label="ชื่ออุปกรณ์รายการที่ ${idx + 1}">
             <span class="chip chip-warn ${dup ? '' : 'hidden'}" data-copy-dup>⚠️ มีอยู่แล้วในรถนี้</span>
-            <button type="button" class="small-btn gray copy-row-remove" data-copy-action="remove" title="เอาออกจากรายการรอคัดลอก">✕ ลบ</button>
+            <button type="button" class="small-btn gray copy-row-remove" data-copy-action="remove" title="เอาออกจากรายการรอบันทึก">✕ ลบ</button>
           </div>
           <div class="copy-row-fields">
             <div>
@@ -1330,20 +1482,11 @@ class VehiclesPage {
               <input type="text" data-copy-field="standard" value="${UI.escape(row.standard)}">
             </div>
             <div>
-              <label>วันหมดอายุ</label>
-              ${/^\d{4}-\d{2}-\d{2}$/.test(String(row.expiry_text || ''))
-                ? `<input type="date" data-copy-field="expiry_text" value="${UI.escape(row.expiry_text)}">`
-                : `<input type="text" data-copy-field="expiry_text" value="${UI.escape(row.expiry_text)}" placeholder="ข้อความวันหมดอายุ เช่น 10 / 15/12/2569">`}
-            </div>
-            <div>
-              <label>ยอดคงเหลือบนรถ</label>
-              <input type="number" min="0" step="any" inputmode="decimal" data-copy-field="current_qty"
-                value="${UI.escape(String(row.current_qty ?? ''))}"
-                placeholder="${row.counted ? 'เว้นว่าง = ไม่คัดลอกยอด' : 'ยังไม่เคยตรวจนับ'}"
-                aria-label="ยอดคงเหลือบนรถของรายการที่ ${idx + 1}">
-              <p class="copy-row-hint">${row.counted
-                ? `คัดลอกจากต้นทาง • ยอดล่าสุด ${UI.escape(row.stock_stamp || '')}`
-                : 'ต้นทางยังไม่เคยตรวจนับ — กรอกตัวเลขถ้าได้ตรวจนับของจริงบนคันนี้แล้ว'}</p>
+              <label>ประเภท</label>
+              <select data-copy-field="item_type">
+                ${VEHICLE_ITEM_TYPES.map(([value, label]) =>
+                  `<option value="${value}" ${type === value ? 'selected' : ''}>${label}</option>`).join('')}
+              </select>
             </div>
             <div>
               <label>สถานะ</label>
@@ -1352,22 +1495,17 @@ class VehiclesPage {
                 <option value="false" ${row.active === false ? 'selected' : ''}>พักใช้งาน</option>
               </select>
             </div>
-            <div>
-              <label>เป็นแบตเตอรี่</label>
-              <select data-copy-field="is_battery">
-                <option value="false" ${!row.is_battery ? 'selected' : ''}>ไม่ใช่</option>
-                <option value="true" ${row.is_battery ? 'selected' : ''}>ใช่</option>
-              </select>
-            </div>
+            ${typeFields}
           </div>
         </div>`;
     }).join('');
 
     panel.classList.remove('hidden');
-    if (fromEl) fromEl.textContent = `จากรถคัน ${this.copySourceLabel}`;
-    if (countChip) countChip.textContent = `รอคัดลอก ${this.copyStaging.length} รายการ`;
-    if (confirmBtn) confirmBtn.textContent = `ยืนยันคัดลอก ${this.copyStaging.length} รายการ`;
+    if (fromEl) fromEl.textContent = this.copySourceLabel;
+    if (countChip) countChip.textContent = `รอบันทึก ${this.copyStaging.length} รายการ`;
+    if (confirmBtn) confirmBtn.textContent = `ยืนยันเพิ่ม ${this.copyStaging.length} รายการลงรถ`;
     this.renderCopyStockSummary();
+    this.saveStagingDraft();
 
     list.querySelectorAll('[data-copy-field]').forEach(input => {
       input.addEventListener('input', () => this.onCopyFieldChange(input));
@@ -1382,9 +1520,10 @@ class VehiclesPage {
   renderCopyStockSummary() {
     const el = document.getElementById('copyPreviewStock');
     if (!el) return;
-    const withStock = this.copyStaging.filter(row => String(row.current_qty ?? '').trim() !== '').length;
+    const withStock = this.copyStaging.filter(row => String(row.stock_qty ?? '').trim() !== '').length;
     const resting = this.copyStaging.filter(row => row.active === false).length;
-    el.textContent = `มียอดคงเหลือบนรถติดมา ${withStock}/${this.copyStaging.length} รายการ`
+    el.textContent = `จะจัดของขึ้นรถพร้อมวันหมดอายุ ${withStock}/${this.copyStaging.length} รายการ`
+      + ' (ที่เว้นว่างไว้ เติมภายหลังที่แท็บ “เติมของ”)'
       + (resting > 0 ? ` • พักใช้งาน ${resting} รายการ` : '');
     el.classList.toggle('hidden', this.copyStaging.length === 0);
   }
@@ -1395,17 +1534,20 @@ class VehiclesPage {
     const field = input.dataset.copyField;
     if (!rowEl || Number.isNaN(idx) || !this.copyStaging[idx]) return;
 
-    if (field === 'is_battery' || field === 'active') {
+    if (field === 'is_battery' || field === 'has_pressure' || field === 'active') {
       this.copyStaging[idx][field] = input.value === 'true';
-    } else if (field === 'current_qty') {
-      // พิมพ์ตัวเลขเอง = ถือเป็นยอดที่นับจริงบนคันนี้ แม้ต้นทางจะยังไม่เคยตรวจนับ
-      this.copyStaging[idx].current_qty = input.value.trim();
-      if (this.copyStaging[idx].current_qty !== '') this.copyStaging[idx].counted = true;
     } else {
       this.copyStaging[idx][field] = input.value;
     }
 
-    if (field === 'current_qty') this.renderCopyStockSummary();
+    if (field === 'item_type') {
+      // ช่องในแถวต่างกันตามประเภท (จำนวน+วันหมดอายุ ↔ แบต/แรงดัน) — วาดใหม่แล้วคืนโฟกัสที่ช่องประเภท
+      this.renderCopyPreview();
+      document.querySelector(`#copyPreviewList .copy-row[data-idx="${idx}"] [data-copy-field="item_type"]`)?.focus();
+      return;
+    }
+    if (field === 'stock_qty') this.renderCopyStockSummary();
+    this.saveStagingDraft();
 
     if (field === 'name') {
       const dupEl = rowEl.querySelector('[data-copy-dup]');
@@ -1423,51 +1565,118 @@ class VehiclesPage {
     window.toast.info(`เหลือรายการรอคัดลอก ${this.copyStaging.length} รายการ`);
   }
 
-  async handleCopyConfirm() {
-    if (this.copyStaging.length === 0) return;
+  /** แถวนี้จะจัดของขึ้นรถด้วยหรือไม่ (มีจำนวน และไม่ใช่ประเภทไม่มีวันหมดอายุ) */
+  stagedStock(row) {
+    const qty = String(row.stock_qty ?? '').trim();
+    return (row.item_type || 'individual') !== 'non_expiring' && qty !== '' ? Number(qty) : null;
+  }
 
+  /** ตรวจทุกแถวก่อนบันทึก — ผิดแถวไหนเลื่อนไปและโฟกัสช่องนั้น */
+  validateStaging() {
+    const today = this.todayIso();
+    const fail = (i, field, message) => {
+      window.toast.error(`รายการที่ ${i + 1}: ${message}`);
+      const el = document.querySelector(`#copyPreviewList .copy-row[data-idx="${i}"] [data-copy-field="${field}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el?.focus();
+      return false;
+    };
     for (let i = 0; i < this.copyStaging.length; i++) {
       const row = this.copyStaging[i];
-      if (!String(row.name).trim() || !String(row.standard).trim()) {
-        window.toast.error(`รายการที่ ${i + 1}: กรอกชื่ออุปกรณ์และจำนวนมาตรฐานให้ครบก่อนยืนยัน`);
-        return;
+      if (!String(row.name).trim()) return fail(i, 'name', 'กรอกชื่ออุปกรณ์');
+      if (!String(row.standard).trim()) return fail(i, 'standard', 'กรอกจำนวนมาตรฐาน');
+      if ((row.item_type || 'individual') === 'non_expiring') continue;
+      const qty = this.stagedStock(row);
+      const expiry = String(row.stock_expiry || '');
+      if (qty === null) {
+        if (expiry) return fail(i, 'stock_qty', 'ใส่วันหมดอายุแล้ว กรุณากรอกจำนวนที่จะจัดขึ้นรถด้วย (หรือลบวันที่ออก)');
+        continue;
       }
-      const qtyText = String(row.current_qty ?? '').trim();
-      if (qtyText !== '' && (!Number.isFinite(Number(qtyText)) || Number(qtyText) < 0)) {
-        window.toast.error(`รายการที่ ${i + 1}: ยอดคงเหลือบนรถต้องเป็นตัวเลข 0 ขึ้นไป`);
-        return;
-      }
+      if (!Number.isFinite(qty) || qty <= 0) return fail(i, 'stock_qty', 'จำนวนที่จะจัดขึ้นรถต้องมากกว่า 0');
+      if (row.item_type === 'individual' && !Number.isInteger(qty)) return fail(i, 'stock_qty', 'ของแบบรายชิ้นต้องเป็นจำนวนเต็ม');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry)) return fail(i, 'stock_expiry', 'เลือกวันหมดอายุของของที่จะจัดขึ้นรถ');
+      if (expiry < today) return fail(i, 'stock_expiry', 'วันหมดอายุผ่านไปแล้ว — ไม่ควรจัดของหมดอายุขึ้นรถ');
     }
+    return true;
+  }
+
+  async handleCopyConfirm() {
+    if (this.copyStaging.length === 0 || !this.validateStaging()) return;
 
     const btn = document.getElementById('btnCopyConfirm');
+    const carId = this.currentVehicleId;
+    const rows = this.copyStaging.slice();
     UI.setLoading(btn, true);
+    let res;
     try {
-      const res = await window.vehicleApi.copyItems(this.currentVehicleId, {
-        items: this.copyStaging.map(row => ({
+      res = await window.vehicleApi.copyItems(carId, {
+        items: rows.map(row => ({
           name: String(row.name).trim(),
           standard: String(row.standard).trim(),
-          expiry_text: String(row.expiry_text || '').trim(),
           is_battery: !!row.is_battery,
           item_type: row.item_type || '',
           has_pressure: !!row.has_pressure,
           active: row.active !== false,
-          // null = ไม่มีข้อมูลตรวจนับ → ฝั่งเซิร์ฟเวอร์จะปล่อย "ยังไม่เคยตรวจนับ" ไว้
-          current_qty: String(row.current_qty ?? '').trim() === '' ? null : String(row.current_qty).trim(),
         })),
       });
-      const created = res.data?.created ?? this.copyStaging.length;
-      const inactiveCopied = Number(res.data?.inactive_copied ?? 0);
-      this.clearCopyStaging();
-      window.toast.success(
-        `คัดลอกรายชื่ออุปกรณ์แล้ว ${created} รายการ (ไม่รวมของบนรถ)`
-        + (inactiveCopied > 0 ? ` • พักใช้งาน ${inactiveCopied} รายการ` : '')
-      );
-      await this.loadItems(this.currentVehicleId);
     } catch (error) {
-      window.toast.error('คัดลอกไม่สำเร็จ: ' + (error.message || 'ไม่ทราบสาเหตุ'));
-    } finally {
       UI.setLoading(btn, false);
+      // 401 = หมดเวลาเข้าสู่ระบบ: รายการยังเก็บไว้ในเบราว์เซอร์ เข้าสู่ระบบใหม่แล้วกลับมาที่รถคันนี้ได้เลย
+      if (error.status !== 401) window.toast.error('บันทึกรายการไม่สำเร็จ: ' + (error.message || 'ไม่ทราบสาเหตุ'));
+      return;
     }
+
+    // จัดของขึ้นรถผ่านหน้าเติมของ (สร้าง Lot + วันหมดอายุ + ประวัติการเคลื่อนไหว) — ทางเดียวกับแท็บ "เติมของ"
+    const ids = res.data?.item_ids || [];
+    const lines = rows.map((row, i) => {
+      const qty = this.stagedStock(row);
+      return qty !== null && ids[i] ? { item_id: ids[i], lots: [{ qty, expiry_date: row.stock_expiry }] } : null;
+    }).filter(Boolean);
+    const created = res.data?.created ?? rows.length;
+    const inactive = Number(res.data?.inactive_copied ?? 0);
+    this.clearCopyStaging();
+
+    let stocked = 0;
+    if (lines.length) {
+      try {
+        const token = (window.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '') : UI.uid() + UI.uid();
+        await window.staffApi.refill(carId, { client_token: token, note: 'จัดของขึ้นรถพร้อมรายการที่เพิ่มใหม่', lines });
+        stocked = lines.length;
+      } catch (error) {
+        window.toast.warning(`เพิ่มรายการแล้ว ${created} รายการ แต่จัดของขึ้นรถไม่สำเร็จ: ${error.message || ''} — เติมต่อได้ที่แท็บ “เติมของ”`, 12000);
+      }
+    }
+    if (!lines.length || stocked) {
+      window.toast.success(
+        `เพิ่มรายการลงรถแล้ว ${created} รายการ`
+        + (stocked ? ` • จัดของขึ้นรถพร้อมวันหมดอายุ ${stocked} รายการ` : '')
+        + (inactive > 0 ? ` • พักใช้งาน ${inactive} รายการ` : '')
+      );
+    }
+    UI.setLoading(btn, false);
+    await this.loadItems(carId);
+  }
+
+  // รายการรอบันทึกเก็บในเบราว์เซอร์ (แท็บนี้) — ถ้าหมดเวลาเข้าสู่ระบบหรือรีเฟรชหน้า ข้อมูลที่แก้ไว้ไม่หาย
+  saveStagingDraft() {
+    try {
+      if (this.copyStaging.length) {
+        sessionStorage.setItem(STAGING_KEY, JSON.stringify({ carId: this.currentVehicleId, label: this.copySourceLabel, rows: this.copyStaging }));
+      } else {
+        sessionStorage.removeItem(STAGING_KEY);
+      }
+    } catch (error) { /* ไม่มี storage ก็ทำงานต่อได้ แค่ไม่กู้คืน */ }
+  }
+
+  restoreStagingDraft(vehicleId) {
+    if (this.copyStaging.length) return;
+    let saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem(STAGING_KEY) || 'null'); } catch (error) { return; }
+    if (!saved || String(saved.carId) !== String(vehicleId) || !Array.isArray(saved.rows) || !saved.rows.length) return;
+    this.copyStaging = saved.rows;
+    this.copySourceLabel = saved.label || '';
+    this.renderCopyPreview();
+    window.toast.info(`กู้คืนรายการที่ยังไม่ได้บันทึก ${saved.rows.length} รายการ — ตรวจสอบแล้วกดยืนยันได้เลย`);
   }
 
   async handleCopyCancel() {
@@ -1485,6 +1694,90 @@ class VehiclesPage {
     this.copyStaging = [];
     this.copySourceLabel = '';
     this.renderCopyPreview();
+  }
+
+  // ==================== Import items from file (.csv / .xlsx) ====================
+
+  downloadItemTemplate() {
+    const rows = [
+      ITEM_IMPORT_COLUMNS.map(c => c.header),
+      ['ตัวอย่าง Adrenaline 1 mg', '10 หลอด', 'รายชิ้น', 'ไม่ใช่', 'ไม่ใช่', 'ใช้งาน', '10', '31/12/2569'],
+      ['ตัวอย่าง ชุดให้น้ำเกลือ', '2 ชุด', 'กล่อง', 'ไม่ใช่', 'ไม่ใช่', 'ใช้งาน', '2', '30/06/2570'],
+      ['ตัวอย่าง ผ้าก๊อซ (ยังไม่จัดของ)', '5 ห่อ', 'กล่อง', 'ไม่ใช่', 'ไม่ใช่', 'ใช้งาน', '', ''],
+      ['ตัวอย่าง ถังออกซิเจน', '2 ถัง', 'ไม่มีวันหมดอายุ', 'ไม่ใช่', 'ใช่', 'ใช้งาน', '', ''],
+      ['ตัวอย่าง เครื่อง AED', '1 เครื่อง', 'ไม่มีวันหมดอายุ', 'ใช่', 'ไม่ใช่', 'ใช้งาน', '', ''],
+    ];
+    const csvCell = (v) => /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+    const csv = rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+    // BOM ให้ Excel เปิดภาษาไทยถูก
+    const blob = new Blob(['﻿' + csv + '\r\n'], { type: 'text/csv;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'แบบฟอร์มนำเข้าอุปกรณ์ในรถ.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    window.toast.success('ดาวน์โหลดไฟล์ต้นแบบแล้ว — แถวที่ขึ้นต้นด้วย "ตัวอย่าง" ระบบจะข้ามให้อัตโนมัติ');
+  }
+
+  async handleItemImport(file) {
+    if (!this.currentVehicleId) {
+      window.toast.warning('กรุณาเลือกรถที่จะเพิ่มอุปกรณ์ก่อน');
+      return;
+    }
+    if (typeof XLSX === 'undefined') {
+      window.toast.error('ตัวอ่านไฟล์ยังโหลดไม่สำเร็จ — กรุณารีเฟรชหน้าแล้วลองใหม่');
+      return;
+    }
+
+    let table;
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = /\.csv$/i.test(file.name)
+        ? XLSX.read(NursesPage.decodeCsvBytes(buffer), { type: 'string', raw: true })
+        : XLSX.read(buffer, { type: 'array', cellDates: true });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      // raw: เซลล์วันที่ใน Excel ได้เป็น Date (ไม่ถูกจัดรูปแบบเป็น ด/ว/ปป แบบอเมริกัน) ตัวเลขได้เป็น number
+      table = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+    } catch (error) {
+      window.toast.error('อ่านไฟล์ไม่สำเร็จ — รองรับ .csv และ .xlsx (ใช้ไฟล์ต้นแบบได้)');
+      return;
+    }
+
+    const { rows, errors, skipped } = parseItemImportTable(table);
+    if (errors.length) {
+      await window.alertDialog(
+        'ยังนำเข้าไม่ได้ กรุณาแก้ไฟล์ตามนี้แล้วเลือกไฟล์ใหม่:\n\n' + errors.slice(0, 12).join('\n')
+          + (errors.length > 12 ? `\n… และอีก ${errors.length - 12} จุด` : ''),
+        { title: 'ไฟล์นำเข้ามีข้อผิดพลาด' }
+      );
+      return;
+    }
+    if (!rows.length) {
+      await window.alertDialog('ไม่พบรายการอุปกรณ์ในไฟล์ (แถวตัวอย่างและแถวว่างจะถูกข้าม)', { title: 'ไม่มีรายการให้นำเข้า' });
+      return;
+    }
+    if (rows.length > 300) {
+      await window.alertDialog(`นำเข้าได้ครั้งละไม่เกิน 300 รายการ (ไฟล์นี้มี ${rows.length} รายการ) — กรุณาแบ่งไฟล์`, { title: 'รายการมากเกินไป' });
+      return;
+    }
+    if (this.copyStaging.length > 0) {
+      const ok = await window.confirmDialog(
+        `มีรายการรอคัดลอก/นำเข้าค้างอยู่ ${this.copyStaging.length} รายการ — แทนที่ด้วยรายการจากไฟล์หรือไม่?`,
+        { title: 'แทนที่รายการที่ค้างอยู่', confirmText: 'แทนที่' }
+      );
+      if (!ok) return;
+    }
+
+    this.copyStaging = rows;
+    this.copySourceLabel = `จากไฟล์ ${file.name}`;
+    this.renderCopyPreview();
+    document.getElementById('copyPreview')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.toast.info(
+      `อ่านไฟล์แล้ว ${rows.length} รายการ${skipped ? ` (ข้ามแถวตัวอย่าง/แถวว่าง ${skipped} แถว)` : ''} `
+      + '— แก้ไข/เลือกวันหมดอายุได้เลย แล้วกด "ยืนยันเพิ่มลงรถ"'
+    );
   }
 
   // ==================== Vehicle CRUD (add / edit / delete) ====================

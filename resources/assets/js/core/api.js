@@ -66,6 +66,10 @@ class ApiClient {
         const error = new Error(message);
         error.status = response.status;
         error.data = data;
+        // session หมด (เช่น server รีสตาร์ท/ไม่ได้ใช้นาน) → ให้หน้าเว็บพากลับไปหน้าเข้าสู่ระบบ แทนที่จะพังเงียบ ๆ
+        if (response.status === 401 && !endpoint.startsWith('/auth/')) {
+          window.dispatchEvent(new CustomEvent('auth:expired'));
+        }
         throw error;
       }
 

@@ -1,0 +1,53 @@
+/* ========================================
+   สีสถานะ / การแจ้งเตือน (โหลดท้ายสุด เพื่อให้ทับสไตล์รายหน้า)
+
+   แดงทึบ + ตัวอักษรขาว = ร้ายแรง ต้องรีบจัดการ: ของขาด, ไม่พร้อมใช้, หมดอายุแล้ว, กรอกผิด, ข้อผิดพลาด
+   น้ำเงินทึบ + ตัวอักษรขาว = ปุ่มหลัก / ปุ่มดำเนินการ (layout.css: button.secondary, .copy-start-btn)
+   เหลือง/ส้ม (พื้นอ่อน ตัวเข้ม) = เตือนล่วงหน้า เช่น ใกล้หมดอายุ — ไม่ใช่สีแดง
+   ใช้สีจากตัวแปรใน base.css (--danger / --primary และ --on-*) เท่านั้น
+   ======================================== */
+
+/* ---------- แดง: ร้ายแรง ---------- */
+.status-critical,
+.chip-miss,                               /* ต้องติดตาม / ผิดพลาด */
+.result-needs_refill,                     /* ⚠️ ของขาด */
+.result-anomaly,                          /* ⛔ ไม่พร้อมใช้ / หมดอายุแล้ว / ผิดปกติ */
+.result-error,                            /* กรอกไม่ถูกต้อง */
+.wiz-lock.is-error,                       /* ล็อกผู้ตรวจไม่ได้ */
+.help-cat-notify.has-items {              /* 🔔 รอเติม N รายการ */
+  background: var(--danger);
+  color: var(--on-danger);
+  border-color: var(--danger-strong);
+}
+.status-critical *,
+.wiz-lock.is-error *,
+.help-cat-notify.has-items * {
+  color: inherit;
+}
+.help-cat-notify.has-items:hover { background: var(--danger-strong); filter: none; }
+/* ปุ่ม ✕ ปิดแจ้งเตือน: ไม่ใช้พื้นไล่สีของปุ่มทั่วไป และบนพื้นแดงไม่จางจนเป็นชมพูอ่านยาก */
+.alert > button { background: transparent; box-shadow: none; padding: 0 4px; }
+.status-critical .opacity-50 { opacity: 0.9; }
+
+/* กล่องสรุปก่อนส่ง: หัวกล่องเป็นแถบแดงทึบ ส่วนรายการด้านล่างอ่านบนพื้นขาว */
+.sum-block.is-bad {
+  border-color: var(--danger);
+  background: #fff;
+  overflow: hidden;
+}
+.sum-block.is-bad > .sum-title {
+  margin: -12px -14px 0;
+  padding: 10px 14px;
+  background: var(--danger);
+  color: var(--on-danger);
+}
+
+/* ---------- เหลือง: เตือนล่วงหน้า (ไม่ร้ายแรง) ---------- */
+.result-warn { background: var(--warn-soft); color: #92400e; }   /* ใกล้หมดอายุ — ตัวเข้ม 6.8:1 */
+
+/* ---------- น้ำเงิน: ปุ่มหลัก (ทึบ ตัวขาว) ---------- */
+.status-primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  border-color: var(--primary-strong);
+}

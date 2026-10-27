@@ -13,7 +13,9 @@ class DashboardPage {
     // Get user role from auth
     const user = window.auth?.getUser();
     this.userRole = user?.role || 'staff';
-    
+    const greeting = document.getElementById('dashGreeting');
+    if (greeting && user?.full_name) greeting.textContent = `สวัสดี ${user.full_name} 👋`;
+
     await this.loadData();
     this.render();
     this.startAutoRefresh();

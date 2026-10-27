@@ -337,7 +337,7 @@ class VehicleService
                 'notes' => $notes !== '' ? $notes : null,
             ]);
 
-            $inserted = $this->insertItems($id, $seed['items']);
+            $inserted = count($this->insertItems($id, $seed['items']));
 
             $db->commit();
         } catch (\Throwable $e) {
@@ -529,13 +529,16 @@ class VehicleService
     /**
      * เขียน refer_items หลายแถวใน transaction ของผู้เรียก
      * target_qty/unit สกัดจาก standard ใหม่ทุกครั้ง (ข้อตกลงข้อ 3)
-     * current_qty/stock_updated_at ติดมาจากแหล่งคัดลอกเฉพาะแถวที่มียอดจริง (ข้อตกลงข้อ 1)
+     * ไม่ใส่ยอด/วันหมดอายุตรงนี้ — ของบนรถต้องเข้าทาง Lot (หน้าเติมของ / RestockService::refill)
+     *
+     * @return string[] รหัสอุปกรณ์ที่สร้าง เรียงตามลำดับ $rows (ให้ client จัดของขึ้นรถต่อได้ทันที)
      */
-    private function insertItems(string $carId, array $rows): int
+    private function insertItems(string $carId, array $rows): array
     {
         if (empty($rows)) {
-            return 0;
+            return [];
         }
+        $ids = [];
 
         $db = Database::getConnection();
         $table = $this->itemModel->getTable();
@@ -547,7 +550,7 @@ class VehicleService
             $active = array_key_exists('active', $row) ? !empty($row['active']) : true;
             $type = VehicleStockService::itemType(['item_type' => $row['item_type'] ?? '', 'is_battery' => $row['is_battery'] ?? 0]);
             $values[] = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)';
-            $params[] = 'itm-' . substr(generate_id(), 0, 12);
+            $ids[] = $params[] = 'itm-' . substr(generate_id(), 0, 12);
             $params[] = $carId;
             $params[] = $row['name'];
             $params[] = $row['standard'];
@@ -568,7 +571,7 @@ class VehicleService
              VALUES " . implode(', ', $values)
         );
         $stmt->execute($params);
-        return count($rows);
+        return $ids;
     }
 
     /**
@@ -659,7 +662,7 @@ class VehicleService
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
-            $created = $this->insertItems($carId, $rows);
+            $itemIds = $this->insertItems($carId, $rows);
             $db->commit();
         } catch (\Throwable $e) {
             if ($db->inTransaction()) {
@@ -667,9 +670,12 @@ class VehicleService
             }
             throw $e;
         }
+        $created = count($itemIds);
 
         return [
             'created' => $created,
+            'item_ids' => $itemIds,   // ลำดับเดียวกับ items ที่ส่งมา
+
             'stock_copied' => $stockCopied,
             'active_copied' => $created - $inactiveCopied,
             'inactive_copied' => $inactiveCopied,

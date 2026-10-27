@@ -136,6 +136,8 @@ class RestockService
             // ไม่มีวันหมดอายุ: ยอด = จำนวนเครื่องบนรถ (ไม่พร้อมใช้ยังนับเป็นเครื่อง แต่ขึ้นเป็น "ตรวจสอบ/เปลี่ยน")
             $usable = $counted ? round($stock['available'] + $stock['unknown'], 2) : (float)count($units);
             $notReady = count(array_filter($units, fn($u) => ($u['status'] ?? '') !== ItemUnit::STATUS_READY));
+            // พร้อมใช้แต่แบต/แรงดันต่ำกว่าเกณฑ์ = ต้องชาร์จ/เติม (ขึ้นในตัวกรอง "ต้องเติม")
+            $low = count(array_filter($units, fn($u) => VehicleStockService::unitLowReasonsForItem($u, $item) !== []));
             $rows[] = [
                 'id' => $id,
                 'name' => (string)$item['name'],
@@ -149,6 +151,7 @@ class RestockService
                 'requires_expiry' => VehicleStockService::requiresExpiry($item),
                 'shortfall' => $target !== null ? round(max(0.0, $target - $usable), 2) : 0.0,
                 'not_ready' => $notReady,
+                'low' => $low,
                 'has_battery' => VehicleStockService::hasBattery($item),
                 'has_pressure' => VehicleStockService::hasPressure($item),
                 'over_target' => ($target !== null && $counted && (float)($current ?? 0) > $target),
@@ -307,13 +310,15 @@ class RestockService
                         throw new ApiException($name . ': ยังไม่ได้เพิ่ม ปลด หรืออัปเดตเครื่อง', 422);
                     }
                     $notReady = 0;
+                    $low = 0;
                     foreach ($this->unitModel->lockActiveByItem($itemId) as $u) {
                         $notReady += (string)$u['status'] !== ItemUnit::STATUS_READY ? 1 : 0;
+                        $low += VehicleStockService::unitLowReasonsForItem($u, $item) !== [] ? 1 : 0;
                     }
                     $applied[] = [
                         'item_id' => $itemId, 'name' => $name, 'item_type' => $type,
                         'before' => $unitsBefore, 'added' => (float)$added, 'retired' => $retired, 'updated' => $updated,
-                        'not_ready' => $notReady,
+                        'not_ready' => $notReady, 'low' => $low,
                         'after' => (float)$this->unitModel->countActive($itemId), 'lots' => [],
                     ];
                     continue;
@@ -525,10 +530,12 @@ class RestockService
      */
     private function applyToOpenRequests(string $carId, array $applied, string $userId, string $userName, string $now): array
     {
-        // ทุกประเภท: จำนวนที่เพิ่มจริงไปปิดบรรทัด "เติม" | ไม่มีวันหมดอายุ: ไม่มีเครื่องไม่พร้อมใช้เหลือ → ปิดบรรทัด "ตรวจสอบ/เปลี่ยน"
+        // ทุกประเภท: จำนวนที่เพิ่มจริงไปปิดบรรทัด "เติม"
+        // ไม่มีวันหมดอายุ: ไม่มีเครื่องไม่พร้อมใช้ และไม่มีแบต/แรงดันต่ำกว่าเกณฑ์เหลือ → ปิดบรรทัด "ตรวจสอบ/เปลี่ยน/ชาร์จ/เติม"
+        $unitsFixed = fn(array $a) => isset($a['not_ready']) && $a['not_ready'] === 0 && ($a['low'] ?? 0) === 0;
         $addedByItem = [];
         foreach ($applied as $a) {
-            if ($a['added'] > 0 || (isset($a['not_ready']) && $a['not_ready'] === 0)) {
+            if ($a['added'] > 0 || $unitsFixed($a)) {
                 $addedByItem[$a['item_id']] = $a;
             }
         }
@@ -556,7 +563,7 @@ class RestockService
                     continue;
                 }
                 $isReplace = ($line['line_type'] ?? 'refill') === 'replace';
-                if ($isReplace ? ($addedByItem[$itemId]['not_ready'] ?? 1) !== 0 : ($left[$itemId] ?? 0) <= 0) {
+                if ($isReplace ? !$unitsFixed($addedByItem[$itemId]) : ($left[$itemId] ?? 0) <= 0) {
                     continue;
                 }
                 $locked = $this->itemModel2->lockLine((string)$request['id'], $itemId);

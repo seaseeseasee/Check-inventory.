@@ -3,6 +3,7 @@
 .env.*
 !.env.*.example
 storage/backups/*
+storage/sessions/
 storage/logs/*
 !storage/backups/.gitkeep
 !storage/logs/.gitkeep
