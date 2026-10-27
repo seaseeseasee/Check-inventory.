@@ -106,6 +106,41 @@ class VehicleStockService
         return $max >= 1 && $max <= 10 ? $max : 4;
     }
 
+    /**
+     * เครื่อง/ถังที่ "พร้อมใช้" แต่แบตหรือแรงดันต่ำกว่าเกณฑ์ที่ตั้งไว้ → ต้องชาร์จ/เติม
+     * ตรวจทั้งแบตและแรงดันแยกกัน (ต่ำอย่างใดอย่างหนึ่งก็นับ) — คืนเหตุผล, ว่าง = ไม่ต่ำ
+     * ใช้กติกาเดียวกันทั้งตอนตรวจเช็ค (InspectionService) และหน้าเติมของ (RestockService)
+     */
+    public static function unitLowReasons(array $unit, bool $hasBattery, ?int $lowBars, bool $hasPressure, ?int $lowPsi, int $maxBars): array
+    {
+        if ((string)($unit['status'] ?? '') !== ItemUnit::STATUS_READY) {
+            return [];   // ไม่พร้อมใช้/เปิดไม่ติด ไปทางรายการ "ตรวจสอบ/เปลี่ยน" อยู่แล้ว
+        }
+        $reasons = [];
+        $level = $unit['battery_level'] ?? null;
+        if ($hasBattery && $lowBars !== null && $level !== null && $level !== '' && (int)$level <= $lowBars) {
+            $reasons[] = sprintf('แบต %d/%d ขีด', (int)$level, $maxBars);
+        }
+        $psi = $unit['pressure_psi'] ?? null;
+        if ($hasPressure && $lowPsi !== null && $psi !== null && $psi !== '' && (float)$psi < $lowPsi) {
+            $reasons[] = sprintf('แรงดัน %d PSI (ต่ำกว่า %d)', (int)round((float)$psi), $lowPsi);
+        }
+        return $reasons;
+    }
+
+    /** unitLowReasons() จากแถวอุปกรณ์ในฐานข้อมูล (เกณฑ์ battery_low_bars / o2_low_psi ของ item) */
+    public static function unitLowReasonsForItem(array $unit, array $item): array
+    {
+        return self::unitLowReasons(
+            $unit,
+            self::hasBattery($item),
+            isset($item['battery_low_bars']) && $item['battery_low_bars'] !== '' ? (int)$item['battery_low_bars'] : null,
+            self::hasPressure($item),
+            isset($item['o2_low_psi']) && $item['o2_low_psi'] !== '' ? (int)$item['o2_low_psi'] : null,
+            self::batteryMax($item)
+        );
+    }
+
     /** วันที่ปัจจุบันตามเวลาไทย (Y-m-d) */
     public static function today(): string
     {

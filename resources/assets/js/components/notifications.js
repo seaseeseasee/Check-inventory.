@@ -1,11 +1,13 @@
 // ========================================
-// COMPONENTS: Notification Floating Button
+// COMPONENTS: Notifications (ตัวเลขบนปุ่มแมวลอย + แถวแจ้งเตือนในกล่องช่วยเหลือ)
 // ========================================
 
 class NotificationCenter {
   constructor() {
-    this.fab = document.getElementById('notifyFab');
+    this.fab = document.getElementById('helpCatBtn');
     this.badge = document.getElementById('notifyBadge');
+    this.goBtn = document.getElementById('notifyGo');
+    this.text = document.getElementById('notifyText');
     this.openStatuses = ['PENDING', 'IN_PROGRESS', 'PARTIAL'];
     this.refreshTimer = null;
   }
@@ -13,7 +15,9 @@ class NotificationCenter {
   init() {
     if (!this.fab) return;
 
-    this.fab.addEventListener('click', () => {
+    this.fab.addEventListener('click', () => this.refresh());
+    this.goBtn?.addEventListener('click', () => {
+      window.helpCat?.close();
       if (typeof switchTab === 'function') switchTab('restock');
       this.refresh();
     });
@@ -46,7 +50,9 @@ class NotificationCenter {
     if (!this.badge || !this.fab) return;
     this.badge.textContent = count > 99 ? '99+' : String(count);
     this.badge.classList.toggle('hidden', count === 0);
-    this.fab.setAttribute('aria-label', count > 0 ? `การแจ้งเตือน ${count} รายการ` : 'การแจ้งเตือน');
+    this.fab.setAttribute('aria-label', count > 0 ? `ขอความช่วยเหลือ · รอเติม ${count} รายการ` : 'ขอความช่วยเหลือ');
+    if (this.text) this.text.textContent = count > 0 ? `รอเติม ${count} รายการ` : 'ไม่มีรายการรอเติม';
+    this.goBtn?.classList.toggle('has-items', count > 0);
   }
 }
 

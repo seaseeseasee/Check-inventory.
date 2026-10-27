@@ -1,5 +1,13 @@
 <!-- Dashboard Tab -->
 <div id="tabContentDashboard">
+  <div class="card mascot-hero">
+    <img class="mascot-hero-img" src="<?= asset('images/mascot/cat-thumbsup.svg') ?>" alt="" width="150" height="154">
+    <div class="mascot-hero-text">
+      <p class="mascot-hero-hi" id="dashGreeting">สวัสดีครับ 👋</p>
+      <h2>ยินดีต้อนรับสู่ระบบเติมสต๊อกรถ Refer</h2>
+      <p>ตรวจเช็กและเติมเวชภัณฑ์ให้รถพร้อมออกปฏิบัติงานทุกเวร</p>
+    </div>
+  </div>
   <div class="card">
     <h2>ภาพรวมระบบ</h2>
     <div class="dash-stats" id="dashStats"></div>
@@ -117,10 +125,18 @@
 <div id="tabContentRestock" class="hidden">
   <div class="card">
     <h2>เติมของ</h2>
+    <div class="mascot-tip">
+      <img src="<?= asset('images/mascot/cat-cart.svg') ?>" alt="" width="120" height="82">
+      <p><b>เลือกรถที่จะเติมของ</b><br>แตะการ์ดรถด้านล่าง ระบบจะแสดงรายการที่ต่ำกว่าเกณฑ์ให้ก่อน</p>
+    </div>
     <p class="step-label">เลือกรถ</p>
     <div class="car-grid" aria-label="เลือกรถที่จะเติมของ" id="refillCarGrid"></div>
     <div id="refillSheet" class="hidden">
       <div class="refill-head" id="refillHead"></div>
+      <div class="mascot-tip">
+        <img src="<?= asset('images/mascot/cat-clipboard.svg') ?>" alt="" width="70" height="72">
+        <p><b>ก่อนกดบันทึก</b><br>ใส่จำนวนที่เติมจริง และตรวจวันหมดอายุของแต่ละล็อตให้ถูกต้อง</p>
+      </div>
       <div class="filter-chips" role="group" aria-label="กรองรายการ">
         <button type="button" class="chip-btn on" id="refillFilterNeed" onclick="setRefillFilter('need')">ต้องเติม <b id="refillCntNeed"></b></button>
         <button type="button" class="chip-btn" id="refillFilterAll" onclick="setRefillFilter('all')">ทั้งหมด <b id="refillCntAll"></b></button>
@@ -199,22 +215,29 @@
         <select id="copySourceCar" aria-label="เลือกรถต้นทางสำหรับคัดลอกอุปกรณ์"></select>
         <button type="button" id="btnCopyStart" class="copy-start-btn" disabled>📋 คัดลอกรายการ</button>
       </div>
+
+      <div id="itemImportBox" class="copy-box">
+        <label for="itemImportFile">นำเข้ารายการจากไฟล์ (.csv / .xlsx)</label>
+        <input type="file" id="itemImportFile" accept=".csv,.xlsx,.xls,text/csv" hidden>
+        <button type="button" id="btnItemImport" class="copy-start-btn">📥 นำเข้าจากไฟล์</button>
+        <button type="button" id="btnItemTemplate" class="copy-start-btn alt">📄 ดาวน์โหลดไฟล์ต้นแบบ</button>
+      </div>
     </div>
 
-    <div id="copyPreview" class="hidden" role="region" aria-label="รายการอุปกรณ์รอคัดลอก">
+    <div id="copyPreview" class="hidden" role="region" aria-label="รายการอุปกรณ์รอเพิ่มลงรถ">
       <div class="copy-preview-head">
         <div class="copy-preview-title">
-          <strong>📋 รายการรอคัดลอก</strong>
+          <strong>📋 รายการรอเพิ่มลงรถ</strong>
           <span id="copyPreviewFrom" class="copy-preview-from"></span>
         </div>
         <span id="copyPreviewCount" class="chip chip-warn"></span>
       </div>
-      <p class="copy-preview-note">ยังไม่ถูกบันทึก — ตรวจสอบ/แก้ไขรายการ แล้วกด “ยืนยันคัดลอก”</p>
+      <p class="copy-preview-note">ยังไม่ถูกบันทึก — แก้ไขรายการ ใส่จำนวนและเลือกวันหมดอายุได้เลย แล้วกด “ยืนยันเพิ่มลงรถ”</p>
       <p id="copyPreviewStock" class="copy-preview-stock hidden"></p>
       <div id="copyPreviewList"></div>
       <div class="copy-preview-actions">
-        <button type="button" id="btnCopyCancel" class="small-btn gray">ยกเลิกรายการคัดลอก</button>
-        <button type="button" id="btnCopyConfirm">ยืนยันคัดลอก</button>
+        <button type="button" id="btnCopyCancel" class="small-btn gray">ยกเลิกรายการทั้งหมด</button>
+        <button type="button" id="btnCopyConfirm">ยืนยันเพิ่มลงรถ</button>
       </div>
     </div>
 

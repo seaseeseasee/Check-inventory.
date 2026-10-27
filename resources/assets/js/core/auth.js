@@ -174,6 +174,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
+// API ตอบ 401 ระหว่างใช้งาน = หมดเวลาเข้าสู่ระบบ → โหลดหน้าใหม่ไปหน้าเข้าสู่ระบบ
+// (ต้องโหลดใหม่: CSRF token ในหน้าเดิมผูกกับ session เก่า เข้าสู่ระบบทับหน้าเดิมจะโดนปฏิเสธ)
+// รายการที่กำลังทำซึ่งเก็บไว้ในเบราว์เซอร์ (เช่น รายการรอเพิ่มลงรถ) จะถูกกู้คืนหลังเข้าสู่ระบบ
+const AUTH_EXPIRED_KEY = 'emer.authExpiredAt';
+window.addEventListener('auth:expired', () => {
+  if (!window.auth.isAuthenticated) return;   // ยิงครั้งเดียว แม้หลาย request ได้ 401 พร้อมกัน
+  window.auth.isAuthenticated = false;
+  try { sessionStorage.setItem(AUTH_EXPIRED_KEY, String(Date.now())); } catch (error) { /* แค่ไม่มีข้อความแจ้ง */ }
+  window.location.reload();
+});
+document.addEventListener('DOMContentLoaded', async () => {
+  if (await window.auth.init()) return;
+  let at = 0;
+  try { at = Number(sessionStorage.getItem(AUTH_EXPIRED_KEY) || 0); sessionStorage.removeItem(AUTH_EXPIRED_KEY); } catch (error) { /* ignore */ }
+  const errorEl = document.getElementById('authError');
+  if (errorEl && at && Date.now() - at < 60000) {
+    errorEl.textContent = 'หมดเวลาการเข้าสู่ระบบ กรุณาเข้าสู่ระบบอีกครั้ง — รายการที่กำลังทำยังอยู่';
+  }
+});
+
 // ---------- หน้าบังคับเปลี่ยนรหัสผ่าน ----------
 // กติกาเดียวกับ User::passwordProblems() ฝั่ง server (server ตรวจซ้ำเสมอ)
 function passwordChecks(pw, username) {
@@ -181,8 +201,6 @@ function passwordChecks(pw, username) {
   const userDigits = String(username || '').replace(/\D/g, '');
   return {
     len: pw.length >= 8 && pw.length <= 72,
-    letter: /[A-Za-z]/.test(pw),
-    digit: /\d/.test(pw),
     phone: pw !== '' && !/\s/.test(pw) && pw.toLowerCase() !== String(username || '').toLowerCase()
       && !(digits.length >= 9 && digits === userDigits),
   };

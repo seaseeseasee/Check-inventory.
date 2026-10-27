@@ -1,0 +1,181 @@
+/* ========================================
+   น้องแมวผู้ช่วย (mascot): หน้าแรก / เติมของ / ปุ่มช่วยเหลือ / แจ้งผลสำเร็จ
+   ======================================== */
+
+/* หน้าแรก: การ์ดต้อนรับ */
+.mascot-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, var(--teal-50), #e0f2fe);
+  border: 1px solid var(--teal-100);
+}
+.mascot-hero-img { flex-shrink: 0; width: 150px; height: auto; }
+.mascot-hero-text, .mascot-tip p { min-width: 0; overflow-wrap: anywhere; }
+.mascot-hero-text h2 { margin: 2px 0 6px; color: var(--teal-800); }
+.mascot-hero-text p { margin: 0; color: var(--muted); }
+.mascot-hero-text .mascot-hero-hi { font-weight: 700; color: var(--teal-700); }
+
+/* หน้าเข้าสู่ระบบ: แมวโบกมือโผล่เหนือการ์ด */
+.auth-card-mascot { margin-top: 96px; padding-top: 0; }
+.auth-mascot {
+  width: 140px;
+  height: auto;
+  margin: -104px auto 4px;
+  filter: drop-shadow(0 6px 10px rgba(15, 23, 42, 0.25));
+  animation: auth-mascot-wave 2.4s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+@keyframes auth-mascot-wave {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-4deg) translateY(-3px); }
+}
+
+/* เติมของ: กล่องคำแนะนำพร้อมรูปแมว */
+.mascot-tip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 14px;
+  padding: 10px 14px;
+  background: #f0f9ff;
+  border: 1px dashed #7dd3fc;
+  border-radius: var(--radius-lg);
+}
+.mascot-tip img { flex-shrink: 0; height: 72px; width: auto; }
+.mascot-tip p { margin: 0; color: #0c4a6e; font-size: 0.95rem; }
+
+/* ปุ่มแมวลอย: รวมแจ้งเตือน (ตัวเลขแดง) กับช่วยเหลือไว้ปุ่มเดียว */
+.help-cat {
+  position: fixed;
+  right: 20px;
+  bottom: 24px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+#helpCatBtn {
+  width: 68px;
+  height: 68px;
+  min-height: 0;
+  margin: 0;
+  padding: 2px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--teal-500);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: transform 0.2s ease;
+}
+#helpCatBtn:hover, #helpCatBtn[aria-expanded="true"] { transform: scale(1.08) rotate(-4deg); }
+#helpCatBtn img { width: 60px; height: auto; border-radius: 50%; pointer-events: none; }
+.help-cat-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--bad);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+/* แถวแจ้งเตือนบนสุดของกล่อง → ไปหน้าเติมของ */
+.help-cat-notify {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 0.93rem;
+  color: var(--teal-800);
+  background: var(--teal-50);
+  border: 1px solid var(--teal-100);
+  box-shadow: none;
+}
+.help-cat-notify span:nth-child(2) { flex: 1 1 auto; }
+.help-cat-notify.has-items { color: #991b1b; background: #fef2f2; border-color: #fecaca; }
+
+.help-cat-panel {
+  position: relative;
+  width: min(320px, calc(100vw - 32px));
+  padding: 16px 16px 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: help-cat-pop 0.18s ease-out;
+}
+.help-cat-panel[hidden] { display: none; }
+/* หางกล่องคำพูดชี้ไปที่แมว */
+.help-cat-panel::after {
+  content: "";
+  position: absolute;
+  right: 26px;
+  bottom: -9px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  transform: rotate(45deg);
+}
+.help-cat-panel h3 { margin: 0 0 8px; color: var(--teal-800); }
+.help-cat-list { margin: 0 0 10px; padding-left: 18px; display: grid; gap: 6px; font-size: 0.93rem; color: var(--ink); }
+.help-cat-note { margin: 0 0 8px; color: var(--muted); font-size: 0.93rem; }
+.help-cat-call {
+  display: block;
+  margin-bottom: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  text-align: center;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--teal-600), var(--teal-700));
+  text-decoration: none;
+}
+.help-cat-close { width: 100%; margin: 0; }
+
+@keyframes help-cat-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+/* แจ้งผลบันทึกสำเร็จ: กล่องกลางจอ */
+.mascot-success { align-items: center; padding: 16px; }
+.mascot-success .sheet { border-radius: var(--radius-xl); text-align: center; max-width: 380px; }
+.mascot-success img { width: 150px; height: auto; margin: 0 auto 6px; display: block; animation: help-cat-pop 0.3s ease-out; }
+.mascot-success h3 { margin: 0 0 6px; color: var(--ok); }
+.mascot-success p { margin: 0 0 14px; white-space: pre-line; color: var(--muted); font-size: 0.93rem; }
+.mascot-success p:empty { display: none; }
+.mascot-success button { margin: 0; }
+
+@media (max-width: 760px) {
+  /* มือถือ: วางเหนือแถบเมนูล่าง */
+  .help-cat { right: 10px; bottom: 96px; }
+  #helpCatBtn { width: 56px; height: 56px; }
+  #helpCatBtn img { width: 50px; }
+  .mascot-hero { gap: 10px; }
+  .mascot-hero-img { width: 96px; }
+  .mascot-tip img { height: 56px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #helpCatBtn, .help-cat-panel, .mascot-success img, .auth-mascot { transition: none; animation: none; }
+  #helpCatBtn:hover, #helpCatBtn[aria-expanded="true"] { transform: none; }
+}

@@ -151,6 +151,15 @@
   background: linear-gradient(135deg, #2563eb, #1d4ed8);
 }
 
+#itemImportBox .copy-start-btn { width: auto; flex: 1 1 170px; }
+#itemImportBox label { flex: 1 1 100%; }
+
+.copy-start-btn.alt {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+}
+
 #copyPreview {
   margin-bottom: 14px;
   padding: 12px;

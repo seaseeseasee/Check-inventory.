@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 205" role="img" aria-label="แมวโบกมือถือกระเป๋าปฐมพยาบาล">
+<g class="body">
+  <path d="M138 182 C178 188 184 150 166 136" fill="none" stroke="#1f2328" stroke-width="12" stroke-linecap="round"/>
+  <rect x="58" y="118" width="84" height="70" rx="26" fill="#8fd0f5" stroke="#3b8fc9" stroke-width="3"/>
+  <path d="M86 119 L100 140 L114 119 Z" fill="#fff"/>
+  <rect x="59.5" y="160" width="81" height="10" fill="#e2e8f0"/><rect x="59.5" y="163.5" width="81" height="3" fill="#facc15"/>
+  <circle cx="123" cy="140" r="8" fill="#fff" stroke="#3b8fc9" stroke-width="2"/><path d="M123 135v10M118 140h10" stroke="#ef4444" stroke-width="3"/>
+  <ellipse cx="82" cy="190" rx="15" ry="9" fill="#fff" stroke="#1f2328" stroke-width="2"/><ellipse cx="118" cy="190" rx="15" ry="9" fill="#fff" stroke="#1f2328" stroke-width="2"/>
+</g>
+<path d="M64 138 C54 148 52 156 52 162" fill="none" stroke="#3b8fc9" stroke-width="19" stroke-linecap="round"/><path d="M64 138 C54 148 52 156 52 162" fill="none" stroke="#8fd0f5" stroke-width="14" stroke-linecap="round"/>
+<path d="M40 162 q12 -12 24 0" fill="none" stroke="#7f1d1d" stroke-width="4"/>
+<rect x="26" y="162" width="52" height="36" rx="6" fill="#ef4444" stroke="#b91c1c" stroke-width="2"/>
+<path d="M52 170v20M42 180h20" stroke="#fff" stroke-width="6"/>
+<circle cx="52" cy="160" r="9" fill="#fff" stroke="#1f2328" stroke-width="2"/>
+<g class="head">
+  <path d="M50 72 L44 20 L86 44 Z" fill="#1f2328"/><path d="M150 72 L156 20 L114 44 Z" fill="#1f2328"/>
+  <path d="M56 58 L53 32 L77 47 Z" fill="#f9a8b8"/><path d="M144 58 L147 32 L123 47 Z" fill="#f9a8b8"/>
+  <ellipse cx="100" cy="80" rx="58" ry="50" fill="#1f2328"/>
+  <path d="M86 38 l3 11 M100 33 v10 M114 38 l-3 11" stroke="#454c56" stroke-width="3" stroke-linecap="round"/>
+  <path d="M100 46 C93 62 81 74 72 94 C80 118 120 118 128 94 C119 74 107 62 100 46 Z" fill="#fff"/>
+  <circle cx="72" cy="78" r="11" fill="#fff"/><circle cx="73" cy="80" r="7" fill="#1f2328"/><circle cx="75.5" cy="76.5" r="2.6" fill="#fff"/>
+  <circle cx="128" cy="78" r="11" fill="#fff"/><circle cx="127" cy="80" r="7" fill="#1f2328"/><circle cx="129.5" cy="76.5" r="2.6" fill="#fff"/>
+  <ellipse cx="80" cy="101" rx="7" ry="4" fill="#fda4af" opacity=".75"/><ellipse cx="120" cy="101" rx="7" ry="4" fill="#fda4af" opacity=".75"/>
+  <path d="M95 92 h10 l-5 6 z" fill="#f472b6"/>
+  <path d="M92 101 q8 11 16 0 z" fill="#be123c" stroke="#1f2328" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M68 97 L42 92 M68 104 L44 109 M132 97 L158 92 M132 104 L156 109" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round"/>
+</g>
+<path d="M136 138 C152 128 160 114 162 100" fill="none" stroke="#3b8fc9" stroke-width="19" stroke-linecap="round"/><path d="M136 138 C152 128 160 114 162 100" fill="none" stroke="#8fd0f5" stroke-width="14" stroke-linecap="round"/>
+<circle cx="164" cy="88" r="14" fill="#fff" stroke="#1f2328" stroke-width="2"/>
+<circle cx="164" cy="92" r="4.5" fill="#f9a8b8"/><circle cx="157" cy="84" r="2.5" fill="#f9a8b8"/><circle cx="164" cy="81" r="2.5" fill="#f9a8b8"/><circle cx="171" cy="84" r="2.5" fill="#f9a8b8"/>
+<path d="M184 74 q8 12 0 26 M190 66 q12 20 0 40" fill="none" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/>
+</svg>

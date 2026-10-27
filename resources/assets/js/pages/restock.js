@@ -174,10 +174,16 @@ class RefillPage {
   itemMatches(item) {
     if (this.filter === 'all') return true;
     if (this.filter === 'expiry') return item.expiry && (item.expiry.state === 'expired' || item.expiry.state === 'soon');
-    // ต้องเติม: ยอดพร้อมใช้ต่ำกว่าเป้าหมาย / มียอดค้างในรายการรอเติม / ยังไม่เคยนับ / มีของหมดอายุ / มีรายการที่กำลังกรอก
+    // ต้องเติม: ยอดพร้อมใช้ต่ำกว่าเป้าหมาย / มียอดค้างในรายการรอเติม / ยังไม่เคยนับ / มีของหมดอายุ
+    // / เครื่องไม่พร้อมใช้ / แบตหรือแรงดันต่ำกว่าเกณฑ์ / มีรายการที่กำลังกรอก
     const d = this.drafts[item.id];
+    return RefillPage.needsAction(item)
+      || (d && (d.lots.length || d.units.length || d.retire.size || Object.keys(d.updates).length));
+  }
+
+  static needsAction(item) {
     return item.shortfall > 0 || item.requested > 0 || !item.counted || (item.stock && item.stock.expired > 0)
-      || item.not_ready > 0 || (d && (d.lots.length || d.units.length || d.retire.size || Object.keys(d.updates).length));
+      || item.not_ready > 0 || item.low > 0;
   }
 
   renderSheet() {
@@ -189,7 +195,7 @@ class RefillPage {
     const items = this.sheet.items;
     const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
     set('refillCntAll', items.length);
-    set('refillCntNeed', items.filter(i => i.shortfall > 0 || i.requested > 0 || !i.counted || i.not_ready > 0 || (i.stock && i.stock.expired > 0)).length);
+    set('refillCntNeed', items.filter(i => RefillPage.needsAction(i)).length);
     set('refillCntExp', items.filter(i => i.expiry && (i.expiry.state === 'expired' || i.expiry.state === 'soon')).length);
 
     const shown = items.filter(item => this.itemMatches(item));
@@ -210,9 +216,10 @@ class RefillPage {
     const chips = [];
     if (!item.counted) chips.push('<span class="result-chip result-pending">📭 ยังไม่ได้จัดขึ้นรถ</span>');
     if (item.not_ready > 0) chips.push(`<span class="result-chip result-anomaly">⛔ ไม่พร้อมใช้ ${item.not_ready} — ตรวจสอบ/เปลี่ยน</span>`);
+    if (item.low > 0) chips.push(`<span class="result-chip result-needs_refill">🔋 แบต/แรงดันต่ำ ${item.low} — ชาร์จ/เติม</span>`);
     if (item.shortfall > 0) chips.push(`<span class="result-chip result-needs_refill">⚠️ ของขาด ${this.fmt(item.shortfall)}${unit}</span>`);
     if (item.stock && item.stock.expired > 0) chips.push(`<span class="result-chip result-anomaly">⛔ หมดอายุแล้ว ${this.fmt(item.stock.expired)}</span>`);
-    else if (item.expiry && item.expiry.state === 'soon') chips.push('<span class="result-chip result-needs_refill">⚠️ ใกล้หมดอายุ</span>');
+    else if (item.expiry && item.expiry.state === 'soon') chips.push('<span class="result-chip result-warn">⚠️ ใกล้หมดอายุ</span>');
     if (item.over_target) chips.push('<span class="result-chip result-pending">เกินมาตรฐาน</span>');
     return chips.length ? `<div class="chip-line">${chips.join('')}</div>` : '';
   }
@@ -672,7 +679,7 @@ class RefillPage {
       // แสดงผลสำเร็จหลังเซิร์ฟเวอร์ยืนยัน commit แล้วเท่านั้น
       const data = res.data || {};
       const parts = (data.applied || []).slice(0, 4).map(a => `${a.name}: ${this.fmt(a.before)} → ${this.fmt(a.after)}`);
-      window.toast.success((data.duplicate ? 'บันทึกไปแล้ว (ไม่เติมซ้ำ)' : 'บันทึกสำเร็จ') + (parts.length ? '\n' + parts.join('\n') : ''), 8000);
+      window.mascotSuccess(data.duplicate ? 'บันทึกไปแล้ว (ไม่เติมซ้ำ)' : 'บันทึกการเติมสต๊อกเรียบร้อยแล้ว', parts.join('\n'));
       (data.warnings || []).forEach(w => window.toast.warning(w, 9000));
       this.drafts = {};
       this.openCards.clear();   // บันทึกแล้ว → ย่อทุกการ์ดกลับเป็นรายการ

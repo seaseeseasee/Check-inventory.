@@ -281,6 +281,24 @@ button.warning {
   color: #334155;
 }
 
+/* ปุ่มพื้นน้ำเงิน/แดงเข้ม: ตัวอักษรขาวทุกสถานะ — .small-btn ประกาศสีเทาเข้ม (#334155) และพื้นเทาตอน hover
+   ทับไว้ ทำให้ "small-btn secondary/danger" กลายเป็นตัวหนังสือเข้มบนพื้นน้ำเงิน/แดง และเป็นสีเทาเมื่อชี้เมาส์ */
+:is(button.secondary, button.danger, .small-btn.secondary, .small-btn.danger, .copy-start-btn:not(.alt), .seg-btn.danger.on),
+:is(button.secondary, button.danger, .small-btn.secondary, .small-btn.danger, .copy-start-btn:not(.alt), .seg-btn.danger.on):is(:hover, :active, :focus, :focus-visible, :disabled) {
+  color: #fff;
+}
+.small-btn.secondary,
+.small-btn.secondary:is(:hover, :active, :disabled) {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  border-color: #1d4ed8;
+}
+.small-btn.danger,
+.small-btn.danger:is(:hover, :active, :disabled) {
+  background: var(--bad);
+  border-color: var(--bad);
+}
+.small-btn:is(.secondary, .danger):hover { filter: brightness(1.08); }
+
 .btn-row {
   display: flex;
   gap: 8px;

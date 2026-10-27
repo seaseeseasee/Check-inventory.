@@ -4,6 +4,7 @@
 # Runtime output — not source
 storage/logs/*
 storage/backups/*
+storage/sessions/
 !storage/logs/.gitkeep
 !storage/backups/.gitkeep
 

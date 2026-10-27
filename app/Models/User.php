@@ -46,17 +46,12 @@ class User extends Model
     {
         $problems = [];
         if (strlen($password) < self::PASSWORD_MIN) {
-            $problems[] = 'ต้องมีอย่างน้อย ' . self::PASSWORD_MIN . ' ตัวอักษร';
+            $problems[] = 'ต้องมีอย่างน้อย ' . self::PASSWORD_MIN . ' ตัว';
         }
         if (strlen($password) > self::PASSWORD_MAX) {
-            $problems[] = 'ยาวได้ไม่เกิน ' . self::PASSWORD_MAX . ' ตัวอักษร';
+            $problems[] = 'ยาวได้ไม่เกิน ' . self::PASSWORD_MAX . ' ตัว';
         }
-        if (!preg_match('/[A-Za-z]/', $password)) {
-            $problems[] = 'ต้องมีตัวอักษรภาษาอังกฤษอย่างน้อย 1 ตัว';
-        }
-        if (!preg_match('/\d/', $password)) {
-            $problems[] = 'ต้องมีตัวเลขอย่างน้อย 1 ตัว';
-        }
+        // ตัวเลขล้วนได้ หรือผสมตัวอักษรได้ — ไม่บังคับให้มีตัวอักษร
         if (preg_match('/\s/', $password)) {
             $problems[] = 'ห้ามมีช่องว่าง';
         }

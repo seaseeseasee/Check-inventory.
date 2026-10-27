@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="<?= asset('css/base.css') ?>">
   <link rel="stylesheet" href="<?= asset('css/layout.css') ?>">
   <link rel="stylesheet" href="<?= asset('css/components.css') ?>">
+  <link rel="stylesheet" href="<?= asset('css/mascot.css') ?>">
   
   <!-- Page-specific styles (will be injected by page controller) -->
   <?php if (isset($pageStyles)): ?>
@@ -28,12 +29,14 @@
   <link rel="stylesheet" href="<?= asset('css/tailwind.css') ?>">
   <!-- มือถือ/ผู้สูงอายุ: โหลดท้ายสุดเพื่อยกค่าพื้นฐาน (ตัวอักษร/พื้นที่กด/เมนูล่าง) -->
   <link rel="stylesheet" href="<?= asset('css/a11y.css') ?>">
+  <!-- สีสถานะ/การแจ้งเตือน (แดง/น้ำเงินทึบ = ตัวอักษรขาว) ต้องอยู่หลังสุดเพื่อทับสไตล์รายหน้า -->
+  <link rel="stylesheet" href="<?= asset('css/status.css') ?>">
 </head>
 <body>
   <!-- Auth Gate -->
   <div id="authGate">
-    <form id="authForm" class="auth-card" method="post">
-      <img class="auth-logo" src="<?= asset('images/logo.png') ?>" width="88" height="88" alt="โลโก้ระบบ" loading="lazy">
+    <form id="authForm" class="auth-card auth-card-mascot" method="post">
+      <img class="auth-mascot" src="<?= asset('images/mascot/cat-wave.svg') ?>" width="140" height="144" alt="">
       <h2>ระบบตรวจเช็ครถ Refer / Ambulance</h2>
       <p class="auth-sub">ชื่อผู้ใช้คือเบอร์โทรศัพท์ของคุณ — เข้าครั้งแรกใช้เบอร์โทรศัพท์เป็นรหัสผ่าน</p>
       <label for="systemUsername">ชื่อผู้ใช้ (เบอร์โทรศัพท์)</label>
@@ -57,9 +60,7 @@
       <label for="pwNew">รหัสผ่านใหม่</label>
       <input type="password" id="pwNew" name="new_password" autocomplete="new-password" aria-describedby="pwRules" required>
       <ul class="pw-rules" id="pwRules" aria-live="polite">
-        <li data-rule="len">อย่างน้อย 8 ตัวอักษร</li>
-        <li data-rule="letter">มีตัวอักษรภาษาอังกฤษ (a-z หรือ A-Z)</li>
-        <li data-rule="digit">มีตัวเลข (0-9)</li>
+        <li data-rule="len">อย่างน้อย 8 ตัว (ตัวเลขล้วน หรือผสมตัวอักษรก็ได้)</li>
         <li data-rule="phone">ไม่ใช่เบอร์โทรศัพท์ / ชื่อผู้ใช้ และไม่มีช่องว่าง</li>
       </ul>
       <label for="pwConfirm">ยืนยันรหัสผ่านใหม่</label>
@@ -122,16 +123,42 @@
     </div>
   </div>
 
-  <!-- Notification Floating Button (m-0 bg-none override the global button rule in layout.css) -->
-  <button id="notifyFab" type="button"
-          class="m-0 bg-none fixed bottom-6 right-6 z-[300] flex items-center justify-center w-14 h-14 rounded-full bg-teal-600 text-white shadow-lg transition-all duration-200 hover:bg-teal-700 hover:shadow-xl hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-teal-300"
-          aria-label="การแจ้งเตือน" title="การแจ้งเตือน">
-    <svg class="w-7 h-7 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-      <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-    </svg>
-    <span id="notifyBadge" class="hidden absolute -top-1 -right-1 min-w-[20px] h-5 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold ring-2 ring-white" aria-hidden="true">0</span>
-  </button>
+  <!-- ปุ่มแมวลอยมุมขวาล่าง = แจ้งเตือน + ช่วยเหลือ: ตัวเลขแดงคือรายการรอเติม, ชี้เมาส์หรือแตะเพื่อเปิดกล่อง -->
+  <?php $helpTel = trim((string) env('HELP_PHONE', '')); ?>
+  <div class="help-cat" id="helpCat">
+    <div class="help-cat-panel" id="helpCatPanel" role="dialog" aria-labelledby="helpCatTitle" hidden>
+      <button type="button" class="help-cat-notify" id="notifyGo">
+        <span class="help-cat-notify-ico" aria-hidden="true">🔔</span>
+        <span id="notifyText">ไม่มีรายการรอเติม</span>
+        <span aria-hidden="true">→</span>
+      </button>
+      <h3 id="helpCatTitle">มีอะไรให้ช่วยไหม?</h3>
+      <ul class="help-cat-list">
+        <li><b>🚑 ตรวจเช็ก</b> เลือกรถ → ผู้ตรวจ/เวร → ตรวจทีละหมวด → ยืนยันส่ง</li>
+        <li><b>🧰 เติมของ</b> เลือกรถ → ใส่จำนวนที่เติมและวันหมดอายุ → กดบันทึก</li>
+      </ul>
+      <?php if ($helpTel !== ''): ?>
+        <a class="help-cat-call" href="tel:<?= escape(preg_replace('/[^\d+]/', '', $helpTel)) ?>">📞 โทรหาเจ้าหน้าที่ <?= escape($helpTel) ?></a>
+      <?php else: ?>
+        <p class="help-cat-note">ถ้ายังไม่แน่ใจ สอบถามหัวหน้าเวรได้เลย</p>
+      <?php endif; ?>
+      <button type="button" class="small-btn gray help-cat-close" id="helpCatClose">ปิด</button>
+    </div>
+    <button type="button" class="help-cat-btn" id="helpCatBtn" aria-expanded="false" aria-controls="helpCatPanel" aria-label="ขอความช่วยเหลือ" title="ขอความช่วยเหลือ">
+      <img src="<?= asset('images/mascot/cat-wave.svg') ?>" alt="" width="60" height="62">
+      <span id="notifyBadge" class="help-cat-badge hidden" aria-hidden="true">0</span>
+    </button>
+  </div>
+
+  <!-- แจ้งผลบันทึกสำเร็จพร้อมน้องแมว (เปิดด้วย window.mascotSuccess) -->
+  <div id="mascotSuccess" class="hidden sheet-overlay mascot-success" role="alertdialog" aria-modal="true" aria-labelledby="mascotSuccessTitle" aria-describedby="mascotSuccessText">
+    <div class="sheet">
+      <img src="<?= asset('images/mascot/cat-thumbsup.svg') ?>" alt="" width="160" height="164">
+      <h3 id="mascotSuccessTitle"></h3>
+      <p id="mascotSuccessText"></p>
+      <button type="button" id="mascotSuccessOk">ตกลง</button>
+    </div>
+  </div>
 
   <!-- Alert Container -->
   <div id="alert-container" class="fixed top-4 right-4 z-[1200] flex flex-col gap-2 w-[calc(100vw-2rem)] max-w-sm pointer-events-none"></div>
@@ -151,6 +178,7 @@
   <script src="<?= asset('js/components/alert.js') ?>"></script>
   <script src="<?= asset('js/components/table.js') ?>"></script>
   <script src="<?= asset('js/components/notifications.js') ?>"></script>
+  <script src="<?= asset('js/components/mascot.js') ?>"></script>
   
   <!-- Page-specific JS (will be injected by page controller) -->
   <?php if (isset($pageScripts)): ?>

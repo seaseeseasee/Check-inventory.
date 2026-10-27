@@ -172,7 +172,7 @@ html, body { overflow-x: hidden; }
 
 /* ปุ่มแจ้งเตือนลอย: บนมือถือวางเหนือแถบเมนูล่าง และเว้นที่ในแถบบันทึกไม่ให้ทับปุ่มบันทึก */
 @media (max-width: 760px) {
-  #notifyFab { bottom: 96px !important; right: 10px !important; width: 52px !important; height: 52px !important; }
+  /* ปุ่มแมวลอย (mascot.css) อยู่ที่ bottom 96px — เว้นที่ขวาให้แถบบันทึก */
   .save-bar { padding-right: 70px; }
 }
 

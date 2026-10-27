@@ -966,13 +966,13 @@ class NursesPage {
     name.textContent = file ? file.name : '';
     meta.textContent = message || '';
 
-    chip.classList.remove('border-teal-200', 'bg-teal-50', 'border-red-200', 'bg-red-50', 'border-amber-200', 'bg-amber-50');
-    meta.classList.remove('text-teal-700', 'text-red-700', 'text-amber-700');
+    chip.classList.remove('border-teal-200', 'bg-teal-50', 'status-critical', 'border-amber-200', 'bg-amber-50');
+    meta.classList.remove('text-teal-700', 'status-critical', 'text-amber-700');
     const style = {
       loading: ['border-amber-200', 'bg-amber-50', 'text-amber-700'],
       warn: ['border-amber-200', 'bg-amber-50', 'text-amber-700'],
       done: ['border-teal-200', 'bg-teal-50', 'text-teal-700'],
-      error: ['border-red-200', 'bg-red-50', 'text-red-700'],
+      error: ['status-critical', 'status-critical', 'status-critical'],   // แดงทึบ ตัวอักษรขาว (status.css)
     }[state];
     if (style) {
       chip.classList.add(style[0], style[1]);

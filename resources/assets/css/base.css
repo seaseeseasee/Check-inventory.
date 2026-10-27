@@ -32,6 +32,14 @@
   --info: #0284c7;
   --info-soft: #e0f2fe;
 
+  /* พื้นทึบ + ตัวอักษรขาวเสมอ (status.css) — แดง = ของขาด/ผิดพลาดร้ายแรง, น้ำเงิน = ปุ่มหลัก/ปุ่มดำเนินการ */
+  --danger: #dc2626;          /* ขาว 4.83:1 */
+  --danger-strong: #b91c1c;   /* ขาว 6.47:1 — ขอบ/hover */
+  --on-danger: #ffffff;
+  --primary: #2563eb;         /* ขาว 5.17:1 */
+  --primary-strong: #1d4ed8;  /* ขาว 6.70:1 */
+  --on-primary: #ffffff;
+
   /* Spacing */
   --space-1: 4px;
   --space-2: 8px;
