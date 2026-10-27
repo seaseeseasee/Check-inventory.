@@ -135,6 +135,14 @@ class InspectionService
         return ['check_date' => $at->format('Y-m-d'), 'shift_code' => $code];
     }
 
+    /** รอบตรวจนี้เป็นของเวรที่กำลังดำเนินอยู่ตอนนี้หรือไม่ (วันที่ + เวร ตรงกับเวลาปัจจุบัน) */
+    public static function isCurrentShift(array $check): bool
+    {
+        $now = self::currentShift();
+        return (string)($check['check_date'] ?? '') === $now['check_date']
+            && (string)($check['shift_code'] ?? '') === $now['shift_code'];
+    }
+
     public static function shiftName(?string $code): string
     {
         return self::SHIFTS[$code ?? '']['name'] ?? '';
@@ -317,19 +325,23 @@ class InspectionService
         }
     }
 
-    /** แก้รอบตรวจที่บันทึกแล้ว: admin ทุกรอบ / staff เฉพาะรอบที่ตนเป็นผู้ตรวจ */
+    /**
+     * แก้รอบตรวจที่บันทึกแล้ว: admin ทุกรอบ / ผู้ตรวจเดิม (ย้อนหลังตามกติกาเวร)
+     * / พยาบาลคนอื่นเช็คซ้ำได้เฉพาะระหว่างเวรนั้นยังไม่หมด
+     */
     private function assertCanEditCheck(array $check, ?array $user): void
     {
         if (($user['role'] ?? '') === 'admin') {
             return;
         }
-        if ((string)($user['nurse_id'] ?? '') !== (string)$check['nurse_id']) {
-            throw new ApiException(
-                sprintf('เวรนี้ถูกตรวจและบันทึกแล้วโดย %s — แก้ไขได้เฉพาะผู้ตรวจเดิมหรือผู้ดูแลระบบ', $check['nurse_name']),
-                409,
-                ['code' => 'SHIFT_ALREADY_CHECKED']
-            );
+        if ((string)($user['nurse_id'] ?? '') === (string)$check['nurse_id'] || self::isCurrentShift($check)) {
+            return;
         }
+        throw new ApiException(
+            sprintf('เวรนี้ถูกตรวจและบันทึกแล้วโดย %s — หมดเวรแล้ว แก้ไขได้เฉพาะผู้ตรวจเดิมหรือผู้ดูแลระบบ', $check['nurse_name']),
+            409,
+            ['code' => 'SHIFT_ALREADY_CHECKED']
+        );
     }
 
     // ==================== สร้างข้อมูลฟอร์ม ====================

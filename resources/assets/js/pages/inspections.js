@@ -303,9 +303,9 @@ class InspectionPage {
     }
     const done = this.doneFor(this.selectedCarId)[shift];
     if (done) {
-      hint.textContent = `✅ ${SHIFT_LABEL[shift]}ตรวจแล้วโดย ${done.nurse_name} — กดปุ่มด้านล่างเพื่อแก้ไขได้`;
+      hint.textContent = `✅ ${SHIFT_LABEL[shift]}ตรวจแล้วโดย ${done.nurse_name} — พยาบาลในเวรนี้กดปุ่มด้านล่างเพื่อเช็คซ้ำ/แก้ไขผลได้`;
       hint.className = 'shift-hint is-done';
-      if (btn) btn.textContent = '✏️ แก้ไขผลการตรวจเดิม →';
+      if (btn) btn.textContent = '✏️ เช็คซ้ำ / แก้ไขผลการตรวจ →';
     } else {
       hint.textContent = `${SHIFT_LABEL[shift]}ยังไม่ได้ตรวจ`;
       hint.className = 'shift-hint';
