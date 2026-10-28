@@ -657,6 +657,77 @@ class RestockService
         }
     }
 
+    /**
+     * ยอดบนรถถูกปรับจากที่อื่น (หน้าทะเบียนรถ) จนถึงมาตรฐานแล้ว → ปิดบรรทัด "เติม" ของอุปกรณ์นี้ในใบรอเติมที่เปิดอยู่
+     * เดิมบรรทัดปิดได้เฉพาะการเติมผ่านหน้าเติมของ ทำให้ของครบแล้วแต่ยังขึ้น "รอเติม" ค้าง
+     * ต้องเรียกภายใน transaction ของผู้เรียก (แถวอุปกรณ์ถูกล็อกแล้ว) — ไม่มีมาตรฐาน / ยังไม่ถึงมาตรฐาน = ไม่ทำอะไร
+     *
+     * @param array $item แถวอุปกรณ์ล่าสุด (หลังปรับยอด)
+     * @return array รายการใบรอเติมที่ถูกแตะ [{id, no, status, lines}]
+     */
+    public function closeLinesWhenStocked(array $item, ?float $stockBefore, ?array $actor, string $reason): array
+    {
+        if (VehicleStockService::usesUnits($item) || $item['target_qty'] === null || $item['target_qty'] === '') {
+            return [];
+        }
+        $itemId = (string)$item['id'];
+        $target = round((float)$item['target_qty'], 2);
+        $stock = $this->stock->detailsForItems([$item])['stock'][$itemId];
+        $usable = round($stock['available'] + $stock['unknown'], 2);   // เหมือนหน้าเติมของ: ไม่นับของหมดอายุ
+        if ($usable < $target) {
+            return [];
+        }
+
+        $open = array_filter(
+            $this->requestModel->getByVehicle((string)$item['car_id']),
+            fn($r) => in_array($r['status'], [RestockRequest::STATUS_PENDING, RestockRequest::STATUS_IN_PROGRESS, RestockRequest::STATUS_PARTIAL], true)
+        );
+        usort($open, fn($a, $b) => strcmp((string)$a['created_at'], (string)$b['created_at']));
+
+        $now = VehicleStockService::now();
+        $touched = [];
+        foreach ($open as $request) {
+            $request = $this->requestModel->lockById((string)$request['id']);
+            if (!$request) {
+                continue;
+            }
+            $hasLine = false;
+            foreach ($this->itemModel2->getByRequest((string)$request['id']) as $line) {
+                if ((string)$line['item_id'] === $itemId && ($line['line_type'] ?? 'refill') !== 'replace') {
+                    $hasLine = true;
+                    break;
+                }
+            }
+            if (!$hasLine) {
+                continue;
+            }
+            $locked = $this->itemModel2->lockLine((string)$request['id'], $itemId);
+            $requested = (float)($locked['qty_requested'] ?? 0);
+            $filled = (float)($locked['qty_filled'] ?? 0);
+            $need = round(max(0.0, $requested - $filled), 2);
+            if ($need <= 0) {
+                continue;
+            }
+            $this->itemModel2->writeQuantities((string)$request['id'], $itemId, $requested, $requested, $stockBefore, $usable);
+            $status = $this->calculateNewStatus((string)$request['id']);
+            if ($status !== (string)$request['status']) {
+                $this->requestModel->updateStatus((string)$request['id'], $status);
+            }
+            $this->actionModel->create([
+                'request_id' => (string)$request['id'],
+                'type' => 'restock',
+                'at' => $now,
+                'by_id' => $actor['id'] ?? null,
+                'by_name' => (string)($actor['full_name'] ?? ''),
+                'note' => $reason,
+                'action_lines' => [['itemId' => $itemId, 'name' => (string)$item['name'], 'qty' => VehicleStockService::fmt($need),
+                    'stockBefore' => $stockBefore, 'stockAfter' => $usable]],
+            ]);
+            $touched[] = ['id' => (string)$request['id'], 'no' => (string)$request['no'], 'status' => $status, 'lines' => 1];
+        }
+        return $touched;
+    }
+
     /** PENDING (ยังไม่เติม) → PARTIAL (เติมบางส่วน) → COMPLETED (ครบทุกบรรทัด) */
     private function calculateNewStatus(string $requestId): string
     {
