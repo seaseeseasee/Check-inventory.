@@ -109,6 +109,7 @@ services:
       - ./database/migrations/013-force-password-change.sql:/docker-entrypoint-initdb.d/06-migration-013.sql:ro
       - ./database/migrations/014-audit-log.sql:/docker-entrypoint-initdb.d/07-migration-014.sql:ro
       - ./database/migrations/015-app-user-least-privilege.sql:/docker-entrypoint-initdb.d/08-migration-015.sql:ro
+      - ./database/migrations/016-vehicle-type.sql:/docker-entrypoint-initdb.d/09-migration-016.sql:ro
     # ปิด LOAD DATA LOCAL INFILE (แอปไม่ได้ใช้)
     command: ["--local-infile=0"]
     healthcheck:

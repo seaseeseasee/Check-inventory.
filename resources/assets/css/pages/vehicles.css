@@ -59,6 +59,79 @@
   margin: 0;
 }
 
+/* ประเภทรถ: Refer / EMR ประจำวอร์ด */
+.veh-kind-chip {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.veh-kind-chip.is-emr {
+  background: #fdf2f8;
+  color: #9d174d;
+}
+
+.veh-kind {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.veh-kind legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.veh-kind-opts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.veh-kind-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.veh-kind-opt:has(input:checked) {
+  border-color: var(--teal-600);
+  background: var(--teal-50);
+}
+
+.veh-kind-opt input {
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--teal-700);
+}
+
+.veh-kind-opt span {
+  display: grid;
+  min-width: 0;
+}
+
+.veh-kind-opt b {
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.veh-kind-opt small {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
 .vcard-plate {
   font-size: 1.15rem;
   padding: 4px 12px;
