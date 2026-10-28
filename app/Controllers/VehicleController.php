@@ -30,12 +30,14 @@ class VehicleController extends Controller
 
     public function index(): void
     {
+        $this->roleMiddleware->requireStaff();
         $vehicles = $this->inspectionService->getVehicles();
         $this->success($vehicles);
     }
 
     public function show(string $id): void
     {
+        $this->roleMiddleware->requireStaff();
         $vehicle = $this->inspectionService->getVehicle($id);
         if (!$vehicle) {
             $this->notFound('Vehicle not found');

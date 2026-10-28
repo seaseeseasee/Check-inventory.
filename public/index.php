@@ -23,9 +23,10 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 // Start session
 if (session_status() === PHP_SESSION_NONE) {
-    // Detect if we're on HTTPS (for production)
+    // Secure cookie เมื่อเว็บเปิดผ่าน HTTPS — ดูจาก APP_ORIGIN ด้วย เพราะเมื่อมี TLS proxy ด้านหน้า
+    // PHP จะไม่เห็น $_SERVER['HTTPS'] เลย (เดิมจึงไม่เคยตั้ง Secure บน production)
     $secure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
-        && !in_array($_SERVER['HTTP_HOST'], ['localhost', '127.0.0.1', '[::1]'], true);
+        || parse_url((string)($_ENV['APP_ORIGIN'] ?? getenv('APP_ORIGIN') ?: ''), PHP_URL_SCHEME) === 'https';
     
     // Determine session path based on installation
     $basePath = '/';
@@ -41,6 +42,9 @@ if (session_status() === PHP_SESSION_NONE) {
         'path' => $basePath,
         'secure' => $secure,
         'httponly' => true,
+        // Lax (ไม่ใช่ Strict): เปิดลิงก์ระบบจากแอปอื่น (เช่น LINE) ต้องยังเห็น session เดิม
+        // ไม่งั้น PHP สร้าง session ใหม่ทับ cookie เดิม = ผู้ใช้หลุดออกจากระบบ
+        // CSRF กันด้วย token + ตรวจ Origin อยู่แล้ว (CsrfMiddleware / AuthService::validateOrigin)
         'samesite' => 'Lax',
     ]);
     session_name('refer_session');

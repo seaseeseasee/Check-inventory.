@@ -411,6 +411,6 @@ class StaffController extends Controller
         $this->roleMiddleware->requireStaff();
         
         $nurses = $this->nurseModel->getActive();
-        $this->success($nurses);
+        $this->success($this->roleMiddleware->isAdmin() ? $nurses : NurseController::forSelection($nurses));
     }
 }

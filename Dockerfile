@@ -3,7 +3,8 @@
 # emer — Ambulance Refer Checklist System
 # Base image: PHP 8.5 (upgraded from 8.2; whole codebase lints clean on 8.5
 # with E_ALL). App code still stays 8.2-compatible for the XAMPP dev machine.
-FROM php:8.5-apache
+# Pin ถึง patch version (เดิม 8.5-apache ลอยตามรุ่นใหม่เมื่อ build ซ้ำ) — อัปเดตตั้งใจเมื่อมี security release
+FROM php:8.5.12-apache
 
 # ---- PHP extensions actually used by app/ (verified by grep, not assumed) ----
 # pdo + pdo_mysql : app/Config/Database.php (`new PDO(...)`, mysql DSN)
@@ -22,6 +23,10 @@ RUN apt-get update \
 RUN a2enmod rewrite headers expires deflate remoteip
 
 COPY docker/apache/remoteip.conf /etc/apache2/conf-enabled/remoteip.conf
+
+# ซ่อนเวอร์ชัน Apache/PHP (zz- = โหลดหลัง security.conf เดิมของ Debian จึงทับค่าได้)
+COPY docker/apache/security.conf /etc/apache2/conf-enabled/zz-security.conf
+COPY docker/php/security.ini /usr/local/etc/php/conf.d/zz-security.ini
 
 # Document Root -> public/ only, so config/, app/, database/, storage/ are
 # never inside the web-servable tree at all (stronger than relying on the

@@ -302,9 +302,9 @@ class HistoryPage {
       });
 
       carContainer.innerHTML = `
-        <button type="button" class="chip-btn${this.filters.car === 'all' ? ' on' : ''}" onclick="historyPage.setCarFilter('all')">ทุกคัน</button>
+        <button type="button" class="chip-btn${this.filters.car === 'all' ? ' on' : ''}" data-call="historyPage.setCarFilter" data-arg="all">ทุกคัน</button>
         ${[...carHints.keys()].map(id => `
-          <button type="button" class="chip-btn${this.filters.car === id ? ' on' : ''}" onclick="historyPage.setCarFilter('${UI.escape(id)}')">${UI.escape(vehiclePlate(carHints.get(id)))}</button>
+          <button type="button" class="chip-btn${this.filters.car === id ? ' on' : ''}" data-call="historyPage.setCarFilter" data-arg="${UI.escape(id)}">${UI.escape(vehiclePlate(carHints.get(id)))}</button>
         `).join('')}
       `;
     }
@@ -327,9 +327,9 @@ class HistoryPage {
       });
       
       statusContainer.innerHTML = `
-        <button type="button" class="chip-btn${this.filters.status === 'all' ? ' on' : ''}" onclick="historyPage.setStatusFilter('all')">ทั้งหมด ${this.restockRequests.length}</button>
+        <button type="button" class="chip-btn${this.filters.status === 'all' ? ' on' : ''}" data-call="historyPage.setStatusFilter" data-arg="all">ทั้งหมด ${this.restockRequests.length}</button>
         ${statuses.map(s => `
-          <button type="button" class="chip-btn${this.filters.status === s ? ' on' : ''}" onclick="historyPage.setStatusFilter('${s}')">${statusLabels[s]} ${counts[s] || 0}</button>
+          <button type="button" class="chip-btn${this.filters.status === s ? ' on' : ''}" data-call="historyPage.setStatusFilter" data-arg="${s}">${statusLabels[s]} ${counts[s] || 0}</button>
         `).join('')}
       `;
     }

@@ -38,9 +38,23 @@ class NurseController extends Controller
                 $nurse['account'] = $account;   // หน้าจัดการผู้ใช้: บทบาท/สถานะ/เข้าสู่ระบบล่าสุด
             }
             unset($nurse);
+        } else {
+            $nurses = self::forSelection($nurses);
         }
 
         $this->success($nurses);
+    }
+
+    /**
+     * รายชื่อสำหรับเลือกผู้ตรวจ (staff) — ตัดเบอร์โทร/หมายเหตุออก
+     * เบอร์โทร = ชื่อผู้ใช้ของบัญชีพยาบาล จึงไม่ควรเปิดให้ทุกคนดูรายชื่อเบอร์ทั้งหมดได้
+     */
+    public static function forSelection(array $nurses): array
+    {
+        return array_map(static function (array $nurse): array {
+            unset($nurse['phone'], $nurse['note']);
+            return $nurse;
+        }, $nurses);
     }
 
     public function store(): void
@@ -117,7 +131,9 @@ class NurseController extends Controller
                     'active' => (bool)$data['active'],
                 ]);
             } catch (\Throwable $e) {
-                $this->error('บันทึกพยาบาลแล้ว แต่สร้างบัญชีเข้าใช้งานไม่สำเร็จ: ' . $e->getMessage(), 500);
+                // ข้อความ exception อาจมี SQL/ชื่อตาราง — เก็บใน log ฝั่งเซิร์ฟเวอร์เท่านั้น
+                error_log('nurse store createUser failed: ' . $e->getMessage());
+                $this->error('บันทึกพยาบาลแล้ว แต่สร้างบัญชีเข้าใช้งานไม่สำเร็จ กรุณาลองใหม่', 500);
             }
         }
 
@@ -199,7 +215,8 @@ class NurseController extends Controller
                         'active' => (bool)$data['active'],
                     ]);
                 } catch (\Throwable $e) {
-                    $this->error('บันทึกพยาบาลแล้ว แต่สร้างบัญชีเข้าใช้งานไม่สำเร็จ: ' . $e->getMessage(), 500);
+                    error_log('nurse update createUser failed: ' . $e->getMessage());
+                    $this->error('บันทึกพยาบาลแล้ว แต่สร้างบัญชีเข้าใช้งานไม่สำเร็จ กรุณาลองใหม่', 500);
                 }
             } else {
                 $updates = [

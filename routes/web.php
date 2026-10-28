@@ -1,11 +1,6 @@
 <?php
 declare(strict_types=1);
 
-// Clear opcache to ensure fresh code execution
-if (function_exists('opcache_reset')) {
-    opcache_reset();
-}
-
 use App\Controllers\AuthController;
 use App\Controllers\HealthController;
 use App\Controllers\AdminController;

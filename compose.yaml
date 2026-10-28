@@ -30,6 +30,18 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+    # Hardening: ตัด Linux capabilities ทิ้งทั้งหมด เหลือเท่าที่ nginx ต้องใช้ (bind :80 แล้วลดสิทธิ์เป็น user nginx)
+    # ระบบไฟล์อ่านอย่างเดียว — เขียนได้เฉพาะ tmpfs (cache/pid)
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    mem_limit: 128m
+    pids_limit: 100
 
   backend:
     build:
@@ -58,9 +70,23 @@ services:
       retries: 3
       start_period: 15s
     restart: unless-stopped
+    # Hardening: Apache ต้อง bind :80 แล้วลดสิทธิ์ worker เป็น www-data เท่านั้น
+    # อ่านอย่างเดียวทั้ง image — ที่เขียนได้คือ volume storage/ (session) + tmpfs ของ Apache/PHP
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/apache2
+      - /var/lock/apache2
+    mem_limit: 512m
+    pids_limit: 200
 
   db:
-    image: mariadb:10.4
+    # Pin ถึง patch version ที่ใช้อยู่จริง — 10.4 หมดอายุการสนับสนุนแล้ว (EOL มิ.ย. 2024)
+    # การอัปเกรดเป็น LTS ใหม่ต้องทำตาม runbook: backup → ทดสอบ restore บน volume แยก → ค่อยสลับ
+    image: mariadb:10.4.34
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
@@ -81,8 +107,15 @@ services:
       - ./database/migrations/011-lot-details-equipment-types.sql:/docker-entrypoint-initdb.d/04-migration-011.sql:ro
       - ./database/migrations/012-three-item-types.sql:/docker-entrypoint-initdb.d/05-migration-012.sql:ro
       - ./database/migrations/013-force-password-change.sql:/docker-entrypoint-initdb.d/06-migration-013.sql:ro
+      - ./database/migrations/014-audit-log.sql:/docker-entrypoint-initdb.d/07-migration-014.sql:ro
+      - ./database/migrations/015-app-user-least-privilege.sql:/docker-entrypoint-initdb.d/08-migration-015.sql:ro
+    # ปิด LOAD DATA LOCAL INFILE (แอปไม่ได้ใช้)
+    command: ["--local-infile=0"]
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      # healthcheck.sh ของ image เอง: ใช้บัญชี healthcheck@localhost (สิทธิ์ USAGE) ที่ image สร้างไว้ตอน init
+      # รหัสอยู่ใน /var/lib/mysql/.my-healthcheck.cnf (mode 600) — เดิมใส่ root password ใน argv
+      # ทำให้เห็นได้จาก process list
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -90,9 +123,16 @@ services:
     # No "ports:" here on purpose — the database is reachable only from other
     # containers on the internal "data" network (service name "db"), never from the host.
     restart: unless-stopped
+    # entrypoint ของ MariaDB ต้อง chown datadir แล้วลดสิทธิ์เป็น user mysql (gosu)
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 1g
+    pids_limit: 200
 
   phpmyadmin:
-    image: phpmyadmin:5.2
+    # ใช้เมื่อจำเป็นเท่านั้น แล้วหยุดทันทีหลังใช้: docker compose stop phpmyadmin
+    image: phpmyadmin:5.2.3
     profiles: ["tools"]
     environment:
       PMA_HOST: db

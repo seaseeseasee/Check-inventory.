@@ -123,7 +123,7 @@ class RefillPage {
       const color = window.vehicleColor(v);
       const open = this.openCountFor(v.id);
       return `<button type="button" class="car-symbol" data-car-id="${UI.escape(v.id)}" aria-pressed="${v.id === this.carId}"
-        style="border-color:${color};box-shadow: inset 0 6px 0 ${color}" onclick="refillPage.selectCar('${UI.escape(v.id)}')">
+        style="border-color:${color};box-shadow: inset 0 6px 0 ${color}" data-call="refillPage.selectCar" data-arg="${UI.escape(v.id)}">
         ${window.vehicleChip(v)}
         <span class="car-stat">${open ? `รอเติม ${open} รายการ` : 'ไม่มีรายการรอเติม'}</span>
       </button>`;
@@ -206,7 +206,7 @@ class RefillPage {
         : (this.filter === 'all'
           ? '<p class="empty">ไม่พบรายการ</p>'
           : `<div class="empty">${this.filter === 'need' ? '✅ ไม่มีของขาด' : 'ไม่พบรายการ'}
-              <button type="button" class="small-btn" onclick="setRefillFilter('all')">แสดงทั้งหมด (เติมรายการอื่น)</button></div>`);
+              <button type="button" class="small-btn" data-call="setRefillFilter" data-arg="all">แสดงทั้งหมด (เติมรายการอื่น)</button></div>`);
     }
     this.renderSummary();
   }

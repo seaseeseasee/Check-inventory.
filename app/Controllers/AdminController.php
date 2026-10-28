@@ -30,6 +30,9 @@ class AdminController extends Controller
     private Item $itemModel;
     private RoleMiddleware $roleMiddleware;
 
+    private const USER_CREATE_FIELDS = ['username', 'password', 'full_name', 'role', 'nurse_id'];
+    private const USER_UPDATE_FIELDS = ['full_name', 'role', 'nurse_id', 'active', 'password'];
+
     public function __construct()
     {
         $this->inspectionService = new InspectionService();
@@ -86,8 +89,9 @@ class AdminController extends Controller
     public function createUser(): void
     {
         $this->roleMiddleware->requireAdmin();
-        
-        $input = $this->getInput();
+
+        // รับเฉพาะช่องในฟอร์ม — กันการส่ง id / password_hash / must_change_password / created_at มาตั้งเอง
+        $input = array_intersect_key($this->getInput(), array_flip(self::USER_CREATE_FIELDS));
         // The users form sends null for "not linked" — normalize so the string rule passes
         if (!isset($input['nurse_id'])) {
             $input['nurse_id'] = '';
@@ -129,8 +133,9 @@ class AdminController extends Controller
     public function updateUser(string $id): void
     {
         $this->roleMiddleware->requireAdmin();
-        
-        $input = $this->getInput();
+
+        // ชื่อผู้ใช้แก้ไม่ได้ (ตัวตนตอน login) และห้ามตั้ง password_hash / id ตรง ๆ
+        $input = array_intersect_key($this->getInput(), array_flip(self::USER_UPDATE_FIELDS));
         // Same normalization as createUser(): null means "not linked"
         if (array_key_exists('nurse_id', $input) && $input['nurse_id'] === null) {
             $input['nurse_id'] = '';

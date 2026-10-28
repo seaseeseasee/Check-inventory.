@@ -74,15 +74,16 @@ class AuthMiddleware
     private function configureSession(): void
     {
         $origin = $_ENV['APP_ORIGIN'] ?? 'http://localhost';
-        $secure = (parse_url($origin, PHP_URL_SCHEME) === 'https')
-            && !in_array(parse_url($origin, PHP_URL_HOST), ['localhost', '127.0.0.1', '[::1]'], true);
-        
+        // ปกติ public/index.php เริ่ม session ไปแล้ว — ส่วนนี้เป็นสำรองและต้องตั้งค่าเหมือนกัน
+        $secure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+            || parse_url($origin, PHP_URL_SCHEME) === 'https';
+
         session_set_cookie_params([
             'lifetime' => 0,
             'path' => '/',
             'secure' => $secure,
             'httponly' => true,
-            'samesite' => 'Strict',
+            'samesite' => 'Lax',
         ]);
         session_name('refer_session');
         ini_set('session.use_strict_mode', '1');

@@ -233,8 +233,8 @@ class DashboardPage {
           <div class="rs-actions">
             ${disabled
               ? '<span class="dash-disabled-note">งดใช้งาน — เปิดกลับที่แท็บ "ทะเบียนรถ/อุปกรณ์" จึงจะตรวจได้</span>'
-              : `<button type="button" class="act-btn ok" onclick="dashboardPage.startInspection('${vehicle.id}')">ตรวจคันนี้</button>`}
-            <button type="button" class="act-btn gray" onclick="dashboardPage.viewRestock('${vehicle.id}')">ดูการเติม</button>
+              : `<button type="button" class="act-btn ok" data-call="dashboardPage.startInspection" data-arg="${UI.escape(vehicle.id)}">ตรวจคันนี้</button>`}
+            <button type="button" class="act-btn gray" data-call="dashboardPage.viewRestock" data-arg="${UI.escape(vehicle.id)}">ดูการเติม</button>
           </div>
         </article>
       `;
@@ -265,9 +265,9 @@ class DashboardPage {
             </div>
             <div class="rs-actions">
               ${['PENDING', 'IN_PROGRESS', 'PARTIAL'].includes(req.status) ? `
-                <button type="button" class="act-btn ok" onclick="dashboardPage.viewRestock('${UI.escape(req.car_id)}')">เติมรถคันนี้</button>
+                <button type="button" class="act-btn ok" data-call="dashboardPage.viewRestock" data-arg="${UI.escape(req.car_id)}">เติมรถคันนี้</button>
               ` : `
-                <button type="button" class="act-btn gray" onclick="dashboardPage.viewRestockDetail('${UI.escape(req.id)}')">ดูรายละเอียด</button>
+                <button type="button" class="act-btn gray" data-call="dashboardPage.viewRestockDetail" data-arg="${UI.escape(req.id)}">ดูรายละเอียด</button>
               `}
             </div>
           </article>
@@ -294,8 +294,8 @@ class DashboardPage {
                 }
               </p>
               <div class="rs-actions">
-                <button type="button" class="act-btn ok" onclick="dashboardPage.startInspection('${vehicle.id}')">ตรวจคันนี้</button>
-                <button type="button" class="act-btn gray" onclick="dashboardPage.viewRestock('${vehicle.id}')">ดูการเติม</button>
+                <button type="button" class="act-btn ok" data-call="dashboardPage.startInspection" data-arg="${UI.escape(vehicle.id)}">ตรวจคันนี้</button>
+                <button type="button" class="act-btn gray" data-call="dashboardPage.viewRestock" data-arg="${UI.escape(vehicle.id)}">ดูการเติม</button>
               </div>
             </article>
           `;
