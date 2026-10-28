@@ -84,9 +84,9 @@ services:
     pids_limit: 200
 
   db:
-    # Pin ถึง patch version ที่ใช้อยู่จริง — 10.4 หมดอายุการสนับสนุนแล้ว (EOL มิ.ย. 2024)
-    # การอัปเกรดเป็น LTS ใหม่ต้องทำตาม runbook: backup → ทดสอบ restore บน volume แยก → ค่อยสลับ
-    image: mariadb:10.4.34
+    # 10.11 LTS (รองรับถึง ก.พ. 2028) — เดิม 10.4 หมดอายุการสนับสนุนแล้ว (EOL มิ.ย. 2024)
+    # pin ถึง patch version; อัปเกรด major ครั้งต่อไปให้ทำแบบเดิม: backup → ทดสอบบน volume แยก → สลับ volume
+    image: mariadb:10.11.19
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
@@ -158,6 +158,11 @@ networks:
   admin:
 
 volumes:
-  # Same keys as before -> same volumes (emer_db_data, emer_storage_data); data kept.
+  # MariaDB 10.11 ใช้ volume ใหม่ (ย้ายข้อมูลด้วย dump/restore 2026-10-28)
+  # volume เดิมของ 10.4 = emer_db_data — เก็บไว้สำหรับย้อนกลับ ห้ามลบจนกว่าจะมั่นใจ
+  #   ย้อนกลับ: image: mariadb:10.4.34 + ลบบรรทัด name ด้านล่าง แล้ว docker compose up -d
+  # ⚠️ name ตายตัว = ไม่ผูกกับชื่อ project: `docker compose -p <ชื่ออื่น>` จะใช้ volume จริงตัวนี้ด้วย
+  #    (MariaDB 2 ตัวบน datadir เดียวกัน = ข้อมูลเสียได้) — stack ทดสอบต้อง override name ของ volume เสมอ
   db_data:
+    name: emer_db_data_1011
   storage_data:

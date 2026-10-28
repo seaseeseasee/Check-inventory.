@@ -103,7 +103,7 @@ Browser ─127.0.0.1:8080─▶ frontend (nginx) ── /assets/* เสิร�
                           backend (PHP 8.5 + Apache, Document Root = public/)
                               │ (network "data" — internal)
                               ▼
-                          db (MariaDB 10.4)
+                          db (MariaDB 10.11)
 ```
 
 - `frontend` — container เดียวที่เปิด port; เสิร์ฟ CSS/JS/รูปจาก `resources/assets` และ proxy

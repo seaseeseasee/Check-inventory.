@@ -135,12 +135,6 @@ window.systemApi = {
   health: () => api.get('/health'),
 };
 
-// Dashboard helpers
-window.dashboardApi = {
-  getStats: () => api.get('/dashboard'),
-  getVehicles: () => api.get('/dashboard/stats'),
-};
-
 // Nurse helpers
 window.nurseApi = {
   getAll: () => api.get('/nurses'),

@@ -9,7 +9,9 @@ FROM php:8.5.12-apache
 # ---- PHP extensions actually used by app/ (verified by grep, not assumed) ----
 # pdo + pdo_mysql : app/Config/Database.php (`new PDO(...)`, mysql DSN)
 # mbstring        : app/Services/StockService.php (mb_substr), app/Helpers (mb_strlen/mb_strtolower)
+# upgrade: รับแพตช์ความปลอดภัยของ Debian ที่ออกหลัง base image ถูก build (เช่น libbrotli1 CVE-2026-111497)
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends libonig-dev \
     && rm -rf /var/lib/apt/lists/* \
     && docker-php-ext-install pdo pdo_mysql mbstring

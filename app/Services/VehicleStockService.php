@@ -39,6 +39,8 @@ class VehicleStockService
     /** ค่าเริ่มต้นเมื่ออุปกรณ์ไม่ได้ตั้ง expiry_warn_days */
     public const EXPIRY_WARN_DAYS = 30;
     public const MAX_PSI = 10000;
+    /** ของแบบชิ้น: 1 ชิ้น = 1 แถว lot + 1 แถว ledger — จำกัดต่อครั้งให้ตรงกับหน้าเว็บ (กัน request เดียวสร้างหลักล้านแถว) */
+    public const MAX_PIECES_PER_OPERATION = 50;
 
     private Item $itemModel;
     private ItemLot $lotModel;
@@ -335,6 +337,9 @@ class VehicleStockService
     {
         if (self::itemType($item) !== self::TYPE_INDIVIDUAL) {
             throw new ApiException((string)$item['name'] . ': ไม่ใช่ของแบบชิ้น', 422);
+        }
+        if (count($expiries) > self::MAX_PIECES_PER_OPERATION) {
+            throw new ApiException(sprintf('%s: เพิ่มได้ครั้งละไม่เกิน %d ชิ้น', (string)$item['name'], self::MAX_PIECES_PER_OPERATION), 422);
         }
         $out = [];
         foreach ($expiries as $expiry) {

@@ -5,7 +5,6 @@ use App\Controllers\AuthController;
 use App\Controllers\HealthController;
 use App\Controllers\AdminController;
 use App\Controllers\StaffController;
-use App\Controllers\DashboardController;
 use App\Controllers\NurseController;
 use App\Controllers\VehicleController;
 use App\Controllers\InspectionController;
@@ -114,9 +113,6 @@ $route = match (true) {
     preg_match('/^\/api\/departments\/([^\/]+)$/', $path, $matches) && $method === 'DELETE' => ['DepartmentController', 'destroy', $matches[1]],
 
     // Legacy routes (for backward compatibility)
-    $path === '/api/dashboard' && $method === 'GET' => ['DashboardController', 'index'],
-    $path === '/api/dashboard/stats' && $method === 'GET' => ['DashboardController', 'stats'],
-
     $path === '/api/nurses' && $method === 'GET' => ['NurseController', 'index'],
     $path === '/api/nurses' && $method === 'POST' => ['NurseController', 'store'],
     preg_match('/^\/api\/nurses\/([^\/]+)$/', $path, $matches) && $method === 'PUT' => ['NurseController', 'update', $matches[1]],
