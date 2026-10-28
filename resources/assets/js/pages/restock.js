@@ -28,6 +28,8 @@ class RefillPage {
     this.openLots = new Set();   // item_id ที่ขยายรายละเอียดล็อตไว้
     this.openCards = new Set();  // item_id ที่ขยายการ์ดไว้ (ค่าเริ่มต้น = ย่อทุกใบ เหลือแถวสรุป)
     this.filter = 'need';
+    this.typeFilter = '';        // '' | individual | box | non_expiring
+    this.search = '';            // ค้นหาชื่ออุปกรณ์ (ไม่สนตัวพิมพ์เล็ก/ใหญ่)
     this.requestFilter = 'open';
     this.clientToken = null;
     this.submitting = false;
@@ -55,6 +57,31 @@ class RefillPage {
       }, true);
     }
     document.getElementById('restockList')?.addEventListener('click', (e) => this.onRequestClick(e));
+
+    // ค้นหาชื่อ / ประเภท — ใช้ร่วมกับปุ่ม ต้องเติม/ทั้งหมด/หมดอายุ
+    document.getElementById('refillSearch')?.addEventListener('input', UI.debounce((e) => {
+      this.search = e.target.value.trim().toLowerCase();
+      this.renderSheet();
+    }, 200));
+    document.getElementById('refillType')?.addEventListener('change', (e) => {
+      this.typeFilter = e.target.value;
+      this.renderSheet();
+    });
+  }
+
+  /** ผ่านตัวกรองประเภท + ค้นหาชื่อ (ไม่รวมปุ่ม ต้องเติม/ทั้งหมด/หมดอายุ) */
+  itemInScope(item) {
+    if (this.typeFilter && item.item_type !== this.typeFilter) return false;
+    return !this.search || String(item.name || '').toLowerCase().includes(this.search);
+  }
+
+  clearNarrow() {
+    this.typeFilter = '';
+    this.search = '';
+    const s = document.getElementById('refillSearch');
+    if (s) s.value = '';
+    const t = document.getElementById('refillType');
+    if (t) t.value = '';
   }
 
   async load() {
@@ -95,6 +122,7 @@ class RefillPage {
     this.focusItem = null;
     const item = this.sheet && this.itemById(itemId);
     if (!item) return;
+    this.clearNarrow();   // ให้รายการที่เลือกมองเห็นแน่นอน
     this.setFilter('all');
     const d = this.draftFor(itemId);
     if (UNIT_TYPES.includes(item.item_type)) {
@@ -192,21 +220,29 @@ class RefillPage {
     if (head) {
       head.innerHTML = `${window.vehicleChip(this.sheet.vehicle)} <span>รายการรอเติมที่เปิดอยู่ ${this.sheet.open_requests.length} ใบ</span>`;
     }
-    const items = this.sheet.items;
+    // ตัวเลขบนปุ่มนับเฉพาะรายการที่ผ่านตัวกรองประเภท/ชื่อ
+    const items = this.sheet.items.filter(item => this.itemInScope(item));
     const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
     set('refillCntAll', items.length);
     set('refillCntNeed', items.filter(i => RefillPage.needsAction(i)).length);
     set('refillCntExp', items.filter(i => i.expiry && (i.expiry.state === 'expired' || i.expiry.state === 'soon')).length);
 
     const shown = items.filter(item => this.itemMatches(item));
+    const narrowed = Boolean(this.typeFilter || this.search);
+    // รายการที่กรอกเติมไว้แล้วแต่ถูกตัวกรองซ่อน — ยังถูกบันทึกด้วย จึงต้องบอกให้รู้
+    const hiddenDrafts = this.sheet.items.filter(item => !shown.includes(item) && this.drafts[item.id]
+      && (this.drafts[item.id].lots.length || this.drafts[item.id].units.length || this.drafts[item.id].retire.size
+        || Object.keys(this.drafts[item.id].updates).length)).length;
     const list = document.getElementById('refillItems');
     if (list) {
-      list.innerHTML = shown.length
-        ? shown.map(item => `<div class="refill-card" data-id="${UI.escape(item.id)}">${this.renderItem(item)}</div>`).join('')
-        : (this.filter === 'all'
-          ? '<p class="empty">ไม่พบรายการ</p>'
-          : `<div class="empty">${this.filter === 'need' ? '✅ ไม่มีของขาด' : 'ไม่พบรายการ'}
-              <button type="button" class="small-btn" data-call="setRefillFilter" data-arg="all">แสดงทั้งหมด (เติมรายการอื่น)</button></div>`);
+      const clearBtn = narrowed ? '<button type="button" class="small-btn gray" data-call="clearRefillNarrow">ล้างการค้นหา / ประเภท</button>' : '';
+      list.innerHTML = (hiddenDrafts ? `<p class="refill-hidden-note">✏️ มีรายการที่กรอกไว้แต่ถูกซ่อนด้วยตัวกรอง ${hiddenDrafts} รายการ — จะถูกบันทึกด้วยเมื่อกดบันทึก</p>` : '')
+        + (shown.length
+          ? shown.map(item => `<div class="refill-card" data-id="${UI.escape(item.id)}">${this.renderItem(item)}</div>`).join('')
+          : (this.filter === 'all'
+            ? `<div class="empty">${narrowed ? 'ไม่พบอุปกรณ์ที่ตรงกับการค้นหา / ประเภท' : 'ไม่พบรายการ'} ${clearBtn}</div>`
+            : `<div class="empty">${this.filter === 'need' ? '✅ ไม่มีของขาด' : 'ไม่พบรายการ'}${narrowed ? ' (ในกลุ่มที่เลือก)' : ''}
+                <button type="button" class="small-btn" data-call="setRefillFilter" data-arg="all">แสดงทั้งหมด (เติมรายการอื่น)</button> ${clearBtn}</div>`));
     }
     this.renderSummary();
   }
@@ -720,9 +756,21 @@ class RefillPage {
       || (f === 'open' && ['PENDING', 'IN_PROGRESS', 'PARTIAL'].includes(r.status))
       || r.status === f);
     list.innerHTML = rows.length ? rows.map(r => {
-      const lines = (r.items || []).map(i => (i.line_type === 'replace'
-        ? `<li>${UI.escape(i.name)} — 🔧 ตรวจสอบ/เปลี่ยน ${Number(i.qty_filled) >= Number(i.qty_requested) ? '✅ เสร็จแล้ว' : ''}${i.note ? ` <small>(${UI.escape(i.note)})</small>` : ''}</li>`
-        : `<li>${UI.escape(i.name)} — ต้องเติม ${UI.escape(i.qty_requested || '0')} • เติมแล้ว ${UI.escape(i.qty_filled || '0')}${i.note ? ` <small>(${UI.escape(i.note)})</small>` : ''}</li>`)).join('');
+      // บรรทัดที่เติมครบแล้ว: ขึ้น ✅ สีจาง และย้ายไปท้ายการ์ด — บรรทัดที่ยังค้างอยู่ด้านบนเสมอ
+      const isDone = (i) => Number(i.qty_requested) > 0 && Number(i.qty_filled) >= Number(i.qty_requested);
+      const all = r.items || [];
+      const ordered = [...all.filter(i => !isDone(i)), ...all.filter(isDone)];
+      const doneCount = all.filter(isDone).length;
+      const note = (i) => (i.note ? ` <small>(${UI.escape(i.note)})</small>` : '');
+      const lines = ordered.map(i => {
+        if (isDone(i)) {
+          return `<li class="is-done">✅ ${UI.escape(i.name)} — ${i.line_type === 'replace' ? 'ตรวจสอบ/เปลี่ยนเสร็จแล้ว' : `เติมครบ ${UI.escape(i.qty_filled)}`}</li>`;
+        }
+        if (i.line_type === 'replace') return `<li>${UI.escape(i.name)} — 🔧 ตรวจสอบ/เปลี่ยน${note(i)}</li>`;
+        const left = Math.round((Number(i.qty_requested || 0) - Number(i.qty_filled || 0)) * 100) / 100;
+        return `<li>${UI.escape(i.name)} — ต้องเติม <b>${UI.escape(String(left))}</b>`
+          + `${Number(i.qty_filled) > 0 ? ` <small>(ขอ ${UI.escape(i.qty_requested)} • เติมแล้ว ${UI.escape(i.qty_filled)})</small>` : ''}${note(i)}</li>`;
+      }).join('');
       const open = ['PENDING', 'IN_PROGRESS', 'PARTIAL'].includes(r.status);
       return `<div class="request-card" data-id="${UI.escape(r.id)}">
         <div class="check-card-head">
@@ -730,6 +778,7 @@ class RefillPage {
             <div class="check-sub">${UI.escape(UI.formatDateTimeThai(r.created_at))} • ผู้แจ้ง ${UI.escape(r.created_name || '-')}</div></div>
           <span class="result-chip status-${UI.escape(r.status)}">${REQUEST_STATUS_LABEL[r.status] || UI.escape(r.status)}</span>
         </div>
+        ${all.length ? `<p class="request-progress">เติมแล้ว <b>${doneCount}/${all.length}</b> รายการ</p>` : ''}
         <ul class="request-lines">${lines}</ul>
         ${open ? `<div class="btn-row">
           <button type="button" class="small-btn" data-action="fill" data-car="${UI.escape(r.car_id)}">🧰 เติมรถคันนี้</button>
@@ -771,4 +820,5 @@ window.initRestock = () => {
 };
 window.setRestockFilter = (filter) => refillPage?.setRequestFilter(filter);
 window.setRefillFilter = (filter) => refillPage?.setFilter(filter);
+window.clearRefillNarrow = () => { refillPage?.clearNarrow(); refillPage?.renderSheet(); };
 window.submitRefill = () => refillPage?.submit();

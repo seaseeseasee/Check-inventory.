@@ -119,16 +119,65 @@ class NursesPage {
       form.addEventListener('submit', (e) => this.handleSubmit(e));
     }
 
-    document.getElementById('resetNurseBtn')?.addEventListener('click', () => this.resetForm());
-
     const search = document.getElementById('nurseSearch');
     if (search) {
       search.addEventListener('input', UI.debounce(() => this.filterTable(), 300));
     }
 
     document.getElementById('nurseDeptFilter')?.addEventListener('change', () => this.filterTable());
-    document.getElementById('userRoleFilter')?.addEventListener('change', () => this.filterTable());
-    document.getElementById('userStatusFilter')?.addEventListener('change', () => this.filterTable());
+
+    // แท็บกรอง (ประเภท/บทบาท/สถานะ) — เก็บค่าที่เลือกไว้บน #userChips ให้ทั้งสองรายการอ่านร่วมกัน
+    const chips = document.getElementById('userChips');
+    chips?.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-role]');
+      if (!btn) return;
+      const off = btn.getAttribute('aria-pressed') === 'true';   // กดหมวดเดิมซ้ำ = ยกเลิกตัวกรอง (แสดงทั้งหมด)
+      chips.dataset.role = off ? '' : btn.dataset.role;
+      chips.dataset.status = off ? '' : btn.dataset.status;
+      chips.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(!off && b === btn)));
+      this.filterTable();
+    });
+
+    // แตะแถวพยาบาล = เปิดหน้าต่างแก้ไข
+    document.getElementById('nurseDirectoryTable')?.addEventListener('click', (e) => {
+      const row = e.target.closest('.user-row');
+      const nurse = row && this.nurses[Number(row.dataset.index)];
+      if (!nurse) return;
+      window.usersPage?.resetForm();
+      this.editNurse(nurse);
+      NursesPage.openSheet('nurse', true);
+    });
+
+    document.getElementById('userAddBtn')?.addEventListener('click', () => {
+      this.resetForm();
+      window.usersPage?.resetForm();
+      NursesPage.openSheet('nurse', false);
+    });
+    document.querySelectorAll('#userKind [data-kind]').forEach((btn) => {
+      btn.addEventListener('click', () => NursesPage.setSheetKind(btn.dataset.kind));
+    });
+
+    // เมนู ⋯ : นำเข้า / ไฟล์ตัวอย่าง / จัดการวอร์ด — ปิดเมื่อเลือกคำสั่งหรือแตะนอกเมนู
+    const more = document.getElementById('usersMore');
+    document.addEventListener('click', (e) => {
+      if (more?.open && (!more.contains(e.target) || e.target.closest('.users-more-item'))) more.open = false;
+    });
+    document.getElementById('userImportOpenBtn')?.addEventListener('click', () => NursesPage.openImport());
+
+    // สวิตช์ "เปิดบัญชีให้คนนี้" (เฉพาะพยาบาลที่ยังไม่มีบัญชี)
+    document.getElementById('nAccountToggle')?.addEventListener('click', () => {
+      const on = document.getElementById('nAccountToggle').getAttribute('aria-checked') !== 'true';
+      this.setAccountSwitch(on);
+      if (on) {
+        const user = document.getElementById('nUsername');
+        user.value = NursesPage.phoneUsername(document.getElementById('nPhone').value) || '';
+        user.dataset.auto = user.value ? '1' : '';
+        user.focus();
+      }
+    });
+    document.getElementById('nRoleBtn')?.addEventListener('click', () => this.editingOriginal && this.changeRole(this.editingOriginal));
+    document.getElementById('nAccountActiveBtn')?.addEventListener('click', () => this.editingOriginal && this.toggleAccount(this.editingOriginal));
+
     document.getElementById('wardManagerBtn')?.addEventListener('click', () => this.openWardManager());
     document.getElementById('deptQuickAddBtn')?.addEventListener('click', () => this.openQuickAddWard());
 
@@ -155,7 +204,8 @@ class NursesPage {
       this.onPhoneInput(e);
       // บัญชีใหม่: ชื่อผู้ใช้ = เบอร์โทร (ใส่ให้อัตโนมัติจนกว่าผู้ดูแลจะพิมพ์ชื่อผู้ใช้เอง)
       const user = document.getElementById('nUsername');
-      if (user && !this.editingLoginUsername && (user.value === '' || user.dataset.auto === '1')) {
+      const switchOn = document.getElementById('nAccountToggle')?.getAttribute('aria-checked') === 'true';
+      if (user && switchOn && !this.editingLoginUsername && (user.value === '' || user.dataset.auto === '1')) {
         user.value = NursesPage.phoneUsername(e.target.value) || '';
         user.dataset.auto = user.value ? '1' : '';
       }
@@ -329,6 +379,9 @@ class NursesPage {
   // ---------- Render ----------
 
   render() {
+    // แถบบน (ค้นหา/ตัวกรอง) ติดใต้หัวเว็บ — ความสูงหัวเว็บต่างกันตามจอ จึงวัดจริง
+    const appTop = document.querySelector('.app-top');
+    if (appTop) document.documentElement.style.setProperty('--app-top-h', appTop.offsetHeight + 'px');
     this.renderTable();
     this.renderDeptSelect();
     this.renderDeptFilter();
@@ -396,59 +449,144 @@ class NursesPage {
     const container = document.getElementById('nurseDirectoryTable');
     if (!container) return;
 
+    // 1 คน = 1 แถว (แตะเพื่อแก้ไข) — data-* ใช้กับตัวกรอง, ค้นหาข้อความใช้ textContent ทั้งแถว
     container.innerHTML = this.nurses.map((nurse, index) => {
       const acc = nurse.account || null;
-      // data-* ใช้กับตัวกรองหน้าจัดการผู้ใช้ (บทบาท/สถานะ) — ค้นหาข้อความใช้ textContent ทั้งการ์ด
       const roleKey = acc ? acc.role : 'nurse-noaccount';
       const statusKey = nurse.active && (!acc || acc.active) ? 'active' : 'inactive';
+      const sub = [
+        `รหัส ${UI.escape(nurse.id)}`,
+        UI.escape((nurse.department || '').trim() || 'ไม่ระบุวอร์ด'),
+        acc ? `🔑 ${UI.escape(acc.username)}` : '',
+        nurse.phone && (!acc || acc.username !== NursesPage.phoneUsername(nurse.phone)) ? `📞 ${UI.escape(nurse.phone)}` : '',
+      ].filter(Boolean).join(' · ');
       return `
-      <article class="nurse-card" data-id="${nurse.id}" data-dept="${UI.escape((nurse.department || '').trim())}" data-role="${roleKey}" data-status="${statusKey}">
-        <div class="nurse-top">
-          <div style="flex:1;min-width:0">
-            <div class="nurse-name">${UI.escape(nurse.name)}</div>
-            <div class="nurse-sub">รหัส ${UI.escape(nurse.id)}</div>
-          </div>
-          <div class="nurse-badges">
-            <span class="chip chip-info ward-chip">${UI.escape((nurse.department || '').trim() || 'ไม่ระบุวอร์ด')}</span>
-            <span class="chip ${nurse.active ? 'chip-ok' : 'chip-off'}">
-              ${nurse.active ? 'ปฏิบัติงาน' : 'พักใช้งาน'}
-            </span>
-          </div>
-        </div>
-        <div class="nurse-meta">
-          ${nurse.phone ? `<span>📞 ${UI.escape(nurse.phone)}</span>` : ''}
-          ${nurse.start_text ? `<span>เริ่ม ${UI.escape(NursesPage.formatThaiDate(nurse.start_text))}</span>` : ''}
-          ${nurse.end_text ? `<span>ครบ 6 เดือน ${UI.escape(NursesPage.formatThaiDate(nurse.end_text))}</span>` : ''}
-          ${nurse.note ? `<span>📝 ${UI.escape(nurse.note)}</span>` : ''}
-        </div>
-        <div class="account-line">
-          ${acc ? `
-            <span>🔑 ${UI.escape(acc.username)}</span>
-            <span class="chip ${acc.role === 'admin' ? 'chip-warn' : 'chip-info'}">${acc.role === 'admin' ? '👑 Admin' : '👨‍⚕️ Staff'}</span>
-            <span class="chip ${acc.active ? 'chip-ok' : 'chip-off'}">${acc.active ? 'บัญชีใช้งาน' : 'บัญชีปิดใช้งาน'}</span>
-            ${acc.last_login_at ? `<span class="text-xs text-slate-500">เข้าสู่ระบบล่าสุด ${UI.escape(UI.formatDateTimeThai(acc.last_login_at))}</span>` : '<span class="text-xs text-slate-500">ยังไม่เคยเข้าสู่ระบบ</span>'}
-          ` : '<span class="text-xs text-slate-500">ยังไม่มีบัญชีเข้าใช้งาน — กด “แก้ไข” แล้วกรอกชื่อผู้ใช้/รหัสผ่านเพื่อสร้าง</span>'}
-        </div>
-        <div class="nurse-actions">
-          <button class="small-btn" data-action="edit" data-index="${index}">แก้ไขข้อมูล/บัญชี</button>
-          ${acc ? `
-            <button class="small-btn gray" data-action="role" data-index="${index}">${acc.role === 'admin' ? 'เปลี่ยนเป็น Staff' : 'ให้สิทธิ์ Admin'}</button>
-            <button class="small-btn ${acc.active ? 'danger' : 'ok'}" data-action="account" data-index="${index}">${acc.active ? 'ปิดบัญชี' : 'เปิดบัญชี'}</button>` : ''}
-        </div>
-      </article>
-    `;
-    }).join('') || '<p class="empty">ยังไม่มีรายชื่อ — เพิ่มหรือเลือกไฟล์ต้นฉบับเพื่อนำเข้าสู่เซิร์ฟเวอร์</p>';
+      <button type="button" class="user-row${statusKey === 'inactive' ? ' is-off' : ''}" data-index="${index}" data-id="${UI.escape(nurse.id)}"
+        data-dept="${UI.escape((nurse.department || '').trim())}" data-role="${roleKey}" data-status="${statusKey}">
+        <span class="user-av${acc?.role === 'admin' ? ' is-admin' : ''}" aria-hidden="true">${UI.escape(NursesPage.initial(nurse.name))}</span>
+        <span class="user-who"><b>${UI.escape(nurse.name)}</b><span>${sub}</span></span>
+        <span class="user-side">${NursesPage.rowBadge(nurse.active, acc)}<span class="user-chev" aria-hidden="true">›</span></span>
+      </button>`;
+    }).join('') || '<p class="empty">ยังไม่มีรายชื่อพยาบาล — กด “+ เพิ่มผู้ใช้” หรือนำเข้าจากไฟล์ที่เมนู ⋯</p>';
 
-    container.querySelectorAll('[data-action="edit"]').forEach((btn) => {
-      btn.addEventListener('click', () => this.editNurse(this.nurses[btn.dataset.index]));
-    });
-    container.querySelectorAll('[data-action="account"]').forEach((btn) => {
-      btn.addEventListener('click', () => this.toggleAccount(this.nurses[btn.dataset.index]));
-    });
-    container.querySelectorAll('[data-action="role"]').forEach((btn) => {
-      btn.addEventListener('click', () => this.changeRole(this.nurses[btn.dataset.index]));
-    });
     this.filterTable();
+  }
+
+  /** ตัวอักษรแรกของชื่อสำหรับวงกลม (ข้ามสระหน้า เ แ โ ใ ไ) */
+  static initial(name) {
+    const chars = [...String(name || '').trim()];
+    return chars.find((c) => !'เแโใไ'.includes(c)) || '?';
+  }
+
+  /** ป้ายด้านขวาของแถว: พัก/ปิด > Admin > Staff > ยังไม่มีบัญชี */
+  static rowBadge(personActive, acc) {
+    if (!personActive) return '<span class="user-badge is-off">พักใช้งาน</span>';
+    if (acc && !acc.active) return '<span class="user-badge is-off">ปิดบัญชี</span>';
+    if (acc?.role === 'admin') return '<span class="user-badge is-admin">👑 Admin</span>';
+    if (acc) return '<span class="user-badge is-staff">Staff</span>';
+    return '<span class="user-badge is-none">ยังไม่มีบัญชี</span>';
+  }
+
+  /** ตัวเลขสรุปบนแถบบน (นับจากข้อมูลทั้งหมด ไม่ขึ้นกับตัวกรอง) */
+  renderUserStats() {
+    const el = document.getElementById('userStats');
+    if (!el) return;
+    const others = window.usersPage ? window.usersPage.otherUsers() : [];
+    const accounts = [...this.nurses.map((n) => n.account).filter(Boolean), ...others];
+    const noAccount = this.nurses.filter((n) => !n.account).length;
+    const off = this.nurses.filter((n) => !n.active || (n.account && !n.account.active)).length
+      + others.filter((u) => !u.active).length;
+    const stat = (value, label, attn = false) =>
+      `<div class="users-stat${attn ? ' is-attn' : ''}"><b>${value}</b><span>${label}</span></div>`;
+    el.innerHTML = stat(this.nurses.length, 'พยาบาล')
+      + stat(accounts.filter((a) => a.role === 'admin').length, 'Admin')
+      + stat(noAccount, 'ยังไม่มีบัญชี', noAccount > 0)
+      + stat(off, 'พัก / ปิด');
+  }
+
+  // ---------- หน้าต่างเพิ่ม/แก้ไข + นำเข้า ----------
+
+  static openSheet(kind, editing) {
+    const sheet = document.getElementById('userSheet');
+    if (!sheet) return;
+    NursesPage.setSheetKind(kind);
+    document.getElementById('userKind')?.classList.toggle('hidden', editing);   // แก้ไข = ประเภทเปลี่ยนไม่ได้
+    sheet.classList.remove('hidden');
+    sheet.querySelectorAll('.user-form-body').forEach((el) => { el.scrollTop = 0; });
+    document.body.classList.add('users-sheet-open');
+    setTimeout(() => (kind === 'nurse' ? document.getElementById('nName') : document.getElementById('uFullName'))?.focus(), 50);
+  }
+
+  static setSheetKind(kind) {
+    const nurse = kind !== 'other';
+    document.querySelectorAll('#userKind [data-kind]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === kind)));
+    document.getElementById('nurseForm')?.classList.toggle('hidden', !nurse);
+    document.getElementById('userForm')?.classList.toggle('hidden', nurse);
+    NursesPage.updateSheetTitle();
+  }
+
+  static updateSheetTitle() {
+    const title = document.getElementById('userSheetTitle');
+    if (!title) return;
+    const nurse = !document.getElementById('nurseForm')?.classList.contains('hidden');
+    const editing = nurse ? window.nursesPage?.editingId : window.usersPage?.editingId;
+    title.textContent = editing ? (nurse ? 'แก้ไขพยาบาล' : 'แก้ไขบัญชีผู้ใช้') : 'เพิ่มผู้ใช้';
+  }
+
+  static closeSheet() {
+    document.getElementById('userSheet')?.classList.add('hidden');
+    document.body.classList.remove('users-sheet-open');
+    window.nursesPage?.resetForm();
+    window.usersPage?.resetForm();
+  }
+
+  static openImport() {
+    document.getElementById('userImportSheet')?.classList.remove('hidden');
+    document.body.classList.add('users-sheet-open');
+  }
+
+  static closeImport() {
+    document.getElementById('userImportSheet')?.classList.add('hidden');
+    document.body.classList.remove('users-sheet-open');
+  }
+
+  /** สวิตช์ "เปิดบัญชีให้คนนี้" — ปิด = ล้างชื่อผู้ใช้/รหัสผ่าน (บันทึกแล้วไม่สร้างบัญชี) */
+  setAccountSwitch(on) {
+    document.getElementById('nAccountToggle')?.setAttribute('aria-checked', String(on));
+    document.getElementById('nAccountFields')?.classList.toggle('hidden', !on);
+    if (!on) {
+      document.getElementById('nUsername').value = '';
+      document.getElementById('nPassword').value = '';
+      this.setFieldError('nUsername', '');
+      this.setFieldError('nPassword', '');
+    }
+  }
+
+  /** ส่วนบัญชีในหน้าต่าง: ยังไม่มีบัญชี = สวิตช์ | มีบัญชีแล้ว = ช่องรหัสผ่าน + ปุ่มเปลี่ยนบทบาท/ปิดบัญชี */
+  renderAccountSection() {
+    const acc = this.editingOriginal?.account || null;
+    document.getElementById('nAccountSwitchRow')?.classList.toggle('hidden', Boolean(acc));
+    document.getElementById('nAccountHint')?.classList.toggle('hidden', Boolean(acc));
+    const actions = document.getElementById('nAccountActions');
+    actions?.classList.toggle('hidden', !acc);
+    if (acc) {
+      document.getElementById('nAccountFields')?.classList.remove('hidden');
+      const role = document.getElementById('nRoleBtn');
+      if (role) role.textContent = acc.role === 'admin' ? '⬇️ เปลี่ยนเป็น Staff' : '👑 ให้สิทธิ์ Admin';
+      const active = document.getElementById('nAccountActiveBtn');
+      if (active) {
+        active.textContent = acc.active ? '🔒 ปิดบัญชี (เข้าสู่ระบบไม่ได้)' : '🔓 เปิดบัญชี';
+        active.classList.toggle('is-danger', Boolean(acc.active));
+      }
+      const last = document.getElementById('nLastLogin');
+      if (last) {
+        last.textContent = (acc.active ? '' : 'บัญชีปิดอยู่ · ')
+          + (acc.last_login_at ? `เข้าสู่ระบบล่าสุด ${UI.formatDateTimeThai(acc.last_login_at)}` : 'ยังไม่เคยเข้าสู่ระบบ');
+      }
+    } else {
+      // แก้ไขพยาบาลที่ยังไม่มีบัญชี: ปิดสวิตช์ไว้ก่อน | เพิ่มคนใหม่: เปิดไว้ (ชื่อผู้ใช้ = เบอร์โทรอัตโนมัติ)
+      this.setAccountSwitch(!this.editingId);
+    }
   }
 
   // ---------- บัญชีของพยาบาล (ใช้ API ผู้ใช้เดิม — server ตรวจสิทธิ์ admin / กันปิดบัญชีตัวเอง / admin คนสุดท้าย) ----------
@@ -498,34 +636,52 @@ class NursesPage {
       await window.usersPage.loadData();
       window.usersPage.render();
     }
+    // หน้าต่างแก้ไขยังเปิดอยู่ (เช่น เพิ่งเปลี่ยนบทบาท/ปิดบัญชี) — อัปเดตส่วนบัญชีให้ตรงข้อมูลใหม่
+    if (this.editingId) {
+      this.editingOriginal = this.nurses.find((n) => String(n.id) === String(this.editingId)) || this.editingOriginal;
+      this.renderAccountSection();
+    }
+  }
+
+  /** ตัวกรองที่เลือกจากแท็บ (ใช้ร่วมกับ users.js) */
+  static chipFilter() {
+    const chips = document.getElementById('userChips');
+    return { role: chips?.dataset.role || '', status: chips?.dataset.status || '' };
   }
 
   filterTable() {
     const query = document.getElementById('nurseSearch')?.value?.toLowerCase().trim() || '';
     const dept = document.getElementById('nurseDeptFilter')?.value || '';
-    const role = document.getElementById('userRoleFilter')?.value || '';
-    const status = document.getElementById('userStatusFilter')?.value || '';
+    const { role, status } = NursesPage.chipFilter();
     let shown = 0;
 
-    document.querySelectorAll('#nurseDirectoryTable .nurse-card').forEach((card) => {
-      const matchDept = !dept || card.dataset.dept === dept;
-      const matchText = !query || card.textContent.toLowerCase().includes(query);
-      const matchRole = !role || role === 'nurse' || card.dataset.role === role;
-      const matchStatus = !status || card.dataset.status === status;
+    document.querySelectorAll('#nurseDirectoryTable .user-row').forEach((row) => {
+      const matchDept = !dept || row.dataset.dept === dept;
+      const matchText = !query || row.textContent.toLowerCase().includes(query);
+      const matchRole = !role || role === 'nurse' || row.dataset.role === role;
+      const matchStatus = !status || row.dataset.status === status;
       const hide = !(matchDept && matchText && matchRole && matchStatus && role !== 'other');
-      card.classList.toggle('hidden', hide);
+      row.classList.toggle('hidden', hide);
       if (!hide) shown++;
     });
     // บัญชีที่ไม่ใช่พยาบาลอยู่หน้าเดียวกัน — ใช้ตัวกรองชุดเดียวกัน
     const others = window.usersPage ? window.usersPage.filterTable() : 0;
+    const filtering = Boolean(query || dept || role || status);
+
+    // หัวกลุ่มซ่อนเมื่อกลุ่มนั้นไม่มีแถวให้แสดงระหว่างกรอง
+    document.getElementById('nurseGroupTitle')?.classList.toggle('hidden', filtering && shown === 0);
+    document.getElementById('nurseDirectoryTable')?.classList.toggle('hidden', filtering && shown === 0);
+    document.getElementById('otherGroupTitle')?.classList.toggle('hidden', others === 0);
+    document.getElementById('userDirectoryTable')?.classList.toggle('hidden', others === 0);
+    document.getElementById('usersEmpty')?.classList.toggle('hidden', !(filtering && shown + others === 0));
 
     const note = document.getElementById('nurseFilterNote');
     if (note) {
-      const filtering = Boolean(query || dept || role || status);
-      const text = filtering ? `แสดงพยาบาล ${shown} รายชื่อ • บัญชีอื่น ${others} บัญชี${dept ? ` (วอร์ด ${dept})` : ''}` : '';
+      const text = filtering ? `พบพยาบาล ${shown} คน · บัญชีอื่น ${others} บัญชี${dept ? ` (วอร์ด ${dept})` : ''}` : '';
       note.textContent = text;
       note.classList.toggle('hidden', !text);
     }
+    this.renderUserStats();
   }
 
   // ---------- Form state ----------
@@ -568,9 +724,13 @@ class NursesPage {
       legacyHint.classList.toggle('hidden', !legacyText);
     }
 
+    // มีวันเริ่ม/หมายเหตุ/พักใช้งาน หรือค่าเดิมแบบเก่า → กาง "ข้อมูลเพิ่มเติม" ให้เห็นเลย
+    const extra = document.getElementById('nurseExtra');
+    if (extra) extra.open = Boolean(nurse.start_text || nurse.note || !nurse.active);
+
     this.clearAllErrors();
+    this.renderAccountSection();
     this.updateFormTitle();
-    document.getElementById('nurseEditor')?.scrollIntoView({ block: 'start' });
   }
 
   resetForm() {
@@ -595,8 +755,11 @@ class NursesPage {
     this.renderLoginStatus();
     document.getElementById('nStartLegacy')?.classList.add('hidden');
     this.renderDeptSelect({ id: '', legacy: '' });
+    const extra = document.getElementById('nurseExtra');
+    if (extra) extra.open = false;
 
     this.clearAllErrors();
+    this.renderAccountSection();
     this.updateFormTitle();
     this.suggestCode();
   }
@@ -610,6 +773,7 @@ class NursesPage {
     if (submitBtn) {
       submitBtn.textContent = this.editingId ? 'บันทึกการแก้ไข' : 'เพิ่มพยาบาล';
     }
+    NursesPage.updateSheetTitle();
   }
 
   renderLoginStatus() {
@@ -705,8 +869,8 @@ class NursesPage {
       UI.setLoading(submitBtn, false);
     }
 
-    // resetForm ต้องทำงานหลัง setLoading(false) ไม่งั้นข้อความปุ่มจะถูกทับกลับเป็นค่าเดิม
-    this.resetForm();
+    // ปิดหน้าต่าง (รวม resetForm) หลัง setLoading(false) ไม่งั้นข้อความปุ่มจะถูกทับกลับเป็นค่าเดิม
+    NursesPage.closeSheet();
     await Promise.all([this.loadNurses(), this.loadDepartments()]);
     this.render();
     // บัญชีที่สร้าง/แก้จากฟอร์มพยาบาลมีผลกับรายการบัญชีอื่นและตัวเลือก "ผูกกับพยาบาล" ด้วย
@@ -1500,3 +1664,8 @@ window.initNurses = () => {
     nursesPage.loadNurses().then(() => nursesPage.render());
   }
 };
+
+// ปุ่มในหน้าต่าง (data-call) — ปิดหน้าต่างเพิ่ม/แก้ไข, ปิดหน้าต่างนำเข้า, ดาวน์โหลดไฟล์ตัวอย่าง
+window.closeUserSheet = () => NursesPage.closeSheet();
+window.closeUserImport = () => NursesPage.closeImport();
+window.downloadNurseTemplate = () => window.nursesPage?.downloadTemplate();

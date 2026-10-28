@@ -2,41 +2,250 @@
    PAGE: VEHICLES / STOCK
    ======================================== */
 
-.vehicle-pick {
+/* หัวข้อ + ปุ่มเพิ่มรถ (งานของรถทุกคัน) */
+.stock-head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
+  margin-bottom: 8px;
 }
 
-.vehicle-pick-main {
-  flex: 1 1 260px;
-  min-width: 0;
-}
-
-.vehicle-pick-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.vehicle-pick-actions .small-btn {
+.stock-head h2 {
   margin: 0;
+  min-width: 0;
+  text-wrap: balance;
+}
+
+.stock-head .stock-add-car {
+  flex: 0 0 auto;
   white-space: nowrap;
+  background: var(--teal-50);
+  color: var(--teal-700);
+  border-color: var(--teal-100);
+  font-weight: 800;
+}
+
+.stock-head .stock-add-car:hover {
+  background: var(--teal-100);
+}
+
+/* การ์ดรถที่เลือก: ทะเบียน + สถานะ + ตัวเลขสรุป + ปุ่มจัดการ */
+.vehicle-card {
+  display: grid;
+  gap: 12px;
+  margin: 10px 0 16px;
+  padding: 12px;
+  border: 1.5px solid var(--teal-100);
+  border-radius: 14px;
+  background: var(--teal-50);
 }
 
 .vehicle-meta {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  color: var(--muted);
+}
+
+.vcard-top {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin: 8px 0 12px;
-  font-size: 13px;
+}
+
+.vcard-top .chip {
+  margin: 0;
+}
+
+.vcard-plate {
+  font-size: 1.15rem;
+  padding: 4px 12px;
+}
+
+.vcard-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 6px;
+}
+
+.vcard-stat {
+  min-width: 0;
+  padding: 6px 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  text-align: center;
+}
+
+.vcard-stat b {
+  display: block;
+  font-size: 1.2rem;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.vcard-stat span {
+  font-size: 0.85rem;
+  font-weight: 600;
   color: var(--muted);
 }
 
-.vehicle-meta .chip {
+/* "รอเติม" มีงานค้าง: เด่นขึ้นมาเอง */
+.vcard-stat.is-attn {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.vcard-stat.is-attn b,
+.vcard-stat.is-attn span {
+  color: #92400e;
+}
+
+.vehicle-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  position: relative;
+}
+
+.vehicle-actions[hidden] {
+  display: none;
+}
+
+.vehicle-actions .vehicle-edit {
+  width: 100%;
+  background: #fff;
+  color: var(--teal-700);
+  border-color: var(--teal-600);
+  font-weight: 800;
+}
+
+.vehicle-actions .vehicle-edit:hover {
+  background: var(--teal-50);
+}
+
+/* เมนู ⋯ : ปิดใช้งาน / ลบรถ */
+.vehicle-more > summary {
+  list-style: none;
+  justify-content: center;
+  min-width: 52px;
+  height: 100%;
+  background: #fff;
+  font-size: 1.2rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.vehicle-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.vehicle-more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  display: grid;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+.vehicle-more-menu .vehicle-more-item {
+  width: 100%;
+  min-height: 44px;
   margin: 0;
+  padding: 8px 12px;
+  text-align: left;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.vehicle-more-menu .vehicle-more-item:hover {
+  background: var(--teal-50);
+  filter: none;
+}
+
+.vehicle-more-menu .vehicle-more-item.is-danger {
+  color: var(--bad);
+}
+
+.vehicle-more-menu .vehicle-more-item.is-danger:hover {
+  background: var(--bad-soft);
+}
+
+/* ส่วนอุปกรณ์ของรถคันนี้ */
+.stock-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stock-section-head h3 {
+  margin: 0 0 8px;
+}
+
+.stock-item-count {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.stock-add-item {
+  margin-bottom: 10px;
+}
+
+/* วิธีเพิ่มอุปกรณ์แบบอื่น (พับเก็บ) */
+.stock-more-ways {
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.stock-more-ways > summary {
+  list-style: none;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  position: relative;
+  padding: 6px 40px 6px 12px;
+  font-weight: 700;
+  color: var(--teal-700);
+}
+
+.stock-more-ways > summary::-webkit-details-marker {
+  display: none;
+}
+
+.stock-more-ways > summary small {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.stock-more-ways > summary::after {
+  content: "▾";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.stock-more-ways[open] > summary::after {
+  content: "▴";
+}
+
+.stock-more-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 10px 10px;
 }
 
 #stockTable .stock-card {
@@ -47,10 +256,135 @@
   opacity: 0.62;
 }
 
+/* การ์ดอุปกรณ์ตอนขยาย: 0) ประเภท 1) ของบนรถตอนนี้ 2) ตั้งค่าอุปกรณ์ 3) บันทึก + เมนู ⋯ */
+#stockTable .stock-type {
+  margin-bottom: 10px;
+}
+
+#stockTable .stock-type label {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#stockTable .stock-type select {
+  min-height: 44px;
+  margin: 0;
+}
+
+#stockTable .stock-onboard {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1.5px solid var(--teal-100);
+  border-radius: 12px;
+  background: var(--teal-50);
+}
+
+#stockTable .stock-onboard-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#stockTable .stock-onboard-head label {
+  margin: 0;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+#stockTable .stock-onboard-head small {
+  color: var(--muted);
+  font-weight: 600;
+  text-align: right;
+}
+
+#stockTable .stock-onboard .stepper input {
+  background: #fff;
+}
+
+#stockTable .stock-onboard .stepper button {
+  background: #fff;
+  color: var(--teal-700);
+  border-color: var(--teal-600);
+}
+
+#stockTable .stock-onboard-qty {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+#stockTable .stock-onboard .add-dates:has(> p.text-sm:only-child) {
+  display: none;   /* ข้อความ "เพิ่มจำนวนแล้วจะมีช่อง…" ไม่ต้องโชว์ — ช่องวันหมดอายุโผล่เองเมื่อกด + */
+}
+
+#stockTable .stock-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+#stockTable .stock-facts > div {
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #fff;
+}
+
+#stockTable .stock-facts span {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+#stockTable .stock-facts b {
+  font-size: 0.95rem;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+#stockTable .stock-link-btn {
+  justify-self: start;
+  width: auto;
+  min-height: 40px;
+  margin: 0;
+  padding: 4px 2px;
+  background: none;
+  color: var(--teal-700);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+#stockTable .stock-link-btn:hover {
+  text-decoration: underline;
+  filter: none;
+}
+
+#stockTable .stock-set-title {
+  margin: 14px 0 6px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--muted);
+}
+
 #stockTable .stock-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+#stockTable .stock-fields > div {
+  min-width: 0;
+}
+
+#stockTable .stock-fields .stock-wide {
+  grid-column: 1 / -1;
 }
 
 #stockTable .stock-fields label {
@@ -59,59 +393,99 @@
   margin: 0 0 4px;
 }
 
-#stockTable .stock-fields input {
-  min-height: 44px;
-  padding: 8px 10px;
-}
-
-#stockTable .stock-name-input {
-  flex: 1 1 auto;
+#stockTable .stock-fields input,
+#stockTable .stock-fields select {
   min-width: 0;
+  min-height: 44px;
   margin: 0;
-  font-weight: 600;
-}
-
-#stockTable .stock-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-#stockTable .stock-stamp {
-  font-size: 12px;
-  color: var(--muted);
-  font-weight: 400;
+  padding: 8px 10px;
 }
 
 #stockTable .small-btn {
   width: 100%;
 }
 
-@media (max-width: 480px) {
-  #stockTable .stock-fields {
-    grid-template-columns: 1fr;
-  }
+/* บันทึก (ปุ่มหลักปุ่มเดียว) + เมนู ⋯ */
+#stockTable .stock-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  position: relative;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
 
-  .vehicle-pick-actions .small-btn {
-    flex: 1 1 45%;
-  }
+#stockTable .stock-dirty {
+  grid-column: 1 / -1;
+  margin: -4px 0 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #92400e;
+}
+
+#stockTable .stock-save {
+  margin: 0;
+}
+
+#stockTable .stock-more > summary {
+  width: auto;
+  min-width: 52px;
+  height: 100%;
+  justify-content: center;
+  list-style: none;
+  background: #fff;
+  font-size: 1.2rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+#stockTable .stock-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+#stockTable .stock-more-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);   /* เปิดขึ้นด้านบน — ปุ่มอยู่ท้ายการ์ด */
+  z-index: 20;
+  display: grid;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+#stockTable .stock-more-item {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 12px;
+  text-align: left;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+#stockTable .stock-more-item:hover {
+  background: var(--teal-50);
+  filter: none;
+}
+
+#stockTable .stock-more-item.is-danger {
+  color: var(--bad);
+}
+
+#stockTable .stock-more-item.is-danger:hover {
+  background: var(--bad-soft);
 }
 
 /* ========================================
    COPY ITEMS FROM ANOTHER VEHICLE
    ======================================== */
-
-.stock-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: stretch;
-  margin-bottom: 12px;
-}
-
-.stock-toolbar .small-btn {
-  margin: 0;
-}
 
 .copy-box {
   display: flex;
@@ -160,104 +534,277 @@
   border: 1.5px solid #bfdbfe;
 }
 
+/* ---------- รายการรอเพิ่มลงรถ (คัดลอกจากรถคันอื่น / นำเข้าจากไฟล์) ---------- */
 #copyPreview {
   margin-bottom: 14px;
-  padding: 12px;
-  border: 1.5px dashed #f59e0b;
+  border: 1.5px solid var(--line);
   border-radius: 14px;
-  background: #fffbeb;
+  background: #fff;
 }
 
-.copy-preview-head {
+/* หัวสรุป: ติดใต้หัวเว็บระหว่างเลื่อนดูรายการ */
+.copy-sum {
+  position: sticky;
+  top: var(--app-top-h, 0px);
+  z-index: 15;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 14px 14px 0 0;
+  background: #fff;
+}
+
+.copy-sum-title {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: 2px 10px;
 }
 
-.copy-preview-title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+.copy-sum-title strong {
+  font-size: 1.05rem;
+  color: var(--ink);
 }
 
 .copy-preview-from {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 13px;
   color: var(--muted);
 }
 
-.copy-preview-note {
-  margin: 4px 0 10px;
-  font-size: 13px;
-  color: #92400e;
+.copy-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: #f1f5f9;
 }
 
+.copy-progress i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--teal-600);
+  transition: width 0.25s ease;
+}
+
+.copy-sum-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.copy-sum-line .is-warn {
+  color: #92400e;
+  font-weight: 700;
+}
+
+.copy-filters {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.copy-filters button {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 36px;
+  margin: 0;
+  padding: 4px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-full);
+  background: #fff;
+  color: #334155;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.copy-filters button.is-warn {
+  color: #92400e;
+  border-color: #f59e0b;
+}
+
+.copy-filters button[aria-pressed="true"] {
+  background: var(--teal-700);
+  border-color: var(--teal-700);
+  color: #fff;
+}
+
+#copyPreviewList {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.copy-filter-empty {
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* การ์ดแต่ละรายการ */
 .copy-row {
-  margin-bottom: 8px;
+  display: grid;
+  gap: 8px;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #fff;
 }
 
-.copy-row-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.copy-row[hidden] {
+  display: none;
+}
+
+.copy-row.is-dup {
+  border-color: #f59e0b;
+}
+
+.copy-row-head {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: start;
 }
 
 .copy-row-no {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 24px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #fef3c7;
-  color: #92400e;
-  font-size: 12px;
+  padding-top: 2px;
+  font-size: 0.8rem;
   font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
-.copy-row-top input[data-copy-field="name"] {
-  flex: 1 1 auto;
+.copy-row-name {
   min-width: 0;
-  margin: 0;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+.copy-row-name.is-empty {
+  color: var(--bad);
+  font-weight: 600;
 }
 
 .copy-row-remove {
-  flex: 0 0 auto;
+  width: auto;
+  min-width: 40px;
   min-height: 40px;
-  margin: 0;
-  padding: 6px 10px;
+  margin: -6px -6px 0 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-size: 1.05rem;
 }
 
-.copy-row-fields {
+.copy-row-remove:hover {
+  background: var(--bad-soft);
+  filter: none;
+}
+
+.copy-row-tags,
+.copy-row-dup {
+  grid-column: 2 / -1;
+}
+
+.copy-row-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.copy-tag {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: #f1f5f9;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.copy-row-dup {
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--warn-soft);
+  color: #92400e;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* ช่องที่ต้องกรอก: จำนวน + วันหมดอายุ ในบรรทัดเดียว */
+.copy-row-fill {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
   gap: 8px;
-  margin-top: 8px;
+}
+
+.copy-row-fill label {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.copy-row-fill input {
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 6px 8px;
 }
 
 .copy-row-hint {
-  margin: 4px 0 0;
-  font-size: 11px;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #f8fafc;
   line-height: 1.45;
   color: var(--muted);
 }
 
-.copy-preview-stock {
-  margin: 6px 0 0;
-  padding: 8px 10px;
-  border: 1px solid #bbf7d0;
-  border-radius: 10px;
-  background: #f0fdf4;
-  font-size: 12px;
-  font-weight: 600;
-  color: #166534;
+/* แก้ไขรายละเอียด (พับไว้) */
+.copy-row-edit > summary {
+  min-height: 36px;
+  list-style: none;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--teal-700);
+}
+
+.copy-row-edit > summary::-webkit-details-marker {
+  display: none;
+}
+
+.copy-row-edit > summary::after {
+  content: " ▾";
+  white-space: pre;
+}
+
+.copy-row-edit[open] > summary::after {
+  content: " ▴";
+}
+
+.copy-row-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.copy-row-wide {
+  grid-column: 1 / -1;
 }
 
 .copy-row-fields label {
@@ -269,32 +816,23 @@
 
 .copy-row-fields input,
 .copy-row-fields select {
+  min-width: 0;
   margin: 0;
   min-height: 44px;
 }
 
-.copy-preview-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+/* ปุ่มยกเลิก / ยืนยัน: ติดด้านล่างจอ (ใช้ .save-bar) */
+.save-bar.copy-preview-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 8px;
-  margin-top: 10px;
+  margin: 0 10px 10px;
 }
 
 .copy-preview-actions button {
   margin: 0;
 }
 
-@media (max-width: 640px) {
-  .copy-row-fields {
-    grid-template-columns: 1fr;
-  }
-
-  .copy-preview-actions {
-    flex-direction: column-reverse;
-  }
-
-  .copy-preview-actions button {
-    width: 100%;
-  }
+.copy-preview-actions .small-btn {
+  min-height: 56px;
 }

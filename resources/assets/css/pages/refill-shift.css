@@ -141,7 +141,15 @@
 .lot-warn { grid-column: 1 / -1; color: var(--bad); font-size: 0.8rem; font-weight: 700; }
 .unit-existing { display: block; padding: 6px 8px; margin: 4px 0; border-radius: var(--radius-sm); background: var(--bg); font-size: 0.85rem; }
 .unit-existing.retired { text-decoration: line-through; color: var(--muted); }
+/* หน้าเติมของ: ค้นหาชื่อ + ประเภท บรรทัดเดียว */
+.refill-narrow { display: flex; gap: 6px; margin: 8px 0 12px; }
+.refill-narrow input { flex: 1 1 auto; min-width: 0; margin: 0; }
+.refill-narrow select { flex: 0 1 150px; min-width: 0; width: auto; margin: 0; }
+.refill-hidden-note { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: var(--info-soft); color: #075985; font-size: 0.9rem; font-weight: 600; }
 .request-lines { margin: 8px 0; padding-left: 18px; font-size: 0.85rem; }
+.request-lines li.is-done { list-style: none; margin-left: -18px; color: var(--muted); opacity: 0.8; }
+.request-progress { margin: 6px 0 0; font-size: 0.85rem; color: var(--muted); }
+.request-progress b { color: var(--ok); }
 .status-PENDING, .status-IN_PROGRESS { background: var(--warn-soft); color: var(--warn); }
 .status-PARTIAL { background: var(--info-soft); color: var(--info); }
 .status-COMPLETED { background: var(--ok-soft); color: var(--ok); }

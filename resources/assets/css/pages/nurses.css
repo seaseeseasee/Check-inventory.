@@ -130,12 +130,667 @@
   }
 }
 
-/* ---------- หน้าจัดการผู้ใช้ (รวมพยาบาล + บัญชีผู้ใช้) ---------- */
-#userDirectoryTable .nurse-card { margin-bottom: 8px; }
-.user-section-title { margin: 18px 0 8px; font-size: 1rem; color: var(--teal-800); }
-.account-line { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 6px 0; font-size: 0.85rem; }
-.nurse-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-.nurse-actions .small-btn { margin: 0; }
-.user-form-wrap { margin-top: 16px; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; background: var(--bg); }
-.user-form-wrap summary { cursor: pointer; font-weight: 700; color: var(--teal-700); }
-#userRoleFilter, #userStatusFilter { margin: 0; }
+/* ========================================
+   หน้าจัดการผู้ใช้: รายชื่อก่อน (1 คน = 1 แถว) — เพิ่ม/แก้ไข/นำเข้า อยู่ในหน้าต่างที่เลื่อนขึ้นจากด้านล่าง
+   ======================================== */
+
+/* แถบบน: ติดใต้หัวเว็บตอนเลื่อนดูรายชื่อ */
+.users-top {
+  position: sticky;
+  top: var(--app-top-h, 0px);
+  z-index: 20;
+  display: grid;
+  gap: 10px;
+  margin: -4px -4px 4px;
+  padding: 4px 4px 10px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.users-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.users-title-row h2 {
+  margin: 0;
+  min-width: 0;
+}
+
+.users-head-actions {
+  display: flex;
+  gap: 6px;
+  position: relative;
+}
+
+.users-head-actions .users-add-btn {
+  width: auto;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 14px;
+  white-space: nowrap;
+  font-size: 0.95rem;
+}
+
+.users-more > summary {
+  width: auto;
+  min-width: 48px;
+  height: 100%;
+  justify-content: center;
+  list-style: none;
+  background: #fff;
+  font-size: 1.2rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.users-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.users-more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  display: grid;
+  min-width: 240px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+.users-more-menu .users-more-item {
+  width: 100%;
+  min-height: 44px !important;
+  margin: 0;
+  padding: 8px 12px;
+  text-align: left;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.users-more-menu .users-more-item:hover {
+  background: var(--teal-50);
+  filter: none;
+}
+
+.users-more-count {
+  margin-left: 4px;
+  padding: 0 7px;
+  border-radius: var(--radius-full);
+  background: #f1f5f9;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* ตัวเลขสรุป */
+.users-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.users-stat {
+  min-width: 0;
+  padding: 4px 2px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  text-align: center;
+}
+
+.users-stat b {
+  display: block;
+  font-size: 1.15rem;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.users-stat span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.users-stat.is-attn {
+  background: var(--warn-soft);
+}
+
+.users-stat.is-attn b,
+.users-stat.is-attn span {
+  color: #92400e;
+}
+
+/* ค้นหา + วอร์ด บรรทัดเดียว */
+.users-search {
+  display: flex;
+  gap: 6px;
+}
+
+.users-search #nurseSearch {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.users-search #nurseDeptFilter {
+  flex: 0 1 132px;
+  min-width: 0;
+  width: auto;
+  margin: 0;
+  padding: 8px;
+}
+
+/* แท็บกรอง */
+.users-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.users-chips button {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 36px;
+  margin: 0;
+  padding: 4px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-full);
+  background: #fff;
+  color: #334155;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
+.users-chips button[aria-pressed="true"] {
+  background: var(--teal-700);
+  border-color: var(--teal-700);
+  color: #fff;
+}
+
+.users-filter-note {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--teal-700);
+}
+
+/* รายชื่อ */
+.users-group {
+  margin: 14px 2px 6px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.users-list {
+  display: grid;
+  gap: 6px;
+}
+
+.user-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 60px;
+  margin: 0;
+  padding: 8px 8px 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 400;
+  text-align: left;
+}
+
+.user-row:hover {
+  border-color: var(--teal-600);
+  background: var(--teal-50);
+  filter: none;
+}
+
+.user-row.is-off {
+  opacity: 0.62;
+}
+
+.user-av {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--teal-50);
+  color: var(--teal-700);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.user-av.is-other {
+  background: var(--info-soft);
+  color: #075985;
+}
+
+.user-av.is-admin {
+  background: var(--warn-soft);
+  color: #92400e;
+}
+
+.user-who {
+  min-width: 0;
+}
+
+.user-who b {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.user-who > span {
+  display: block;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.user-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.user-badge {
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.user-badge.is-admin { background: var(--warn-soft); color: #92400e; }
+.user-badge.is-staff { background: var(--info-soft); color: #075985; }
+.user-badge.is-none { background: #f1f5f9; color: var(--muted); }
+.user-badge.is-off { background: var(--bad-soft); color: #991b1b; }
+
+.user-chev {
+  color: var(--muted);
+  font-size: 1.2rem;
+}
+
+/* ---------- หน้าต่างเพิ่ม / แก้ไข / นำเข้า ---------- */
+body.users-sheet-open {
+  overflow: hidden;
+}
+
+.sheet.user-sheet {
+  display: flex;
+  flex-direction: column;
+  max-width: 560px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.user-sheet-head {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.user-sheet-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.user-sheet-title h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.user-sheet-x {
+  flex: 0 0 auto;
+  width: 40px;
+  min-height: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 1rem;
+}
+
+.user-kind {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #f1f5f9;
+}
+
+.user-kind button {
+  min-height: 40px;
+  margin: 0;
+  padding: 6px;
+  border-radius: 9px;
+  background: none;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.user-kind button[aria-pressed="true"] {
+  background: #fff;
+  color: var(--teal-700);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.14);
+}
+
+.user-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.user-form-body {
+  display: grid;
+  gap: 14px;
+  padding: 12px 16px;
+  overflow-y: auto;
+}
+
+.user-sec {
+  display: grid;
+  gap: 8px;
+}
+
+.user-sec h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.user-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.user-grid > * {
+  min-width: 0;
+}
+
+.user-grid .user-wide {
+  grid-column: 1 / -1;
+}
+
+.user-sheet label {
+  margin: 0 0 4px;
+}
+
+.user-sheet input,
+.user-sheet select {
+  margin: 0;
+}
+
+.user-req {
+  color: var(--bad);
+}
+
+.user-err {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--bad);
+}
+
+.user-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.user-hint-warn {
+  margin-top: 4px;
+  color: #b45309;
+}
+
+.user-with-btn {
+  display: flex;
+  gap: 6px;
+}
+
+.user-with-btn input,
+.user-with-btn select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.user-mini-btn {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  padding: 0 12px;
+  border: 1.5px solid var(--teal-100);
+  border-radius: 10px;
+  background: var(--teal-50);
+  color: var(--teal-700);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.user-mini-btn:disabled {
+  opacity: 0.45;
+}
+
+.user-extra {
+  padding: 2px 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.user-extra > summary {
+  list-style: none;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--teal-700);
+}
+
+.user-extra > summary::-webkit-details-marker {
+  display: none;
+}
+
+.user-extra > summary::after {
+  content: " ▾";
+  white-space: pre;
+}
+
+.user-extra[open] > summary::after {
+  content: " ▴";
+}
+
+/* สวิตช์ "เปิดบัญชีให้คนนี้" */
+.user-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f1f5f9;
+}
+
+.user-switch b {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.user-switch small {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.user-toggle {
+  position: relative;
+  flex: 0 0 auto;
+  width: 52px;
+  min-height: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--radius-full);
+  background: #cbd5e1;
+}
+
+.user-toggle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.2s ease;
+}
+
+.user-toggle[aria-checked="true"] {
+  background: var(--teal-600);
+}
+
+.user-toggle[aria-checked="true"]::after {
+  left: 25px;
+}
+
+/* บัญชีที่มีอยู่แล้ว: เปลี่ยนบทบาท / เปิด-ปิดบัญชี */
+.user-acc-actions {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.user-acc-btn {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--ink);
+  text-align: left;
+  font-size: 0.95rem;
+}
+
+.user-acc-btn:hover {
+  background: var(--teal-50);
+  filter: none;
+}
+
+.user-acc-btn.is-danger {
+  color: var(--bad);
+}
+
+.user-acc-btn.is-danger:hover {
+  background: var(--bad-soft);
+}
+
+.user-sheet-foot {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+
+.user-sheet-foot button {
+  min-height: 52px;
+  margin: 0;
+}
+
+/* นำเข้าจากไฟล์ */
+.user-dropzone {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 24px 16px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 14px;
+  background: #f8fafc;
+  text-align: center;
+  cursor: pointer;
+}
+
+.user-dropzone:hover,
+.user-dropzone:focus-visible {
+  border-color: var(--teal-500);
+  background: var(--teal-50);
+}
+
+.user-dropzone-ico {
+  font-size: 2rem;
+}
+
+.user-dropzone-main {
+  margin: 0;
+  font-weight: 700;
+  color: #334155;
+}
+
+.user-file-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.user-file-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.user-file-text p {
+  margin: 0;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.user-file-text p:first-child {
+  font-weight: 700;
+}
+
+.user-file-status.hidden {
+  display: none;
+}
+
+@media (max-width: 420px) {
+  .user-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .users-stat span {
+    font-size: 0.72rem;
+  }
+}

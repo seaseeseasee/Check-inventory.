@@ -117,10 +117,12 @@ window.confirmDialog = async (message, options = {}) => {
       onClose: () => resolve(false),
     }).render();
 
+    // tone: 'ok' = ปุ่มยืนยันสีเขียว (งานปกติ เช่น บันทึกยอด) | ค่าเริ่มต้น = สีแดง (ลบ/ปิดใช้งาน)
+    const confirmBg = options.tone === 'ok' ? 'var(--ok)' : 'var(--bad)';
     const actions = modal.element.querySelector('.sheet-actions');
     actions.innerHTML = `
       <button type="button" class="small-btn gray flex-1" data-action="cancel">${UI.escape(options.cancelText || 'ยกเลิก')}</button>
-      <button type="button" class="flex-1" style="background: var(--bad);" data-action="confirm">${UI.escape(options.confirmText || 'ยืนยัน')}</button>
+      <button type="button" class="flex-1" style="background: ${confirmBg};" data-action="confirm">${UI.escape(options.confirmText || 'ยืนยัน')}</button>
     `;
 
     actions.querySelector('[data-action="cancel"]').onclick = () => {

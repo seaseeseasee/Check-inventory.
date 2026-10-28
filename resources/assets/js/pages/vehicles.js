@@ -149,6 +149,7 @@ class VehiclesPage {
     this.editingItemId = null;
     this.copyStaging = [];
     this.copySourceLabel = '';
+    this.copyFilter = 'all';   // ตัวกรองรายการรอเพิ่มลงรถ: all | dup | empty
     this._vehicleModal = null;
     this._itemModal = null;
     this.init();
@@ -193,10 +194,20 @@ class VehiclesPage {
     document.getElementById('btnToggleVehicleStatus')?.addEventListener('click', () => this.handleToggleVehicleStatus());
     document.getElementById('btnDeleteVehicle')?.addEventListener('click', () => this.handleDeleteVehicle());
 
+    // เมนู ⋯ (ปิดใช้งาน / ลบรถ): ปิดเองเมื่อเลือกคำสั่งหรือแตะนอกเมนู
+    const more = document.getElementById('vehicleMore');
+    more?.querySelector('.vehicle-more-menu')?.addEventListener('click', () => { more.open = false; });
+    document.addEventListener('click', (e) => {
+      if (more?.open && !more.contains(e.target)) more.open = false;
+    });
+
     // Copy items from another vehicle
     document.getElementById('btnCopyStart')?.addEventListener('click', () => this.handleCopyStart());
     document.getElementById('btnCopyConfirm')?.addEventListener('click', () => this.handleCopyConfirm());
     document.getElementById('btnCopyCancel')?.addEventListener('click', () => this.handleCopyCancel());
+    document.querySelectorAll('#copyPreview [data-copy-filter]').forEach(btn => {
+      btn.addEventListener('click', () => this.setCopyFilter(btn.dataset.copyFilter));
+    });
 
     // Import items from a CSV / Excel file (เข้าคิวรายการเดียวกับการคัดลอก แล้วยืนยันด้วยปุ่มเดิม)
     const importInput = document.getElementById('itemImportFile');
@@ -260,31 +271,35 @@ class VehiclesPage {
   /** แถบสรุปข้อมูลรถที่เลือก — บอกสถานะ + สิ่งที่ผูกอยู่ (ใช้ตอนจะลบรถ) */
   renderVehicleMeta() {
     const el = document.getElementById('stockCarMeta');
+    const actions = document.getElementById('vehicleActions');
+    const count = document.getElementById('stockItemCount');
     this.updateToggleStatusButton();
     if (!el) return;
     const v = this.currentVehicle;
+    if (actions) actions.hidden = !v;
+    if (count) count.textContent = v?.active_item_count !== undefined ? `${v.active_item_count} รายการ` : '';
     if (!v) {
-      el.innerHTML = 'ยังไม่มีรถในระบบ — กด “เพิ่มรถใหม่” เพื่อเริ่ม';
+      el.innerHTML = 'ยังไม่มีรถในระบบ — กด “+ เพิ่มรถ” เพื่อเริ่ม';
       return;
     }
 
     const status = VEHICLE_STATUS_LABEL[v.status] || v.status || '-';
     const chip = VEHICLE_STATUS_CHIP[v.status] || 'chip-off';
     window.vehicleRef.remember([v]);
-    const bits = [window.vehicleChip(v), `<span class="chip ${chip}">${UI.escape(status)}</span>`];
 
-    if (v.active_item_count !== undefined) {
-      bits.push(`<span class="chip chip-info">อุปกรณ์ใช้งาน ${UI.escape(String(v.active_item_count))} รายการ</span>`);
-    }
-    if (v.check_count !== undefined) {
-      bits.push(`<span class="chip chip-pending">ประวัติตรวจ ${UI.escape(String(v.check_count))} ครั้ง</span>`);
-    }
+    // ตัวเลขสรุปเป็นช่องเรียงกัน สีกลาง ๆ — "รอเติม" เป็นสีส้มเฉพาะตอนมีงานค้าง
+    const stat = (value, label, attn = false) =>
+      `<div class="vcard-stat${attn ? ' is-attn' : ''}"><b>${UI.escape(String(value))}</b><span>${label}</span></div>`;
+    const stats = [];
+    if (v.active_item_count !== undefined) stats.push(stat(v.active_item_count, 'อุปกรณ์'));
+    if (v.check_count !== undefined) stats.push(stat(v.check_count, 'ครั้งที่ตรวจ'));
     if (v.open_restock_count !== undefined) {
-      const cls = Number(v.open_restock_count) > 0 ? 'chip-warn' : 'chip-pending';
-      bits.push(`<span class="chip ${cls}">งานเติมค้าง ${UI.escape(String(v.open_restock_count))}</span>`);
+      stats.push(stat(v.open_restock_count, 'รอเติม', Number(v.open_restock_count) > 0));
     }
 
-    el.innerHTML = bits.join('');
+    el.innerHTML = `
+      <div class="vcard-top">${window.vehicleChip(v, 'vcard-plate')}<span class="chip ${chip}">${UI.escape(status)}</span></div>
+      ${stats.length ? `<div class="vcard-stats">${stats.join('')}</div>` : ''}`;
   }
 
   /** ปุ่มเดียวสลับ "ปิดใช้งาน" ↔ "เปิดใช้งาน" ตามสถานะปัจจุบันของรถที่เลือก */
@@ -298,13 +313,8 @@ class VehiclesPage {
       return;
     }
     btn.disabled = false;
-    if (v.status === 'disabled') {
-      btn.textContent = '✅ เปิดใช้งานรถ';
-      btn.classList.remove('danger');
-    } else {
-      btn.textContent = '🚫 ปิดใช้งานรถ';
-      btn.classList.add('danger');
-    }
+    // อยู่ในเมนู ⋯ แล้ว จึงไม่ต้องทาสีแดง (สีแดงเหลือไว้ให้ "ลบรถ" อย่างเดียว)
+    btn.textContent = v.status === 'disabled' ? '✅ เปิดใช้งานรถ' : '🚫 ปิดใช้งานรถ';
   }
 
   /**
@@ -404,41 +414,59 @@ class VehiclesPage {
 
     container.innerHTML = this.items.map((item) => {
       const counted = item.stock_updated_at ? String(item.stock_updated_at) : '';
-      const stamp = counted
-        ? `<span class="stock-stamp">ยอดล่าสุด ${UI.escape(this.fmtStamp(counted))}</span>`
-        : '<span class="stock-stamp">ยังไม่ได้จัดขึ้นรถ</span>';
 
       // ยอดคงเหลือ + วันหมดอายุมาจาก Lot / รายเครื่อง (แก้ผ่านการเติมของ/การตรวจเช็คเท่านั้น)
       const type = item.item_type || (item.is_battery ? 'non_expiring' : 'individual');
       const unitWord = item.has_pressure ? ' ถัง' : ' เครื่อง';
       const viewLabel = type === 'non_expiring' ? (item.has_pressure ? '🔧 จัดการถัง' : '🔧 จัดการเครื่อง') : (type === 'individual' ? '📦 ดูรายชิ้น' : '📦 ดูล็อต');
       const expiry = String(item.expiry_text ?? '');
-      const qtyText = counted
-        ? `${UI.escape(String(Math.round(Number(item.current_qty || 0) * 100) / 100))}${type === 'non_expiring' ? unitWord : ''}`
-        : 'ยังไม่ได้จัดขึ้นรถ';
+      const qtyNum = String(Math.round(Number(item.current_qty || 0) * 100) / 100);
+      const qtyText = counted ? `${UI.escape(qtyNum)}${type === 'non_expiring' ? unitWord : ''}` : 'ยังไม่ได้จัดขึ้นรถ';
+      const target = item.target_qty === null || item.target_qty === undefined || item.target_qty === '' ? null : item.target_qty;
+      const minText = target !== null
+        ? `ขั้นต่ำ ${UI.escape(String(Math.round(Number(target) * 100) / 100))}${type === 'non_expiring' ? unitWord : (item.unit ? ' ' + UI.escape(item.unit) : '')}`
+        : (String(item.standard || '').trim() ? `ขั้นต่ำ ${UI.escape(item.standard)}` : '');
 
+      // โครงการ์ดตอนขยาย: 1) ของบนรถตอนนี้ (ใช้บ่อยสุด อยู่บน) 2) ตั้งค่าอุปกรณ์ 3) บันทึก + เมนู ⋯ (พัก/ลบ)
       return `
       <article class="stock-card${item.active ? '' : ' is-off'}" data-item-id="${item.id}">
         <details class="stock-collapse" data-item-id="${item.id}" ${this.openItems.has(item.id) ? 'open' : ''}>
         ${this.renderItemSummary(item, type, counted, expiry, unitWord)}
-        <div class="stock-top">
-          <input type="text" class="stock-name-input" value="${UI.escape(item.name)}" data-item-id="${item.id}" data-field="name" aria-label="ชื่ออุปกรณ์">
-          <span class="chip ${item.active ? 'chip-ok' : 'chip-off'}">
-            ${item.active ? 'ใช้งาน' : 'พัก'}
-          </span>
+        <!-- ประเภทอยู่บนสุด: กำหนดว่ากล่องของบนรถด้านล่างนับแบบไหน (รายชิ้น / ล็อต / รายเครื่อง) -->
+        <div class="stock-type">
+          <label for="typ-${item.id}">ประเภท</label>
+          <select id="typ-${item.id}" data-item-id="${item.id}" data-field="item_type">
+            <option value="individual" ${type === 'individual' ? 'selected' : ''}>🧩 รายชิ้น (วันหมดอายุรายชิ้น)</option>
+            <option value="box" ${type === 'box' ? 'selected' : ''}>📦 กล่อง/ล็อต (วันหมดอายุทั้งกล่อง)</option>
+            <option value="non_expiring" ${type === 'non_expiring' ? 'selected' : ''}>🩺 ไม่มีวันหมดอายุ (รายเครื่อง)</option>
+          </select>
         </div>
+        <section class="stock-onboard" aria-label="ของบนรถตอนนี้">
+          <div class="stock-onboard-head">
+            <label ${type === 'non_expiring' ? '' : `for="onb-${item.id}"`}>ของบนรถตอนนี้</label>
+            ${minText ? `<small>${minText}</small>` : ''}
+          </div>
+          ${type === 'non_expiring'
+            ? `<div class="stock-onboard-qty">${qtyText}</div>`
+            : `${UI.stepper(`id="onb-${item.id}" min="0" data-item-id="${item.id}" data-field="onboard_qty" value="${counted ? UI.escape(qtyNum) : ''}" placeholder="${counted ? '' : 'ยังไม่ได้จัด'}"`, 'ยอดบนรถ')}
+          <div class="add-dates" data-role="add-dates" data-item-id="${item.id}">${this.renderAddDates(item, 0)}</div>`}
+          <div class="stock-facts">
+            <div><span>หมดอายุเร็วสุด</span><b>${type === 'non_expiring' ? 'ไม่มีวันหมดอายุ' : (expiry ? UI.escape(UI.formatDateThai(expiry)) : '—')}</b></div>
+            <div><span>นับล่าสุด</span><b>${counted ? UI.escape(this.fmtStamp(counted)) : 'ยังไม่เคย'}</b></div>
+          </div>
+          <button type="button" class="stock-link-btn" data-action="lots" data-item-id="${item.id}" aria-expanded="false" data-label="${viewLabel} →">${viewLabel} →</button>
+          <div class="item-lots hidden" data-role="lots" aria-live="polite"></div>
+        </section>
+
+        <p class="stock-set-title">ตั้งค่าอุปกรณ์</p>
         <div class="stock-fields">
-          <div>
-            <label for="std-${item.id}">ขั้นต่ำที่ต้องมี (มาตรฐาน)</label>
-            <input id="std-${item.id}" type="text" value="${UI.escape(item.standard)}" data-item-id="${item.id}" data-field="standard" placeholder="เช่น 5 หรือ 1 ชุด">
+          <div class="stock-wide">
+            <label for="nm-${item.id}">ชื่ออุปกรณ์</label>
+            <input id="nm-${item.id}" type="text" value="${UI.escape(item.name)}" data-item-id="${item.id}" data-field="name">
           </div>
           <div>
-            <label>ประเภท</label>
-            <select data-item-id="${item.id}" data-field="item_type" style="min-height: 44px;">
-              <option value="individual" ${type === 'individual' ? 'selected' : ''}>รายชิ้น (วันหมดอายุรายชิ้น)</option>
-              <option value="box" ${type === 'box' ? 'selected' : ''}>กล่อง/ล็อต (วันหมดอายุทั้งกล่อง)</option>
-              <option value="non_expiring" ${type === 'non_expiring' ? 'selected' : ''}>ไม่มีวันหมดอายุ (รายเครื่อง)</option>
-            </select>
+            <label for="std-${item.id}">ขั้นต่ำที่ต้องมี</label>
+            <input id="std-${item.id}" type="text" value="${UI.escape(item.standard)}" data-item-id="${item.id}" data-field="standard" placeholder="เช่น 5 หรือ 1 ชุด">
           </div>
           ${this.renderThresholdFields(item, type)}
           ${type === 'non_expiring' ? `
@@ -446,33 +474,18 @@ class VehiclesPage {
             <label><input type="checkbox" data-item-id="${item.id}" data-field="is_battery" ${item.is_battery ? 'checked' : ''}> 🔋 มีแบตเตอรี่</label>
             <label><input type="checkbox" data-item-id="${item.id}" data-field="has_pressure" ${item.has_pressure ? 'checked' : ''}> 🫧 วัดแรงดัน (PSI)</label>
           </div>` : ''}
-          ${type === 'non_expiring' ? `
-          <div>
-            <label>มีบนรถตอนนี้</label>
-            <div class="readonly-field">${qtyText} <small>(เพิ่ม/นำออก/อัปเดตที่ปุ่ม “${viewLabel}”)</small></div>
-          </div>` : `
-          <div>
-            <label for="onb-${item.id}">มีบนรถตอนนี้</label>
-            ${UI.stepper(`id="onb-${item.id}" min="0" data-item-id="${item.id}" data-field="onboard_qty" value="${counted ? UI.escape(String(Math.round(Number(item.current_qty || 0) * 100) / 100)) : ''}" placeholder="${counted ? '' : 'ยังไม่ได้จัด'}"`, 'ยอดบนรถ')}
-          </div>
+        </div>
 
-          <div class="add-dates" data-role="add-dates" data-item-id="${item.id}">${this.renderAddDates(item, 0)}</div>`}
-          <div>
-            <label>หมดอายุเร็วสุด</label>
-            <div class="readonly-field">${type === 'non_expiring' ? '—' : (expiry ? UI.escape(UI.formatDateThai(expiry)) : 'ไม่มีข้อมูล')}</div>
-          </div>
-        </div>
-        <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">${stamp}</div>
-        <div class="item-lots-actions">
-          <button type="button" class="small-btn secondary" data-action="lots" data-item-id="${item.id}" aria-expanded="false" data-label="${viewLabel}">${viewLabel}</button>
-        </div>
-        <div class="item-lots hidden" data-role="lots" aria-live="polite"></div>
-        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;">
-          <button type="button" class="small-btn" data-action="save" data-item-id="${item.id}">บันทึก</button>
-          <button type="button" class="small-btn gray" data-action="toggle" data-item-id="${item.id}">
-            ${item.active ? 'พักใช้งาน' : 'เปิดใช้งาน'}
-          </button>
-          <button type="button" class="small-btn danger" data-action="delete" data-item-id="${item.id}">ลบ</button>
+        <div class="stock-actions">
+          <p class="stock-dirty hidden" data-role="dirty">● มีการแก้ไขที่ยังไม่บันทึก</p>
+          <button type="button" class="stock-save" data-action="save" data-item-id="${item.id}" disabled>บันทึก</button>
+          <details class="stock-more">
+            <summary class="small-btn" aria-label="ตัวเลือกเพิ่มเติมของอุปกรณ์นี้" title="ตัวเลือกเพิ่มเติม">⋯</summary>
+            <div class="stock-more-menu">
+              <button type="button" class="stock-more-item" data-action="toggle" data-item-id="${item.id}">${item.active ? '⏸ พักใช้งาน' : '▶️ เปิดใช้งาน'}</button>
+              <button type="button" class="stock-more-item is-danger" data-action="delete" data-item-id="${item.id}">🗑 ลบอุปกรณ์</button>
+            </div>
+          </details>
         </div>
         </details>
       </article>
@@ -511,6 +524,25 @@ class VehiclesPage {
         const inputs = [...btn.closest('[data-role="add-dates"]').querySelectorAll('input[type="date"]')];
         const first = inputs.find(i => i.value);
         if (first) inputs.forEach(i => { if (!i.value) i.value = first.value; });
+      });
+
+      // ปุ่มบันทึกกดได้เมื่อมีการแก้ไขในการ์ด (ไม่นับช่องในรายการล็อต/รายชิ้น ซึ่งบันทึกแยกเอง)
+      const markDirty = (e) => {
+        const field = e.target.closest('[data-field]');
+        if (!field || field.closest('[data-role="lots"]')) return;
+        const card = field.closest('.stock-card');
+        const save = card?.querySelector('[data-action="save"]');
+        if (save) save.disabled = false;
+        card?.querySelector('[data-role="dirty"]')?.classList.remove('hidden');
+      };
+      container.addEventListener('input', markDirty);
+      container.addEventListener('change', markDirty);
+
+      // เมนู ⋯ (พักใช้งาน / ลบ): ปิดเมื่อเลือกคำสั่ง หรือแตะนอกเมนู
+      document.addEventListener('click', (e) => {
+        container.querySelectorAll('details.stock-more[open]').forEach(menu => {
+          if (!menu.contains(e.target) || e.target.closest('.stock-more-item')) menu.open = false;
+        });
       });
     }
     // แก้/นำออกรายล็อต-รายชิ้น ในการ์ดเลย
@@ -1279,7 +1311,7 @@ class VehiclesPage {
             ? `เพิ่ม ${data.onboard_expiries.length} ชิ้น หมดอายุ: ${data.onboard_expiries.map(d => UI.formatDateThai(d)).join(', ')}`
             : `ของที่เพิ่มหมดอายุ ${UI.formatDateThai(data.onboard_expiry)}`)
           : 'ตัดยอดจากล็อตที่หมดอายุก่อน') + '\n(บันทึกในประวัติเป็นการปรับยอด)',
-        { confirmText: 'บันทึกยอด' }
+        { confirmText: 'บันทึกยอด', tone: 'ok' }
       );
       if (!ok) return;
     }
@@ -1291,6 +1323,8 @@ class VehiclesPage {
       let message = 'บันทึกสำเร็จ';
       if (data.standard) message += ' • ปรับขั้นต่ำแล้ว';
       if (res?.data?.onboard) message += ` • ยอดบนรถ ${res.data.onboard.after}`;
+      const closed = res?.data?.onboard?.requests || [];
+      if (closed.length) message += ` • ครบมาตรฐานแล้ว ปิดรายการรอเติม ${closed.map(r => r.no).join(', ')}`;
       window.toast.success(message);
       this.openItems.delete(itemId);   // บันทึกแล้ว → ย่อกลับเป็นรายการ
       await this.loadItems(this.currentVehicleId);
@@ -1441,70 +1475,89 @@ class VehiclesPage {
     if (this.copyStaging.length === 0) {
       panel.classList.add('hidden');
       list.innerHTML = '';
+      this.copyFilter = 'all';
       this.saveStagingDraft();
       return;
     }
 
-    const existing = new Set(this.items.map(i => String(i.name || '').trim().toLowerCase()));
+    // หัวสรุปติดใต้หัวเว็บ — ความสูงหัวเว็บต่างกันตามจอ จึงวัดจริง
+    const appTop = document.querySelector('.app-top');
+    if (appTop) document.documentElement.style.setProperty('--app-top-h', appTop.offsetHeight + 'px');
+
     const today = this.todayIso();
     const yesNo = (field, on) => `<select data-copy-field="${field}">
                 <option value="false" ${!on ? 'selected' : ''}>ไม่ใช่</option>
                 <option value="true" ${on ? 'selected' : ''}>ใช่</option>
               </select>`;
+    // แต่ละรายการโชว์แค่ช่องที่ต้องกรอก (จำนวน + วันหมดอายุ) — ชื่อ/มาตรฐาน/ประเภท/สถานะ มาจากต้นทางแล้ว จึงพับไว้ใน "แก้ไขรายละเอียด"
     list.innerHTML = this.copyStaging.map((row, idx) => {
-      const dup = existing.has(row.name.trim().toLowerCase());
       const type = row.item_type || 'individual';
-      // กล่อง/รายชิ้น: จัดของขึ้นรถได้เลยพร้อมวันหมดอายุ | ไม่มีวันหมดอายุ: แบต/แรงดัน (เพิ่มเครื่องที่หน้าเติมของ)
-      const typeFields = type === 'non_expiring'
-        ? `<div><label>มีแบตเตอรี่</label>${yesNo('is_battery', row.is_battery)}</div>
-            <div><label>วัดแรงดัน (PSI)</label>${yesNo('has_pressure', row.has_pressure)}</div>
-            <p class="copy-row-hint copy-row-wide">🩺 ไม่มีวันหมดอายุ — เพิ่มเครื่อง/ถังพร้อมค่าแบต/แรงดันที่แท็บ “เติมของ” หลังบันทึก</p>`
-        : `<div>
-              <label for="cpq-${idx}">จำนวนที่จะจัดขึ้นรถ</label>
-              <input id="cpq-${idx}" type="number" min="0" step="${type === 'individual' ? 1 : 'any'}" inputmode="decimal"
-                data-copy-field="stock_qty" value="${UI.escape(String(row.stock_qty ?? ''))}" placeholder="เว้นว่าง = ยังไม่จัดของ">
-            </div>
-            <div>
-              <label for="cpe-${idx}">วันหมดอายุ</label>
-              <input id="cpe-${idx}" type="date" min="${today}" data-copy-field="stock_expiry" value="${UI.escape(row.stock_expiry || '')}">
+      const nonExpiring = type === 'non_expiring';
+      const fill = nonExpiring
+        ? '<p class="copy-row-hint">🩺 ไม่มีวันหมดอายุ — เพิ่มเครื่อง/ถังพร้อมค่าแบต/แรงดันที่แท็บ “เติมของ” หลังบันทึก</p>'
+        : `<div class="copy-row-fill">
+              <label for="cpq-${idx}">จำนวนที่จัดขึ้นรถ
+                <input id="cpq-${idx}" type="number" min="0" step="${type === 'individual' ? 1 : 'any'}" inputmode="decimal"
+                  data-copy-field="stock_qty" value="${UI.escape(String(row.stock_qty ?? ''))}" placeholder="ว่าง = ยังไม่จัด">
+              </label>
+              <label for="cpe-${idx}">วันหมดอายุ
+                <input id="cpe-${idx}" type="date" min="${today}" data-copy-field="stock_expiry" value="${UI.escape(row.stock_expiry || '')}">
+              </label>
             </div>`;
+      const typeFields = nonExpiring
+        ? `<div><label>มีแบตเตอรี่</label>${yesNo('is_battery', row.is_battery)}</div>
+            <div><label>วัดแรงดัน (PSI)</label>${yesNo('has_pressure', row.has_pressure)}</div>`
+        : '';
       return `
         <div class="copy-row" data-idx="${idx}">
-          <div class="copy-row-top">
+          <div class="copy-row-head">
             <span class="copy-row-no">${idx + 1}</span>
-            <input type="text" data-copy-field="name" value="${UI.escape(row.name)}" placeholder="ชื่ออุปกรณ์" aria-label="ชื่ออุปกรณ์รายการที่ ${idx + 1}">
-            <span class="chip chip-warn ${dup ? '' : 'hidden'}" data-copy-dup>⚠️ มีอยู่แล้วในรถนี้</span>
-            <button type="button" class="small-btn gray copy-row-remove" data-copy-action="remove" title="เอาออกจากรายการรอบันทึก">✕ ลบ</button>
+            <strong class="copy-row-name" data-copy-name></strong>
+            <button type="button" class="copy-row-remove" data-copy-action="remove"
+              aria-label="เอารายการที่ ${idx + 1} ออก" title="เอาออกจากรายการรอบันทึก">🗑</button>
+            <div class="copy-row-tags" data-copy-tags></div>
+            <p class="copy-row-dup hidden" data-copy-dup>⚠️ มีชื่อนี้อยู่ในรถแล้ว — ถ้าไม่ต้องการให้กด 🗑</p>
           </div>
-          <div class="copy-row-fields">
-            <div>
-              <label>จำนวนมาตรฐาน</label>
-              <input type="text" data-copy-field="standard" value="${UI.escape(row.standard)}">
+          ${fill}
+          <details class="copy-row-edit">
+            <summary>แก้ไขรายละเอียด</summary>
+            <div class="copy-row-fields">
+              <div class="copy-row-wide">
+                <label for="cpn-${idx}">ชื่ออุปกรณ์</label>
+                <input id="cpn-${idx}" type="text" data-copy-field="name" value="${UI.escape(row.name)}" placeholder="ชื่ออุปกรณ์">
+              </div>
+              <div>
+                <label for="cps-${idx}">จำนวนมาตรฐาน</label>
+                <input id="cps-${idx}" type="text" data-copy-field="standard" value="${UI.escape(row.standard)}">
+              </div>
+              <div>
+                <label for="cpt-${idx}">ประเภท</label>
+                <select id="cpt-${idx}" data-copy-field="item_type">
+                  ${VEHICLE_ITEM_TYPES.map(([value, label]) =>
+                    `<option value="${value}" ${type === value ? 'selected' : ''}>${label}</option>`).join('')}
+                </select>
+              </div>
+              <div class="copy-row-wide">
+                <label for="cpa-${idx}">สถานะ</label>
+                <select id="cpa-${idx}" data-copy-field="active">
+                  <option value="true" ${row.active !== false ? 'selected' : ''}>ใช้งาน</option>
+                  <option value="false" ${row.active === false ? 'selected' : ''}>พักใช้งาน</option>
+                </select>
+              </div>
+              ${typeFields}
             </div>
-            <div>
-              <label>ประเภท</label>
-              <select data-copy-field="item_type">
-                ${VEHICLE_ITEM_TYPES.map(([value, label]) =>
-                  `<option value="${value}" ${type === value ? 'selected' : ''}>${label}</option>`).join('')}
-              </select>
-            </div>
-            <div>
-              <label>สถานะ</label>
-              <select data-copy-field="active">
-                <option value="true" ${row.active !== false ? 'selected' : ''}>ใช้งาน</option>
-                <option value="false" ${row.active === false ? 'selected' : ''}>พักใช้งาน</option>
-              </select>
-            </div>
-            ${typeFields}
-          </div>
+          </details>
         </div>`;
     }).join('');
 
+    list.querySelectorAll('.copy-row').forEach(rowEl => this.renderCopyRowHead(rowEl));
+
     panel.classList.remove('hidden');
     if (fromEl) fromEl.textContent = this.copySourceLabel;
-    if (countChip) countChip.textContent = `รอบันทึก ${this.copyStaging.length} รายการ`;
-    if (confirmBtn) confirmBtn.textContent = `ยืนยันเพิ่ม ${this.copyStaging.length} รายการลงรถ`;
+    if (countChip) countChip.textContent = `📥 รอเพิ่มลงรถ ${this.copyStaging.length} รายการ`;
+    if (confirmBtn) confirmBtn.textContent = `ยืนยันเพิ่ม ${this.copyStaging.length} รายการ`;
     this.renderCopyStockSummary();
+    this.applyCopyFilter();
     this.saveStagingDraft();
 
     list.querySelectorAll('[data-copy-field]').forEach(input => {
@@ -1517,15 +1570,93 @@ class VehiclesPage {
     });
   }
 
+  /** ส่วนหัวของรายการ: ชื่อ + ป้ายอ่านอย่างเดียว (ประเภท/มาตรฐาน/สถานะ) + เตือนชื่อซ้ำกับของในรถ */
+  renderCopyRowHead(rowEl) {
+    const row = this.copyStaging[Number(rowEl.dataset.idx)];
+    if (!row) return;
+    const name = String(row.name || '').trim();
+    const nameEl = rowEl.querySelector('[data-copy-name]');
+    if (nameEl) {
+      nameEl.textContent = name || 'ยังไม่มีชื่อ — กด “แก้ไขรายละเอียด”';
+      nameEl.classList.toggle('is-empty', !name);
+    }
+
+    const type = row.item_type || 'individual';
+    const typeLabel = (VEHICLE_ITEM_TYPES.find(([value]) => value === type) || [])[1] || type;
+    const tags = [typeLabel];
+    if (String(row.standard || '').trim()) tags.push(`มาตรฐาน ${String(row.standard).trim()}`);
+    if (row.active === false) tags.push('พักใช้งาน');
+    if (type === 'non_expiring' && row.is_battery) tags.push('🔋 มีแบต');
+    if (type === 'non_expiring' && row.has_pressure) tags.push('วัดแรงดัน');
+    const tagsEl = rowEl.querySelector('[data-copy-tags]');
+    if (tagsEl) tagsEl.innerHTML = tags.map(t => `<span class="copy-tag">${UI.escape(t)}</span>`).join('');
+
+    const dup = this.copyRowIsDup(row);
+    rowEl.classList.toggle('is-dup', dup);
+    rowEl.querySelector('[data-copy-dup]')?.classList.toggle('hidden', !dup);
+  }
+
+  copyRowIsDup(row) {
+    const name = String(row.name || '').trim().toLowerCase();
+    return name !== '' && this.items.some(i => String(i.name || '').trim().toLowerCase() === name);
+  }
+
+  /** แถวที่ยังต้องใส่จำนวน (มีวันหมดอายุ แต่ยังว่าง) */
+  copyRowNeedsQty(row) {
+    return (row.item_type || 'individual') !== 'non_expiring' && String(row.stock_qty ?? '').trim() === '';
+  }
+
+  /** หัวสรุป: ความคืบหน้า + จำนวนซ้ำ/พักใช้งาน + ตัวเลขบนปุ่มกรอง */
   renderCopyStockSummary() {
     const el = document.getElementById('copyPreviewStock');
     if (!el) return;
-    const withStock = this.copyStaging.filter(row => String(row.stock_qty ?? '').trim() !== '').length;
-    const resting = this.copyStaging.filter(row => row.active === false).length;
-    el.textContent = `จะจัดของขึ้นรถพร้อมวันหมดอายุ ${withStock}/${this.copyStaging.length} รายการ`
-      + ' (ที่เว้นว่างไว้ เติมภายหลังที่แท็บ “เติมของ”)'
-      + (resting > 0 ? ` • พักใช้งาน ${resting} รายการ` : '');
-    el.classList.toggle('hidden', this.copyStaging.length === 0);
+    const rows = this.copyStaging;
+    const fillable = rows.filter(row => (row.item_type || 'individual') !== 'non_expiring');
+    const empty = rows.filter(row => this.copyRowNeedsQty(row)).length;
+    const done = fillable.length - empty;
+    const dup = rows.filter(row => this.copyRowIsDup(row)).length;
+    const resting = rows.filter(row => row.active === false).length;
+
+    const bits = [`<span>ใส่จำนวนแล้ว ${done}/${fillable.length}</span>`];
+    if (dup > 0) bits.push(`<span class="is-warn">⚠️ ซ้ำกับในรถ ${dup}</span>`);
+    if (resting > 0) bits.push(`<span>พักใช้งาน ${resting}</span>`);
+    bits.push('<span>ยังไม่บันทึก · ที่เว้นว่างไว้เติมภายหลังที่แท็บ “เติมของ”</span>');
+    el.innerHTML = bits.join('');
+
+    const bar = document.getElementById('copyProgressBar');
+    if (bar) bar.style.width = fillable.length ? `${(done / fillable.length) * 100}%` : '100%';
+
+    const counts = { all: rows.length, dup, empty };
+    const labels = { all: 'ทั้งหมด', dup: 'ซ้ำกับในรถ', empty: 'ยังไม่ใส่จำนวน' };
+    document.querySelectorAll('#copyPreview [data-copy-filter]').forEach(btn => {
+      const key = btn.dataset.copyFilter;
+      btn.textContent = `${labels[key]} ${counts[key]}`;
+      btn.hidden = key !== 'all' && counts[key] === 0 && this.copyFilter !== key;
+    });
+  }
+
+  /** ซ่อน/แสดงรายการตามปุ่มกรอง — กรองตอนกดปุ่มเท่านั้น (พิมพ์จำนวนแล้วแถวไม่หายไปใต้มือ) */
+  applyCopyFilter() {
+    const filter = this.copyFilter || 'all';
+    let shown = 0;
+    document.querySelectorAll('#copyPreviewList .copy-row').forEach(rowEl => {
+      const row = this.copyStaging[Number(rowEl.dataset.idx)];
+      const visible = !row || filter === 'all'
+        || (filter === 'dup' && this.copyRowIsDup(row))
+        || (filter === 'empty' && this.copyRowNeedsQty(row));
+      rowEl.hidden = !visible;
+      if (visible) shown++;
+    });
+    document.getElementById('copyFilterEmpty')?.classList.toggle('hidden', shown > 0);
+    document.querySelectorAll('#copyPreview [data-copy-filter]').forEach(btn => {
+      btn.setAttribute('aria-pressed', String(btn.dataset.copyFilter === filter));
+    });
+  }
+
+  setCopyFilter(filter) {
+    this.copyFilter = filter;
+    this.renderCopyStockSummary();
+    this.applyCopyFilter();
   }
 
   onCopyFieldChange(input) {
@@ -1543,19 +1674,17 @@ class VehiclesPage {
     if (field === 'item_type') {
       // ช่องในแถวต่างกันตามประเภท (จำนวน+วันหมดอายุ ↔ แบต/แรงดัน) — วาดใหม่แล้วคืนโฟกัสที่ช่องประเภท
       this.renderCopyPreview();
-      document.querySelector(`#copyPreviewList .copy-row[data-idx="${idx}"] [data-copy-field="item_type"]`)?.focus();
+      const rowAfter = document.querySelector(`#copyPreviewList .copy-row[data-idx="${idx}"]`);
+      const edit = rowAfter?.querySelector('.copy-row-edit');
+      if (edit) edit.open = true;   // วาดใหม่แล้วพับปิด — เปิดค้างไว้ให้แก้ต่อได้
+      rowAfter?.querySelector('[data-copy-field="item_type"]')?.focus();
       return;
     }
-    if (field === 'stock_qty') this.renderCopyStockSummary();
-    this.saveStagingDraft();
-
-    if (field === 'name') {
-      const dupEl = rowEl.querySelector('[data-copy-dup]');
-      if (dupEl) {
-        const existing = new Set(this.items.map(i => String(i.name || '').trim().toLowerCase()));
-        dupEl.classList.toggle('hidden', !existing.has(String(input.value).trim().toLowerCase()));
-      }
+    if (field !== 'stock_expiry') {
+      this.renderCopyRowHead(rowEl);
+      this.renderCopyStockSummary();
     }
+    this.saveStagingDraft();
   }
 
   removeCopyRow(idx) {
@@ -1577,6 +1706,10 @@ class VehiclesPage {
     const fail = (i, field, message) => {
       window.toast.error(`รายการที่ ${i + 1}: ${message}`);
       const el = document.querySelector(`#copyPreviewList .copy-row[data-idx="${i}"] [data-copy-field="${field}"]`);
+      // ช่องที่ผิดอาจถูกกรองซ่อน หรืออยู่ใน "แก้ไขรายละเอียด" ที่พับไว้
+      if (el?.closest('.copy-row')?.hidden) this.setCopyFilter('all');
+      const details = el?.closest('details');
+      if (details) details.open = true;
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el?.focus();
       return false;

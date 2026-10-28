@@ -171,6 +171,10 @@ html, body { overflow-x: hidden; }
 .tab-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 /* ปุ่มแจ้งเตือนลอย: บนมือถือวางเหนือแถบเมนูล่าง และเว้นที่ในแถบบันทึกไม่ให้ทับปุ่มบันทึก */
+@media (min-width: 761px) {
+  /* ปุ่มแมวลอยจอใหญ่ (mascot.css) right 20px + กว้าง 68px — เว้นที่ขวาไม่ให้บังข้อความ/ปุ่มในแถบบันทึก */
+  .save-bar { padding-right: 96px; }
+}
 @media (max-width: 760px) {
   /* ปุ่มแมวลอย (mascot.css) อยู่ที่ bottom 96px — เว้นที่ขวาให้แถบบันทึก */
   .save-bar { padding-right: 70px; }
@@ -194,10 +198,6 @@ html, body { overflow-x: hidden; }
 #wardManagerBtn, #nurseTemplateBtn, #deptQuickAddBtn, #nurseFileClear { min-height: 48px !important; }
 #tabContentNurses input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(.sr-only),
 #tabContentNurses select { min-height: 48px !important; }
-/* หน้าผู้ใช้: ช่องค้นหาเต็มแถว ตัวกรองขึ้นแถวใหม่ (เดิมช่องค้นหาถูกบีบเหลือ ~35px บนมือถือ) */
-#tabContentNurses .search-box { flex-wrap: wrap; }
-#nurseSearch { flex: 1 1 100% !important; }
-#nurseDeptFilter, #userRoleFilter, #userStatusFilter { flex: 1 1 140px !important; width: auto !important; }
 @media (max-width: 760px) {
   /* ป้ายเมนูล่างต้องอ่านได้เต็มคำบนจอ 360px */
   .nav-tabs { padding-left: 2px; padding-right: 2px; gap: 1px; }
@@ -260,7 +260,8 @@ html, body { overflow-x: hidden; }
   display: flex; justify-content: space-between; gap: 12px;
   margin: -4px -4px 8px; padding: 6px 4px; background: #fff;
 }
-.wiz-top button { flex: 1 1 auto; width: auto; margin: 0; min-height: 52px; padding: 8px 16px; font-weight: 800; white-space: nowrap; }
+/* flex-basis 0 + min-width 0 = แบ่งที่เท่ากันและหดได้ ข้อความขึ้นบรรทัดใหม่แทนการล้นขอบจอเมื่อจอแคบ */
+.wiz-top button { flex: 1 1 0; min-width: 0; width: auto; margin: 0; min-height: 52px; padding: 8px 16px; font-weight: 800; line-height: 1.25; overflow-wrap: anywhere; }
 .wiz-help { background: #fff7ed; color: #9a3412; border: 2px solid #fdba74; }
 .wiz-progress { margin: 4px 0 14px; }
 .wiz-step-text { margin: 0 0 6px; font-weight: 800; color: #1e293b; }
@@ -295,6 +296,12 @@ html, body { overflow-x: hidden; }
   background: #ecfdf5; color: #065f46; border: 2px solid #6ee7b7; box-shadow: none;
 }
 .wiz-bar { position: sticky; }
+/* หน้าสรุป: ปุ่มส่งเต็มความกว้าง สีเขียว (ยืนยันงานปกติ) */
+.wiz-submit-bar { margin-top: 16px; }
+.wiz-submit-bar .wiz-submit { width: 100%; background: var(--ok); color: #fff; }
+.wiz-bar.is-static { position: static; padding-right: 8px; box-shadow: none; }   /* ไม่ลอย = แมวลอยไม่ทับถาวร จึงไม่ต้องเว้นขวา */
+.wiz-bar .shift-hint { flex: 1 1 100%; margin: 0; text-align: center; overflow-wrap: anywhere; }
+.wiz-bar .shift-hint:empty { display: none; }
 .wiz-bar button:disabled { opacity: 0.55; }
 
 .sum-block { margin: 0 0 12px; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); background: #fff; }
@@ -309,6 +316,10 @@ html, body { overflow-x: hidden; }
 
 .wiz-done { text-align: center; padding: 24px 8px 8px; }
 .wiz-done-icon { font-size: 64px; line-height: 1; margin-bottom: 12px; }
+.wiz-done-mascot { position: relative; width: 150px; margin: 0 auto 8px; animation: help-cat-pop 0.3s ease-out; }
+.wiz-done-mascot img { display: block; width: 150px; height: auto; }
+.wiz-done-badge { position: absolute; right: -6px; bottom: 6px; font-size: 40px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.2)); }
+@media (prefers-reduced-motion: reduce) { .wiz-done-mascot { animation: none; } }
 .wiz-done p { font-size: 1.05rem; color: #1e293b; }
 .wiz-done-actions { display: grid; gap: 14px; margin-top: 16px; }
 .wiz-done-actions button { margin: 0; min-height: 56px; font-size: 1.1rem; }

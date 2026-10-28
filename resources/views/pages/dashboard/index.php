@@ -61,9 +61,9 @@
           <label for="inspectionDate">วันที่ตรวจ</label>
           <input type="date" id="inspectionDate" required>
         </details>
-        <p id="inspectionShiftHint" class="shift-hint" role="status" aria-live="polite"></p>
-
-        <div class="save-bar wiz-bar">
+        <!-- ฟอร์มสั้น: แถบไม่ลอย (is-static) เพื่อไม่บังช่องเลือกวันที่/ข้อความเมื่อจอเตี้ย -->
+        <div class="save-bar wiz-bar is-static">
+          <p id="inspectionShiftHint" class="shift-hint" role="status" aria-live="polite"></p>
           <button type="submit" id="inspectionStartBtn">เริ่มตรวจ →</button>
         </div>
       </form>
@@ -91,15 +91,21 @@
       <h2>📋 ตรวจสอบอีกครั้งก่อนส่ง</h2>
       <div class="top-info" id="inspectionSummaryInfo"></div>
       <div id="inspectionSummary"></div>
-      <div class="save-bar wiz-bar">
-        <button id="inspectionSubmitBtn" type="button" class="secondary" data-call="submitInspection">✅ ยืนยันส่งผลการตรวจ</button>
+      <!-- หน้าสรุปสั้น และต้องอ่านให้จบก่อนส่ง: ปุ่มอยู่ท้ายรายการ (ไม่ลอย) จึงไม่บังกล่องสรุปสุดท้าย -->
+      <div class="save-bar wiz-bar is-static wiz-submit-bar">
+        <p class="save-hint">อ่านสรุปด้านบนครบแล้ว กดส่งได้เลย</p>
+        <button id="inspectionSubmitBtn" type="button" class="wiz-submit" data-call="submitInspection">✅ ยืนยันส่งผลการตรวจ</button>
       </div>
     </section>
 
     <!-- เสร็จแล้ว -->
     <section class="wiz-step hidden" id="inspectionStepDone">
       <div class="wiz-done">
-        <div class="wiz-done-icon" aria-hidden="true">✅</div>
+        <!-- มาสคอตแมวชูสองมือดีใจ + ป้ายติ๊กถูก แทนไอคอน ✅ อย่างเดียว -->
+        <div class="wiz-done-mascot" aria-hidden="true">
+          <img src="<?= asset('images/mascot/cat-cheer.svg') ?>" alt="" width="150" height="154">
+          <span class="wiz-done-badge">✅</span>
+        </div>
         <h2>บันทึกผลการตรวจเรียบร้อยแล้ว</h2>
         <p id="inspectionDoneText"></p>
       </div>
@@ -141,6 +147,16 @@
         <button type="button" class="chip-btn on" id="refillFilterNeed" data-call="setRefillFilter" data-arg="need">ต้องเติม <b id="refillCntNeed"></b></button>
         <button type="button" class="chip-btn" id="refillFilterAll" data-call="setRefillFilter" data-arg="all">ทั้งหมด <b id="refillCntAll"></b></button>
         <button type="button" class="chip-btn" id="refillFilterExp" data-call="setRefillFilter" data-arg="expiry">หมดอายุ <b id="refillCntExp"></b></button>
+      </div>
+      <!-- เลือกเติมเฉพาะบางกลุ่มก่อน: ค้นหาชื่อ + ประเภท (ใช้ร่วมกับปุ่มด้านบน) -->
+      <div class="refill-narrow">
+        <input type="search" id="refillSearch" placeholder="🔍 ค้นหาชื่ออุปกรณ์" aria-label="ค้นหาชื่ออุปกรณ์ที่จะเติม" autocomplete="off">
+        <select id="refillType" aria-label="กรองตามประเภทอุปกรณ์">
+          <option value="">ทุกประเภท</option>
+          <option value="individual">🧩 รายชิ้น</option>
+          <option value="box">📦 กล่อง / ล็อต</option>
+          <option value="non_expiring">🩺 ไม่มีวันหมดอายุ</option>
+        </select>
       </div>
       <div id="refillItems" class="list"></div>
       <label for="refillNote">หมายเหตุ (ถ้ามี)</label>
@@ -191,25 +207,40 @@
 <!-- Vehicles/Stock Tab -->
 <div id="tabContentStock" class="hidden">
   <div class="card">
-    <h2>ทะเบียนรถและอุปกรณ์ประจำรถ</h2>
+    <!-- งานของ "รถทุกคัน" (เพิ่มรถ) อยู่ข้างหัวข้อ แยกจากงานของ "รถคันที่เลือก" ด้านล่าง -->
+    <div class="stock-head">
+      <h2>ทะเบียนรถและอุปกรณ์</h2>
+      <button type="button" class="small-btn stock-add-car" data-call="showAddVehicleForm">+ เพิ่มรถ</button>
+    </div>
 
-    <div class="vehicle-pick">
-      <div class="vehicle-pick-main">
-        <label for="stockCar">เลือกรถ</label>
-        <select id="stockCar"></select>
-      </div>
-      <div class="vehicle-pick-actions">
-        <button type="button" id="btnEditVehicle" class="small-btn secondary">✏️ แก้ไขข้อมูลรถ</button>
-        <button type="button" id="btnToggleVehicleStatus" class="small-btn">🚫 ปิดใช้งานรถ</button>
-        <button type="button" id="btnDeleteVehicle" class="small-btn danger">🗑 ลบรถ</button>
+    <label for="stockCar">เลือกรถ</label>
+    <select id="stockCar"></select>
+
+    <div class="vehicle-card">
+      <div id="stockCarMeta" class="vehicle-meta">จำนวนและวันหมดอายุแยกตามรถแต่ละคัน</div>
+      <div class="vehicle-actions" id="vehicleActions">
+        <button type="button" id="btnEditVehicle" class="small-btn vehicle-edit">✏️ แก้ไขข้อมูลรถ</button>
+        <!-- ปิดใช้งาน / ลบ นาน ๆ ใช้ที: เก็บในเมนู ⋯ ลดปุ่มแดงบนจอและกันกดพลาด -->
+        <details class="vehicle-more" id="vehicleMore">
+          <summary class="small-btn" aria-label="ตัวเลือกเพิ่มเติมของรถคันนี้" title="ตัวเลือกเพิ่มเติม">⋯</summary>
+          <div class="vehicle-more-menu">
+            <button type="button" id="btnToggleVehicleStatus" class="vehicle-more-item">🚫 ปิดใช้งานรถ</button>
+            <button type="button" id="btnDeleteVehicle" class="vehicle-more-item is-danger">🗑 ลบรถ</button>
+          </div>
+        </details>
       </div>
     </div>
-    <p id="stockCarMeta" class="vehicle-meta">จำนวนและวันหมดอายุแยกตามรถแต่ละคัน</p>
 
-    <div class="stock-toolbar">
-      <button type="button" class="small-btn secondary" data-call="showAddVehicleForm">🚚 เพิ่มรถใหม่</button>
-      <button type="button" class="small-btn" data-call="showAddItemForm">+ เพิ่มอุปกรณ์</button>
+    <div class="stock-section-head">
+      <h3>อุปกรณ์ในรถคันนี้</h3>
+      <span id="stockItemCount" class="stock-item-count"></span>
+    </div>
+    <button type="button" class="stock-add-item" data-call="showAddItemForm">+ เพิ่มอุปกรณ์</button>
 
+    <!-- คัดลอก / นำเข้า ใช้ตอนตั้งค่ารถคันใหม่เป็นหลัก จึงพับเก็บไว้ -->
+    <details class="stock-more-ways" id="stockMoreWays">
+      <summary>วิธีเพิ่มอุปกรณ์แบบอื่น <small>(คัดลอกจากรถคันอื่น / นำเข้าจากไฟล์)</small></summary>
+      <div class="stock-more-body">
       <div id="copyBox" class="copy-box">
         <label for="copySourceCar">คัดลอกรายการจากรถคันอื่น</label>
         <select id="copySourceCar" aria-label="เลือกรถต้นทางสำหรับคัดลอกอุปกรณ์"></select>
@@ -222,20 +253,27 @@
         <button type="button" id="btnItemImport" class="copy-start-btn">📥 นำเข้าจากไฟล์</button>
         <button type="button" id="btnItemTemplate" class="copy-start-btn alt">📄 ดาวน์โหลดไฟล์ต้นแบบ</button>
       </div>
-    </div>
+      </div>
+    </details>
 
     <div id="copyPreview" class="hidden" role="region" aria-label="รายการอุปกรณ์รอเพิ่มลงรถ">
-      <div class="copy-preview-head">
-        <div class="copy-preview-title">
-          <strong>📋 รายการรอเพิ่มลงรถ</strong>
+      <!-- หัวสรุปติดด้านบนระหว่างเลื่อนดูรายการ: จำนวน / ที่มา / ความคืบหน้า / ตัวกรอง -->
+      <div class="copy-sum">
+        <div class="copy-sum-title">
+          <strong id="copyPreviewCount">รอเพิ่มลงรถ</strong>
           <span id="copyPreviewFrom" class="copy-preview-from"></span>
         </div>
-        <span id="copyPreviewCount" class="chip chip-warn"></span>
+        <div class="copy-progress" aria-hidden="true"><i id="copyProgressBar"></i></div>
+        <p id="copyPreviewStock" class="copy-sum-line"></p>
+        <div class="copy-filters" role="group" aria-label="กรองรายการรอเพิ่มลงรถ">
+          <button type="button" data-copy-filter="all" aria-pressed="true">ทั้งหมด</button>
+          <button type="button" data-copy-filter="dup" class="is-warn" aria-pressed="false">ซ้ำกับในรถ</button>
+          <button type="button" data-copy-filter="empty" aria-pressed="false">ยังไม่ใส่จำนวน</button>
+        </div>
       </div>
-      <p class="copy-preview-note">ยังไม่ถูกบันทึก — แก้ไขรายการ ใส่จำนวนและเลือกวันหมดอายุได้เลย แล้วกด “ยืนยันเพิ่มลงรถ”</p>
-      <p id="copyPreviewStock" class="copy-preview-stock hidden"></p>
       <div id="copyPreviewList"></div>
-      <div class="copy-preview-actions">
+      <p id="copyFilterEmpty" class="copy-filter-empty hidden">ไม่มีรายการในกลุ่มนี้แล้ว</p>
+      <div class="save-bar copy-preview-actions">
         <button type="button" id="btnCopyCancel" class="small-btn gray">ยกเลิกรายการทั้งหมด</button>
         <button type="button" id="btnCopyConfirm">ยืนยันเพิ่มลงรถ</button>
       </div>
@@ -245,185 +283,213 @@
   </div>
 </div>
 
-<!-- Nurses Tab -->
+<!-- Nurses Tab (จัดการผู้ใช้: รายชื่อก่อน — เพิ่ม/แก้ไข/นำเข้า อยู่ในหน้าต่างที่เลื่อนขึ้นจากด้านล่าง) -->
 <div id="tabContentNurses" class="hidden">
-  <div class="card">
-    <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
-      <div>
+  <div class="card users-page">
+    <!-- แถบบนติดตอนเลื่อน: หัวข้อ + ปุ่ม / ตัวเลขสรุป / ค้นหา + วอร์ด / แท็บกรอง -->
+    <div class="users-top">
+      <div class="users-title-row">
         <h2>จัดการผู้ใช้</h2>
-        <p>พยาบาลเวร Refer และบัญชีเข้าใช้งานระบบทั้งหมดในหน้าเดียว — เพิ่ม/แก้ไขพยาบาล บัญชี บทบาท และสถานะ</p>
-      </div>
-      <button type="button" id="wardManagerBtn" class="m-0 inline-flex w-auto min-h-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-200 hover:bg-slate-100 focus:outline-none focus:ring-4 focus:ring-slate-200">
-        🏥 จัดการวอร์ด <span id="wardManagerCount" class="rounded-full bg-slate-100 px-1.5 text-[11px] font-bold text-slate-600"></span>
-      </button>
-    </div>
-
-    <form id="nurseForm" novalidate>
-      <h3 id="nurseFormTitle">เพิ่มพยาบาลใหม่</h3>
-
-      <div id="nurseEditor" class="grid gap-5">
-        <fieldset class="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 md:grid-cols-2">
-          <legend class="px-2 text-sm font-bold text-slate-700">ข้อมูลส่วนตัว</legend>
-
-          <div>
-            <label class="!mt-0" for="nName">ชื่อ–นามสกุล <span class="text-red-500" aria-hidden="true">*</span></label>
-            <input id="nName" type="text" placeholder="เช่น สมศรี ใจดี" autocomplete="name" required>
-            <p class="mt-1 text-xs leading-relaxed text-slate-500">ชื่อ-สกุลจริง ใช้แสดงในประวัติการตรวจ</p>
-            <p class="mt-1 hidden text-xs font-semibold text-red-600" id="nNameError" role="alert"></p>
-          </div>
-
-          <div>
-            <label class="!mt-0" for="nPhone">โทรศัพท์</label>
-            <input id="nPhone" type="tel" inputmode="tel" placeholder="081-234-5678" autocomplete="tel">
-            <p class="mt-1 text-xs leading-relaxed text-slate-500">พิมพ์เฉพาะตัวเลข ระบบจัดรูปแบบเบอร์ให้อัตโนมัติ</p>
-            <p class="mt-1 hidden text-xs font-semibold text-red-600" id="nPhoneError" role="alert"></p>
-          </div>
-        </fieldset>
-
-        <fieldset class="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 md:grid-cols-2">
-          <legend class="px-2 text-sm font-bold text-slate-700">ข้อมูลการทำงาน</legend>
-
-          <div>
-            <label class="!mt-0" for="nId">รหัสพยาบาล <span class="text-red-500" aria-hidden="true">*</span></label>
-            <div class="flex gap-2">
-              <input id="nId" type="text" placeholder="เช่น 1004" class="flex-1 min-w-0" required>
-              <button type="button" id="nurseCodeGenBtn" title="สร้างรหัสลำดับถัดไปให้อัตโนมัติ" class="m-0 w-auto min-h-0 shrink-0 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-200 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-200">⟳ สร้างรหัส</button>
+        <div class="users-head-actions">
+          <button type="button" id="userAddBtn" class="users-add-btn">+ เพิ่มผู้ใช้</button>
+          <details class="users-more" id="usersMore">
+            <summary class="small-btn" aria-label="ตัวเลือกเพิ่มเติม" title="ตัวเลือกเพิ่มเติม">⋯</summary>
+            <div class="users-more-menu">
+              <button type="button" id="userImportOpenBtn" class="users-more-item">📥 นำเข้าจาก Excel / CSV</button>
+              <button type="button" id="nurseTemplateBtn" class="users-more-item">📄 ดาวน์โหลดไฟล์ตัวอย่าง (.xlsx)</button>
+              <button type="button" id="wardManagerBtn" class="users-more-item">🏥 จัดการวอร์ด <span id="wardManagerCount" class="users-more-count"></span></button>
             </div>
-            <p class="mt-1 text-xs leading-relaxed text-slate-500">ระบบแนะนำรหัสถัดไปให้ — รหัสต้องไม่ซ้ำกับรายชื่อที่มีอยู่</p>
-            <p class="mt-1 hidden text-xs font-semibold text-red-600" id="nIdError" role="alert"></p>
-          </div>
+          </details>
+        </div>
+      </div>
+      <div class="users-stats" id="userStats" aria-live="polite"></div>
+      <div class="users-search">
+        <input type="search" id="nurseSearch" placeholder="🔍 ชื่อ, รหัส, เบอร์, ชื่อผู้ใช้" aria-label="ค้นหาผู้ใช้">
+        <select id="nurseDeptFilter" aria-label="กรองรายชื่อตามวอร์ด"></select>
+      </div>
+      <div class="users-chips" id="userChips" role="group" aria-label="กรองตามประเภทและสถานะ" data-role="" data-status="">
+        <!-- 3 หมวด — กดหมวดที่เลือกอยู่ซ้ำ = กลับไปแสดงทั้งหมด -->
+        <button type="button" data-role="nurse" data-status="" aria-pressed="false">👩‍⚕️ พยาบาล</button>
+        <button type="button" data-role="admin" data-status="" aria-pressed="false">👑 แอดมิน</button>
+        <button type="button" data-role="other" data-status="" aria-pressed="false">👤 ผู้ใช้</button>
+      </div>
+      <p id="nurseFilterNote" class="hidden users-filter-note"></p>
+    </div>
 
-          <div>
-            <label class="!mt-0" for="nDept">หน่วยงาน / วอร์ด <span class="text-red-500" aria-hidden="true">*</span></label>
-            <div class="flex gap-2">
-              <select id="nDept" class="min-w-0 flex-1" required></select>
-              <button type="button" id="deptQuickAddBtn" title="เพิ่มวอร์ดใหม่เข้าไปในทะเบียนทันที" class="m-0 w-auto min-h-0 shrink-0 whitespace-nowrap rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition-colors duration-200 hover:bg-teal-100 focus:outline-none focus:ring-2 focus:ring-teal-200">+ วอร์ด</button>
+    <p class="users-group" id="nurseGroupTitle">พยาบาล</p>
+    <div id="nurseDirectoryTable" class="users-list"></div>
+
+    <p class="users-group" id="otherGroupTitle">บัญชีอื่น (ไม่ผูกกับรายชื่อพยาบาล)</p>
+    <div id="userDirectoryTable" class="users-list"></div>
+    <p id="usersEmpty" class="empty hidden">ไม่พบผู้ใช้ที่ตรงกับตัวกรอง</p>
+  </div>
+
+  <!-- หน้าต่างเพิ่ม / แก้ไขผู้ใช้ (พยาบาล หรือ บัญชีอื่น) -->
+  <div id="userSheet" class="hidden sheet-overlay" role="dialog" aria-modal="true" aria-labelledby="userSheetTitle" data-call="closeUserSheet" data-call-self>
+    <div class="sheet user-sheet">
+      <div class="user-sheet-head">
+        <div class="user-sheet-title">
+          <h3 id="userSheetTitle">เพิ่มผู้ใช้</h3>
+          <button type="button" class="user-sheet-x" data-call="closeUserSheet" aria-label="ปิดหน้าต่าง">✕</button>
+        </div>
+        <div class="user-kind" id="userKind" role="group" aria-label="ประเภทผู้ใช้">
+          <button type="button" data-kind="nurse" aria-pressed="true">👩‍⚕️ พยาบาล</button>
+          <button type="button" data-kind="other" aria-pressed="false">👤 บัญชีอื่น</button>
+        </div>
+      </div>
+
+      <form id="nurseForm" class="user-form" novalidate>
+        <h3 id="nurseFormTitle" class="sr-only">เพิ่มพยาบาลใหม่</h3>
+        <div id="nurseEditor" class="user-form-body">
+          <section class="user-sec">
+            <h4>ข้อมูลพื้นฐาน</h4>
+            <div class="user-grid">
+              <div class="user-wide">
+                <label for="nName">ชื่อ–นามสกุล <span class="user-req" aria-hidden="true">*</span></label>
+                <input id="nName" type="text" placeholder="เช่น สมศรี ใจดี" autocomplete="name" required>
+                <p class="user-err hidden" id="nNameError" role="alert"></p>
+              </div>
+              <div>
+                <label for="nId">รหัสพยาบาล <span class="user-req" aria-hidden="true">*</span></label>
+                <div class="user-with-btn">
+                  <input id="nId" type="text" placeholder="เช่น 1004" required>
+                  <button type="button" id="nurseCodeGenBtn" class="user-mini-btn" title="สร้างรหัสลำดับถัดไปให้อัตโนมัติ" aria-label="สร้างรหัสถัดไป">⟳</button>
+                </div>
+                <p class="user-err hidden" id="nIdError" role="alert"></p>
+              </div>
+              <div>
+                <label for="nPhone">โทรศัพท์</label>
+                <input id="nPhone" type="tel" inputmode="tel" placeholder="081-234-5678" autocomplete="tel">
+                <p class="user-err hidden" id="nPhoneError" role="alert"></p>
+              </div>
+              <div class="user-wide">
+                <label for="nDept">หน่วยงาน / วอร์ด <span class="user-req" aria-hidden="true">*</span></label>
+                <div class="user-with-btn">
+                  <select id="nDept" required></select>
+                  <button type="button" id="deptQuickAddBtn" class="user-mini-btn" title="เพิ่มวอร์ดใหม่เข้าไปในทะเบียนทันที">+ วอร์ด</button>
+                </div>
+                <p class="user-err hidden" id="nDeptError" role="alert"></p>
+              </div>
             </div>
-            <p class="mt-1 text-xs leading-relaxed text-slate-500">เลือกจากทะเบียนวอร์ด — กด "+ วอร์ด" เพื่อเพิ่มหน่วยงานใหม่ หรือ "จัดการวอร์ด" เพื่อแก้ชื่อ/ปิดใช้งาน</p>
-            <p class="mt-1 hidden text-xs font-semibold text-red-600" id="nDeptError" role="alert"></p>
-          </div>
+          </section>
 
-          <div>
-            <label class="!mt-0" for="nStart">วันเริ่มปฏิบัติงาน</label>
-            <input id="nStart" type="date">
-            <p class="mt-1 text-xs leading-relaxed text-slate-500">กดช่องเพื่อเลือกจากปฏิทิน — ระบบคำนวณวันครบ 6 เดือนให้อัตโนมัติ</p>
-            <p class="mt-1 hidden text-xs leading-relaxed text-amber-600" id="nStartLegacy"></p>
-          </div>
+          <details class="user-sec user-extra" id="nurseExtra">
+            <summary>ข้อมูลเพิ่มเติม (วันเริ่มงาน, สถานะ, หมายเหตุ)</summary>
+            <div class="user-grid">
+              <div>
+                <label for="nStart">วันเริ่มปฏิบัติงาน</label>
+                <input id="nStart" type="date">
+                <p class="user-hint user-hint-warn hidden" id="nStartLegacy"></p>
+              </div>
+              <div>
+                <label for="nActive">สถานะ</label>
+                <select id="nActive"><option value="true">ปฏิบัติงาน</option><option value="false">พักใช้งาน</option></select>
+              </div>
+              <div class="user-wide">
+                <label for="nNote">หมายเหตุ</label>
+                <input id="nNote" type="text" placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)">
+              </div>
+            </div>
+            <p class="user-hint">ครบ 6 เดือนคำนวณจากวันเริ่มให้อัตโนมัติ · พักใช้งาน = ไม่แสดงตอนเลือกผู้ตรวจ แต่ประวัติเดิมยังอยู่</p>
+          </details>
 
-          <div>
-            <label class="!mt-0" for="nActive">สถานะ</label>
-            <select id="nActive"><option value="true">ปฏิบัติงาน</option><option value="false">พักใช้งาน</option></select>
-            <p class="mt-1 text-xs leading-relaxed text-slate-500">พักใช้งาน = ไม่แสดงในตัวเลือกตอนตรวจเช็ค แต่ประวัติเดิมยังอยู่</p>
-          </div>
+          <section class="user-sec">
+            <h4>บัญชีเข้าใช้งานระบบ</h4>
+            <div class="user-switch" id="nAccountSwitchRow">
+              <div>
+                <b>เปิดบัญชีให้คนนี้</b>
+                <small>เข้าสู่ระบบด้วยเบอร์โทร · รหัสเริ่มต้น = เบอร์โทร</small>
+              </div>
+              <button type="button" class="user-toggle" id="nAccountToggle" role="switch" aria-checked="true" aria-label="เปิดบัญชีเข้าใช้งาน"></button>
+            </div>
+            <div id="nAccountFields" class="user-grid">
+              <div>
+                <label for="nUsername">ชื่อผู้ใช้ (เบอร์โทร)</label>
+                <input id="nUsername" type="text" inputmode="tel" placeholder="0812345678" autocomplete="off" autocapitalize="none" spellcheck="false">
+                <p class="user-err hidden" id="nUsernameError" role="alert"></p>
+              </div>
+              <div>
+                <label for="nPassword">รหัสผ่าน</label>
+                <input id="nPassword" type="password" placeholder="ว่าง = ใช้เบอร์โทร" autocomplete="new-password">
+                <p class="user-err hidden" id="nPasswordError" role="alert"></p>
+              </div>
+              <p class="user-hint user-wide" id="nAccountHint">ผู้ใช้จะถูกให้ตั้งรหัสใหม่ตอนเข้าสู่ระบบครั้งแรก</p>
+              <p id="nLoginStatus" class="user-hint user-wide hidden"></p>
+            </div>
+            <!-- บัญชีที่มีอยู่แล้ว: เปลี่ยนบทบาท / เปิด-ปิดบัญชี (เดิมเป็นปุ่มบนการ์ด) -->
+            <div id="nAccountActions" class="user-acc-actions hidden">
+              <button type="button" id="nRoleBtn" class="user-acc-btn"></button>
+              <button type="button" id="nAccountActiveBtn" class="user-acc-btn"></button>
+              <p id="nLastLogin" class="user-hint"></p>
+            </div>
+          </section>
 
-          <div class="md:col-span-2">
-            <label class="!mt-0" for="nNote">หมายเหตุ</label>
-            <input id="nNote" type="text" placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)">
-          </div>
-        </fieldset>
-
-        <fieldset class="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 md:grid-cols-2">
-          <legend class="px-2 text-sm font-bold text-slate-700">บัญชีเข้าใช้งานระบบ (ถ้ามี)</legend>
-
-          <div>
-            <label class="!mt-0" for="nUsername">ชื่อผู้ใช้สำหรับเข้าสู่ระบบ (เบอร์โทรศัพท์)</label>
-            <input id="nUsername" type="text" inputmode="tel" placeholder="เช่น 0812345678" autocomplete="off" autocapitalize="none" spellcheck="false">
-            <p class="mt-1 text-xs leading-relaxed text-slate-500">ใช้เบอร์โทรศัพท์ของพยาบาล (กรอกเบอร์โทรด้านบนแล้วระบบใส่ให้เอง) — เว้นว่างได้ถ้ายังไม่เปิดบัญชีให้พยาบาลรายนี้</p>
-            <p class="mt-1 hidden text-xs font-semibold text-red-600" id="nUsernameError" role="alert"></p>
-          </div>
-
-          <div>
-            <label class="!mt-0" for="nPassword">รหัสผ่าน</label>
-            <input id="nPassword" type="password" placeholder="เว้นว่าง = ใช้เบอร์โทรเป็นรหัสเริ่มต้น" autocomplete="new-password">
-            <p class="mt-1 text-xs leading-relaxed text-slate-500">บัญชีใหม่: เว้นว่าง = รหัสผ่านเริ่มต้นคือเบอร์โทรศัพท์ • ตอนแก้ไข: เว้นว่าง = ใช้รหัสเดิม, กรอก = รีเซ็ตรหัส — ผู้ใช้จะถูกบังคับตั้งรหัสใหม่ตอนเข้าสู่ระบบครั้งแรก</p>
-            <p class="mt-1 hidden text-xs font-semibold text-red-600" id="nPasswordError" role="alert"></p>
-          </div>
-
-          <p id="nLoginStatus" class="md:col-span-2 hidden rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs leading-relaxed text-teal-700"></p>
-        </fieldset>
-
-        <input type="hidden" id="nEnd">
-
-        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button type="button" id="resetNurseBtn" class="m-0 w-full min-h-0 rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition-all duration-200 hover:bg-slate-100 focus:outline-none focus:ring-4 focus:ring-slate-200 active:scale-[0.98] sm:w-auto">ล้างช่องกรอก</button>
-          <button type="submit" id="nurseSubmitBtn" class="m-0 w-full min-h-0 rounded-xl bg-teal-600 px-6 py-3 text-sm font-bold text-white shadow-md transition-all duration-200 hover:bg-teal-700 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-200 active:scale-[0.98] sm:w-auto">เพิ่มพยาบาล</button>
+          <input type="hidden" id="nEnd">
         </div>
-      </div>
-    </form>
-
-    <div class="mt-6 border-t border-slate-200 pt-5">
-      <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p class="text-sm font-bold text-slate-700">นำเข้ารายชื่อจากไฟล์ Excel / CSV</p>
-        <button type="button" id="nurseTemplateBtn" class="m-0 inline-flex w-auto min-h-0 items-center gap-1.5 rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition-colors duration-200 hover:bg-teal-100 focus:outline-none focus:ring-4 focus:ring-teal-100">
-          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-          ดาวน์โหลดไฟล์ตัวอย่าง (.xlsx)
-        </button>
-      </div>
-      <div id="nurseDropzone" role="button" tabindex="0" aria-label="อัปโหลดไฟล์รายชื่อ Excel หรือ CSV" class="cursor-pointer rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center transition-colors duration-200 hover:border-teal-400 hover:bg-teal-50">
-        <svg class="mx-auto mb-2 h-8 w-8 text-teal-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="17 8 12 3 7 8"></polyline>
-          <line x1="12" y1="3" x2="12" y2="15"></line>
-        </svg>
-        <p class="text-sm font-semibold text-slate-700">ลากไฟล์ .xlsx .xls .csv มาวางที่นี่</p>
-        <p class="mt-1 text-xs text-slate-500">หรือ <span class="font-semibold text-teal-600 underline">คลิกเพื่อเลือกไฟล์</span> — ระบบจะแสดงตารางพรีวิวให้ตรวจสอบก่อนบันทึกจริง</p>
-        <input id="nurseImport" type="file" accept=".xlsx,.xls,.csv" class="sr-only">
-      </div>
-      <div id="nurseFileStatus" class="mt-2 hidden flex items-center gap-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2">
-        <span class="text-lg" aria-hidden="true">📄</span>
-        <div class="min-w-0 flex-1">
-          <p id="nurseFileName" class="truncate text-xs font-semibold text-slate-700"></p>
-          <p id="nurseFileMeta" class="text-xs text-teal-700"></p>
+        <div class="user-sheet-foot">
+          <button type="button" class="small-btn gray" data-call="closeUserSheet">ยกเลิก</button>
+          <button type="submit" id="nurseSubmitBtn">เพิ่มพยาบาล</button>
         </div>
-        <button type="button" id="nurseFileClear" class="m-0 w-auto min-h-0 shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-teal-700 transition-colors duration-200 hover:bg-teal-100" aria-label="ลบไฟล์ที่เลือก">✕</button>
-      </div>
-    </div>
-    
-    <div class="search-box flex flex-wrap items-center gap-2">
-      <input type="text" id="nurseSearch" placeholder="🔍 ค้นหาด้วย ชื่อ, สกุล, ชื่อบัญชี หรือหน่วยงาน..." class="min-w-0 flex-1">
-      <select id="nurseDeptFilter" aria-label="กรองรายชื่อตามวอร์ด" class="w-auto min-w-0 shrink-0 whitespace-nowrap"></select>
-      <select id="userRoleFilter" aria-label="กรองตามประเภท/บทบาท" class="w-auto min-w-0 shrink-0 whitespace-nowrap">
-        <option value="">ทุกประเภท</option>
-        <option value="nurse">พยาบาลทั้งหมด</option>
-        <option value="nurse-noaccount">พยาบาลที่ยังไม่มีบัญชี</option>
-        <option value="admin">ผู้ดูแลระบบ (Admin)</option>
-        <option value="staff">เจ้าหน้าที่ (Staff)</option>
-        <option value="other">บัญชีที่ไม่ใช่พยาบาล</option>
-      </select>
-      <select id="userStatusFilter" aria-label="กรองตามสถานะ" class="w-auto min-w-0 shrink-0 whitespace-nowrap">
-        <option value="">ทุกสถานะ</option>
-        <option value="active">ใช้งาน / ปฏิบัติงาน</option>
-        <option value="inactive">ปิดใช้งาน / พักใช้งาน</option>
-      </select>
-    </div>
-    <p id="nurseFilterNote" class="hidden mb-2 text-xs font-semibold text-teal-700"></p>
-
-    <h3 class="user-section-title">👩‍⚕️ พยาบาลและบัญชีเข้าใช้งาน</h3>
-    <div id="nurseDirectoryTable" class="list"></div>
-
-    <h3 class="user-section-title">👥 บัญชีผู้ใช้อื่น (ไม่ได้ผูกกับรายชื่อพยาบาล)</h3>
-    <p class="text-xs text-slate-500">เช่น ผู้ดูแลระบบ หรือเจ้าหน้าที่ที่ไม่อยู่ในทะเบียนพยาบาล — บัญชีของพยาบาลแสดงในการ์ดของพยาบาลด้านบน</p>
-    <div id="userDirectoryTable" class="list"></div>
-
-    <details id="userFormWrap" class="user-form-wrap">
-      <summary>+ เพิ่ม / แก้ไขบัญชีผู้ใช้ที่ไม่ใช่พยาบาล</summary>
-      <form id="userForm">
-        <h3 id="userFormTitle">เพิ่มผู้ใช้ใหม่</h3>
-        <div class="editor" id="userEditor">
-          <div><label for="uUsername">ชื่อผู้ใช้ (Username)</label><input id="uUsername" placeholder="เช่น staff01" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
-          <div><label for="uPassword">รหัสผ่าน</label><input id="uPassword" type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)" autocomplete="new-password"></div>
-          <div><label for="uFullName">ชื่อ–นามสกุล</label><input id="uFullName" placeholder="ชื่อ–นามสกุล"></div>
-          <div><label for="uRole">บทบาท</label><select id="uRole"><option value="staff">Staff (เจ้าหน้าที่ปฏิบัติงาน)</option><option value="admin">Admin (ผู้ดูแลระบบ)</option></select></div>
-          <div><label for="uNurse">ผูกกับรายชื่อพยาบาล (ถ้ามี)</label><select id="uNurse"><option value="">-- ไม่ผูก --</option></select></div>
-          <button type="submit">เพิ่มผู้ใช้</button>
-          <button type="button" class="gray">ล้างช่องกรอก</button>
-        </div>
-        <p class="text-xs text-slate-500">บัญชีของพยาบาลสร้าง/แก้ได้ในฟอร์มพยาบาลด้านบน (ส่วน "บัญชีเข้าใช้งานระบบ") — พยาบาล 1 คนมีได้ 1 บัญชี</p>
       </form>
-    </details>
+
+      <form id="userForm" class="user-form hidden" novalidate>
+        <h3 id="userFormTitle" class="sr-only">เพิ่มบัญชีผู้ใช้ใหม่</h3>
+        <div id="userEditor" class="user-form-body">
+          <section class="user-sec">
+            <h4>ข้อมูลบัญชี</h4>
+            <div class="user-grid">
+              <div class="user-wide"><label for="uFullName">ชื่อ–นามสกุล <span class="user-req" aria-hidden="true">*</span></label><input id="uFullName" placeholder="ชื่อ–นามสกุล"></div>
+              <div><label for="uUsername">ชื่อผู้ใช้ <span class="user-req" aria-hidden="true">*</span></label><input id="uUsername" placeholder="เช่น staff01" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+              <div><label for="uRole">บทบาท</label><select id="uRole"><option value="staff">Staff (เจ้าหน้าที่)</option><option value="admin">Admin (ผู้ดูแลระบบ)</option></select></div>
+              <div class="user-wide"><label for="uPassword">รหัสผ่าน</label><input id="uPassword" type="password" placeholder="อย่างน้อย 6 ตัวอักษร" autocomplete="new-password"></div>
+            </div>
+          </section>
+          <details class="user-sec user-extra">
+            <summary>ผูกกับรายชื่อพยาบาล (ถ้ามี)</summary>
+            <div class="user-grid">
+              <div class="user-wide"><label for="uNurse">พยาบาล</label><select id="uNurse"><option value="">-- ไม่ผูก --</option></select></div>
+            </div>
+            <p class="user-hint">พยาบาล 1 คนมีได้ 1 บัญชี — ผูกแล้วบัญชีจะไปแสดงในแถวของพยาบาลคนนั้น</p>
+          </details>
+          <div id="uAccountActions" class="user-acc-actions hidden">
+            <button type="button" id="uActiveBtn" class="user-acc-btn"></button>
+            <p id="uLastLogin" class="user-hint"></p>
+          </div>
+        </div>
+        <div class="user-sheet-foot">
+          <button type="button" class="small-btn gray" data-call="closeUserSheet">ยกเลิก</button>
+          <button type="submit" id="userSubmitBtn">เพิ่มบัญชี</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- หน้าต่างนำเข้ารายชื่อจากไฟล์ -->
+  <div id="userImportSheet" class="hidden sheet-overlay" role="dialog" aria-modal="true" aria-labelledby="userImportTitle" data-call="closeUserImport" data-call-self>
+    <div class="sheet user-sheet">
+      <div class="user-sheet-head">
+        <div class="user-sheet-title">
+          <h3 id="userImportTitle">นำเข้ารายชื่อจาก Excel / CSV</h3>
+          <button type="button" class="user-sheet-x" data-call="closeUserImport" aria-label="ปิดหน้าต่าง">✕</button>
+        </div>
+      </div>
+      <div class="user-form-body">
+        <div id="nurseDropzone" role="button" tabindex="0" aria-label="อัปโหลดไฟล์รายชื่อ Excel หรือ CSV" class="user-dropzone">
+          <span class="user-dropzone-ico" aria-hidden="true">📥</span>
+          <p class="user-dropzone-main">ลากไฟล์ .xlsx .xls .csv มาวาง หรือ <u>แตะเพื่อเลือกไฟล์</u></p>
+          <p class="user-hint">ระบบจะแสดงตารางพรีวิวให้ตรวจก่อนบันทึกจริง</p>
+          <input id="nurseImport" type="file" accept=".xlsx,.xls,.csv" class="sr-only">
+        </div>
+        <div id="nurseFileStatus" class="user-file-status hidden">
+          <span aria-hidden="true">📄</span>
+          <div class="user-file-text">
+            <p id="nurseFileName"></p>
+            <p id="nurseFileMeta"></p>
+          </div>
+          <button type="button" id="nurseFileClear" class="user-sheet-x" aria-label="ซ่อนสถานะไฟล์">✕</button>
+        </div>
+        <button type="button" data-call="downloadNurseTemplate" class="user-acc-btn">📄 ดาวน์โหลดไฟล์ตัวอย่าง (.xlsx)</button>
+      </div>
+    </div>
   </div>
 </div>

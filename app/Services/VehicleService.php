@@ -1083,6 +1083,15 @@ class VehicleService
             }
             // ยอดบนรถคำนวณหลังอัปเดตประเภท/มาตรฐาน (อ่านแถวที่ล็อกไว้ใหม่)
             $onboard = $wantsOnboard ? $this->applyOnboardQty($this->itemModel->lockById($itemId), $input, $actor) : null;
+            // ยอดบนรถถึงมาตรฐานแล้ว → ปิดบรรทัดที่ค้างในใบรอเติม (ไม่งั้นของครบแต่ยังขึ้น "รอเติม")
+            if ($onboard !== null) {
+                $onboard['requests'] = (new RestockService())->closeLinesWhenStocked(
+                    $this->itemModel->lockById($itemId),
+                    $onboard['before'],
+                    $actor,
+                    'ยอดบนรถครบตามมาตรฐาน (ปรับยอดจากหน้าทะเบียนรถ)'
+                );
+            }
             $db->commit();
 
             $result = $this->itemModel->find($itemId) ?? [];
