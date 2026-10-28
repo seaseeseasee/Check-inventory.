@@ -209,7 +209,13 @@ class User extends Model
         $data['updated_at'] = $now;
         $data['active'] = $data['active'] ?? true;
 
-        return $this->create($data);
+        $created = $this->create($data);
+        AuditLog::record('user.create', 'user', (string)$data['id'], [
+            'username' => $data['username'] ?? null,
+            'role' => $data['role'],
+            'nurse_id' => $data['nurse_id'] ?? null,
+        ]);
+        return $created;
     }
 
     public function updateUser(string $id, array $data): bool
@@ -232,7 +238,43 @@ class User extends Model
 
         $data['updated_at'] = (new \DateTime())->format('Y-m-d\TH:i:s.u\Z');
 
-        return $this->update($id, $data);
+        $before = $this->find($id);
+        $ok = $this->update($id, $data);
+        if ($ok && $before) {
+            $this->auditChanges($id, $before, $data);
+        }
+        return $ok;
+    }
+
+    /** บันทึกเฉพาะช่องที่เปลี่ยนจริง — รหัสผ่านบันทึกแค่ว่าเปลี่ยน (ไม่เก็บค่า/hash) */
+    private function auditChanges(string $id, array $before, array $data): void
+    {
+        $changes = [];
+        foreach (['username', 'full_name', 'role', 'nurse_id', 'active', 'must_change_password'] as $field) {
+            if (!array_key_exists($field, $data)) {
+                continue;
+            }
+            $old = $before[$field] ?? null;
+            $new = $data[$field];
+            if (in_array($field, ['active', 'must_change_password'], true)) {
+                $old = (bool)$old;
+                $new = (bool)$new;
+            }
+            if ($old !== $new) {
+                $changes[$field] = [$old, $new];
+            }
+        }
+        $passwordChanged = isset($data['password_hash']);
+        if (!$changes && !$passwordChanged) {
+            return;
+        }
+        // เจ้าของบัญชีเปลี่ยนรหัสเอง vs ผู้อื่น (admin) ตั้งรหัสให้
+        $self = (string)($_SESSION['user']['id'] ?? '') === $id;
+        if ($passwordChanged) {
+            $changes['password'] = $self ? 'changed_by_owner' : 'reset_by_admin';
+        }
+        $action = $passwordChanged && $self && count($changes) <= 2 ? 'user.password_change' : 'user.update';
+        AuditLog::record($action, 'user', $id, $changes);
     }
 
     public function isAdmin(array $user): bool

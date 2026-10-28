@@ -33,7 +33,7 @@ class RoleMiddleware
         $userRole = $user['role'] ?? '';
         
         if (!in_array($userRole, $allowedRoles, true)) {
-            Response::forbidden('Insufficient permissions. Required role: ' . implode(', ', $allowedRoles));
+            Response::forbidden('Insufficient permissions');
         }
     }
 

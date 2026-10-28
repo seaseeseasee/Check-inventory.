@@ -6,20 +6,24 @@ namespace App\Controllers;
 use App\Services\InspectionService;
 use App\Services\RestockService;
 use App\Helpers\Response;
+use App\Middleware\RoleMiddleware;
 
 class HistoryController extends Controller
 {
     private InspectionService $inspectionService;
     private RestockService $restockService;
+    private RoleMiddleware $roleMiddleware;
 
     public function __construct()
     {
         $this->inspectionService = new InspectionService();
         $this->restockService = new RestockService();
+        $this->roleMiddleware = new RoleMiddleware();
     }
 
     public function inspections(): void
     {
+        $this->roleMiddleware->requireStaff();
         $inspections = $this->inspectionService->getInspections();
 
         $summary = $this->inspectionService->getItemSummary(array_column($inspections, 'id'));
@@ -53,6 +57,7 @@ class HistoryController extends Controller
 
     public function inspectionDetail(string $id): void
     {
+        $this->roleMiddleware->requireStaff();
         $inspection = $this->inspectionService->getInspectionWithItems($id);
         if (!$inspection) {
             $this->notFound('ไม่พบรอบการตรวจ');
@@ -63,6 +68,7 @@ class HistoryController extends Controller
 
     public function restock(): void
     {
+        $this->roleMiddleware->requireStaff();
         $requests = $this->restockService->getRestockRequestsForAdmin();
         
         // Apply filters
@@ -90,6 +96,7 @@ class HistoryController extends Controller
 
     public function clearInspections(): void
     {
+        $this->roleMiddleware->requireAdmin();
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             Response::error('Method not allowed', 405);
         }

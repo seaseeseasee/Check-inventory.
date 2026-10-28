@@ -20,8 +20,8 @@
   <!-- ตรวจเช็กแบบทีละขั้น: 1 เลือกรถ → 2 ผู้ตรวจ/เวร → 3 ตรวจทีละหมวด → 4 สรุป → เสร็จ -->
   <div class="card wiz" id="inspectionWizard" data-help-tel="<?= escape(env('HELP_PHONE', '')) ?>">
     <div class="wiz-top">
-      <button type="button" class="gray wiz-back" id="inspectionBackBtn" onclick="inspectionBack()">← ย้อนกลับ</button>
-      <button type="button" class="wiz-help" onclick="openInspectionHelp()">📞 ขอความช่วยเหลือ</button>
+      <button type="button" class="gray wiz-back" id="inspectionBackBtn" data-call="inspectionBack">← ย้อนกลับ</button>
+      <button type="button" class="wiz-help" data-call="openInspectionHelp">📞 ขอความช่วยเหลือ</button>
     </div>
     <div class="wiz-progress">
       <p class="wiz-step-text" id="inspectionStepText" aria-live="polite"></p>
@@ -75,14 +75,14 @@
       <p id="inspectionModeNote" class="mode-note hidden" role="status"></p>
       <h2 id="inspectionGroupTitle"></h2>
       <p class="wiz-sub" id="inspectionGroupSub" role="status" aria-live="polite"></p>
-      <button type="button" class="wiz-all-ok hidden" id="inspectionPageNoneBtn" onclick="checkAllInspection()">✅ หน้านี้ไม่ได้ใช้ ไม่มีหาย ทั้งหมด</button>
+      <button type="button" class="wiz-all-ok hidden" id="inspectionPageNoneBtn" data-call="checkAllInspection">✅ หน้านี้ไม่ได้ใช้ ไม่มีหาย ทั้งหมด</button>
 
       <div id="inspectionItemTable" class="list"></div>
 
       <p class="autosave-note" id="inspectionAutosaveNote" role="status" aria-live="polite"></p>
       <div class="save-bar wiz-bar">
         <p id="inspectionSaveHint" class="save-hint"></p>
-        <button type="button" id="inspectionNextBtn" onclick="inspectionNext()">ถัดไป →</button>
+        <button type="button" id="inspectionNextBtn" data-call="inspectionNext">ถัดไป →</button>
       </div>
     </section>
 
@@ -92,7 +92,7 @@
       <div class="top-info" id="inspectionSummaryInfo"></div>
       <div id="inspectionSummary"></div>
       <div class="save-bar wiz-bar">
-        <button id="inspectionSubmitBtn" type="button" class="secondary" onclick="submitInspection()">✅ ยืนยันส่งผลการตรวจ</button>
+        <button id="inspectionSubmitBtn" type="button" class="secondary" data-call="submitInspection">✅ ยืนยันส่งผลการตรวจ</button>
       </div>
     </section>
 
@@ -104,19 +104,19 @@
         <p id="inspectionDoneText"></p>
       </div>
       <div class="wiz-done-actions">
-        <button type="button" onclick="switchTab('dashboard')">🏠 กลับหน้าแรก</button>
-        <button type="button" class="gray" onclick="inspectionRestart()">🚑 ตรวจรถคันอื่น</button>
+        <button type="button" data-call="switchTab" data-arg="dashboard">🏠 กลับหน้าแรก</button>
+        <button type="button" class="gray" data-call="inspectionRestart">🚑 ตรวจรถคันอื่น</button>
       </div>
     </section>
   </div>
 
   <!-- หน้าต่างช่วยเหลือ -->
-  <div id="inspectionHelp" class="hidden sheet-overlay" role="dialog" aria-modal="true" aria-labelledby="inspectionHelpTitle" onclick="if (event.target === this) closeInspectionHelp()">
+  <div id="inspectionHelp" class="hidden sheet-overlay" role="dialog" aria-modal="true" aria-labelledby="inspectionHelpTitle" data-call="closeInspectionHelp" data-call-self>
     <div class="sheet">
       <h3 id="inspectionHelpTitle">📞 ขอความช่วยเหลือ</h3>
       <div id="inspectionHelpBody"></div>
       <a class="wiz-call hidden" id="inspectionHelpCall" href="#">📞 โทรหาเจ้าหน้าที่</a>
-      <button type="button" class="gray" onclick="closeInspectionHelp()">ปิดหน้าต่างนี้</button>
+      <button type="button" class="gray" data-call="closeInspectionHelp">ปิดหน้าต่างนี้</button>
     </div>
   </div>
 </div>
@@ -138,16 +138,16 @@
         <p><b>ก่อนกดบันทึก</b><br>ใส่จำนวนที่เติมจริง และตรวจวันหมดอายุของแต่ละล็อตให้ถูกต้อง</p>
       </div>
       <div class="filter-chips" role="group" aria-label="กรองรายการ">
-        <button type="button" class="chip-btn on" id="refillFilterNeed" onclick="setRefillFilter('need')">ต้องเติม <b id="refillCntNeed"></b></button>
-        <button type="button" class="chip-btn" id="refillFilterAll" onclick="setRefillFilter('all')">ทั้งหมด <b id="refillCntAll"></b></button>
-        <button type="button" class="chip-btn" id="refillFilterExp" onclick="setRefillFilter('expiry')">หมดอายุ <b id="refillCntExp"></b></button>
+        <button type="button" class="chip-btn on" id="refillFilterNeed" data-call="setRefillFilter" data-arg="need">ต้องเติม <b id="refillCntNeed"></b></button>
+        <button type="button" class="chip-btn" id="refillFilterAll" data-call="setRefillFilter" data-arg="all">ทั้งหมด <b id="refillCntAll"></b></button>
+        <button type="button" class="chip-btn" id="refillFilterExp" data-call="setRefillFilter" data-arg="expiry">หมดอายุ <b id="refillCntExp"></b></button>
       </div>
       <div id="refillItems" class="list"></div>
       <label for="refillNote">หมายเหตุ (ถ้ามี)</label>
       <input type="text" id="refillNote" maxlength="200">
       <div class="save-bar">
         <p id="refillSummary" class="save-hint" role="status" aria-live="polite"></p>
-        <button id="refillSubmitBtn" type="button" class="secondary" onclick="submitRefill()">💾 บันทึก</button>
+        <button id="refillSubmitBtn" type="button" class="secondary" data-call="submitRefill">💾 บันทึก</button>
       </div>
     </div>
   </div>
@@ -155,10 +155,10 @@
   <div class="card">
     <h3>รายการรอเติม</h3>
     <div class="filter-chips" role="group" aria-label="กรองสถานะ" style="margin-bottom: 12px;">
-      <button type="button" class="chip-btn on" id="restockFilterOpen" onclick="setRestockFilter('open')">ยังไม่ครบ</button>
-      <button type="button" class="chip-btn" id="restockFilterCompleted" onclick="setRestockFilter('COMPLETED')">เติมครบ</button>
-      <button type="button" class="chip-btn" id="restockFilterCancelled" onclick="setRestockFilter('CANCELLED')">ยกเลิก</button>
-      <button type="button" class="chip-btn" id="restockFilterAll" onclick="setRestockFilter('all')">ทั้งหมด</button>
+      <button type="button" class="chip-btn on" id="restockFilterOpen" data-call="setRestockFilter" data-arg="open">ยังไม่ครบ</button>
+      <button type="button" class="chip-btn" id="restockFilterCompleted" data-call="setRestockFilter" data-arg="COMPLETED">เติมครบ</button>
+      <button type="button" class="chip-btn" id="restockFilterCancelled" data-call="setRestockFilter" data-arg="CANCELLED">ยกเลิก</button>
+      <button type="button" class="chip-btn" id="restockFilterAll" data-call="setRestockFilter" data-arg="all">ทั้งหมด</button>
     </div>
     <div id="restockList"></div>
   </div>
@@ -169,8 +169,8 @@
   <div class="card">
     <h2>ประวัติการตรวจและการเติมอุปกรณ์</h2>
     <div class="seg" role="group" aria-label="เลือกประเภทประวัติ">
-      <button type="button" class="seg-btn on" id="historySegInspections" onclick="setHistoryView('inspections')">การตรวจเช็ค</button>
-      <button type="button" class="seg-btn" id="historySegRestock" onclick="setHistoryView('restock')">การเติมอุปกรณ์</button>
+      <button type="button" class="seg-btn on" id="historySegInspections" data-call="setHistoryView" data-arg="inspections">การตรวจเช็ค</button>
+      <button type="button" class="seg-btn" id="historySegRestock" data-call="setHistoryView" data-arg="restock">การเติมอุปกรณ์</button>
     </div>
     
     <div class="report-toolbar">
@@ -207,8 +207,8 @@
     <p id="stockCarMeta" class="vehicle-meta">จำนวนและวันหมดอายุแยกตามรถแต่ละคัน</p>
 
     <div class="stock-toolbar">
-      <button type="button" class="small-btn secondary" onclick="showAddVehicleForm()">🚚 เพิ่มรถใหม่</button>
-      <button type="button" class="small-btn" onclick="showAddItemForm()">+ เพิ่มอุปกรณ์</button>
+      <button type="button" class="small-btn secondary" data-call="showAddVehicleForm">🚚 เพิ่มรถใหม่</button>
+      <button type="button" class="small-btn" data-call="showAddItemForm">+ เพิ่มอุปกรณ์</button>
 
       <div id="copyBox" class="copy-box">
         <label for="copySourceCar">คัดลอกรายการจากรถคันอื่น</label>

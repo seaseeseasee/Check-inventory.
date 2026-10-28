@@ -103,7 +103,7 @@ Browser ─127.0.0.1:8080─▶ frontend (nginx) ── /assets/* เสิร�
                           backend (PHP 8.5 + Apache, Document Root = public/)
                               │ (network "data" — internal)
                               ▼
-                          db (MariaDB 10.4)
+                          db (MariaDB 10.11)
 ```
 
 - `frontend` — container เดียวที่เปิด port; เสิร์ฟ CSS/JS/รูปจาก `resources/assets` และ proxy
@@ -146,7 +146,26 @@ docker compose ps        # frontend, backend, db ต้องขึ้น (healt
 - healthcheck ของ `backend` ใช้ `docker/healthcheck.php` (รันผ่าน CLI เช็คว่าเว็บตอบ และ login DB ได้);
   `frontend` เช็คที่ `/healthz` ของ nginx
 - ดู log: `docker compose logs -f frontend backend`
-- หยุดระบบ: `docker compose down` (ข้อมูลยังอยู่ใน volume `db_data`)
+- หยุดระบบ: `docker compose down` (ข้อมูลยังอยู่ใน volume `db_data`) — **ห้ามใส่ `-v`**
+- **บัญชี DB ของแอปมีสิทธิ์แค่ SELECT/INSERT/UPDATE/DELETE** (migration 015) — migration ใหม่ต้องรันด้วย root:
+  `docker exec -i emer-db-1 sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < database/migrations/0xx-....sql`
+- phpMyAdmin เปิดเฉพาะตอนใช้ แล้ว `docker compose stop phpmyadmin` ทันที
+- container ทำงานแบบ hardening (cap_drop ALL, no-new-privileges, read-only filesystem สำหรับ frontend/backend)
+  — ถ้าเพิ่มฟีเจอร์ที่ต้องเขียนไฟล์ ให้เขียนใน `storage/` (volume) เท่านั้น
+- ไฟล์ backup ฐานข้อมูลเก็บนอกโปรเจกต์ (ห้ามเก็บใน `storage/backups/` หรือใต้ htdocs)
+
+### ความปลอดภัยฝั่งหน้าเว็บ (CSP)
+- `script-src 'self'` — **ห้ามใส่ `<script>` inline หรือ `onclick="..."`** (เบราว์เซอร์จะไม่รัน)
+- ปุ่มที่เรียกฟังก์ชัน global ให้ใช้ `data-call="ชื่อฟังก์ชัน"` และ `data-arg="ค่า"` (ถ้ามี)
+  เช่น `<button data-call="dashboardPage.viewRestock" data-arg="${UI.escape(id)}">` — ตัวกระจาย event อยู่ที่
+  `resources/assets/js/core/shell.js` (ฟังก์ชันต้องอยู่บน `window`)
+
+### Session / การเข้าสู่ระบบ
+- ทุก request ตรวจสถานะบัญชีจากฐานข้อมูล: ปิดใช้งาน / เปลี่ยนบทบาท / รีเซ็ตหรือเปลี่ยนรหัสผ่าน มีผลทันที
+  (เปลี่ยนรหัสผ่าน = session อื่นของบัญชีนั้นหลุดทั้งหมด)
+- ไม่มีการใช้งานเกิน `SESSION_IDLE_MINUTES` (ค่าเริ่มต้น 120) ต้องเข้าสู่ระบบใหม่; อายุสูงสุด 8 ชม.
+- ลองรหัสผิด: 10 ครั้ง/บัญชี หรือ 30 ครั้ง/IP ใน 15 นาที → ล็อกชั่วคราว (429)
+- การเปลี่ยนแปลงบัญชีถูกบันทึกในตาราง `refer_audit_log` (migration 014)
 
 ## การพัฒนา
 

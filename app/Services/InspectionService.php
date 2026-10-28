@@ -585,8 +585,12 @@ class InspectionService
                 if (!$header || (string)$header['car_id'] !== $carId) {
                     throw new ApiException('ไม่พบรอบตรวจที่ต้องการแก้ไข', 404);
                 }
-                $expectedRevision = isset($input['revision']) ? (int)$input['revision'] : null;
-                if ($expectedRevision !== null && $expectedRevision !== (int)$header['revision']) {
+                // บังคับส่ง revision เสมอ — ไม่งั้นสองคนแก้รอบเดียวกันพร้อมกัน คนหลังเขียนทับโดยไม่รู้ตัว
+                if (!isset($input['revision']) || !is_numeric($input['revision'])) {
+                    throw new ApiException('ข้อมูลรอบตรวจไม่ครบ (ไม่มีเลขครั้งที่แก้) กรุณาเปิดรอบตรวจนี้ใหม่', 409, ['code' => 'STALE_REVISION']);
+                }
+                $expectedRevision = (int)$input['revision'];
+                if ($expectedRevision !== (int)$header['revision']) {
                     throw new ApiException('รอบตรวจนี้ถูกแก้ไขโดยผู้อื่นระหว่างที่ท่านกำลังแก้ กรุณาเปิดใหม่เพื่อดูข้อมูลล่าสุด', 409, ['code' => 'STALE_REVISION']);
                 }
                 $ctx = ['check_id' => $checkId, 'by_user_id' => $userId, 'by_name' => $userName, 'at' => $now];

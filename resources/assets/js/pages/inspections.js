@@ -244,7 +244,7 @@ class InspectionPage {
         aria-pressed="${String(vehicle.id) === this.selectedCarId}"
         aria-label="เลือกรถ ${UI.escape(vehiclePlate(vehicle))}"
         style="border-color:${color};box-shadow: inset 0 6px 0 ${color}"
-        onclick="inspectionPage.selectVehicle('${UI.escape(vehicle.id)}')">
+        data-call="inspectionPage.selectVehicle" data-arg="${UI.escape(vehicle.id)}">
         <img src="${this.getVehicleIcon()}" alt="" width="64" height="64">
         ${window.vehicleChip(vehicle)}
         <span class="car-selected-mark">✓</span>

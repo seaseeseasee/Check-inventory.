@@ -342,6 +342,10 @@ class RestockService
                         }
                         $pieceCount += (int)$q;
                     }
+                    // รวมทุกล็อตของรายการนี้ (addPieces จำกัดต่อครั้งอีกชั้น แต่ 20 ล็อต × 50 ยังมากเกินหน้าเว็บ)
+                    if ($pieceCount > VehicleStockService::MAX_PIECES_PER_OPERATION) {
+                        throw new ApiException(sprintf('%s: เติมได้ครั้งละไม่เกิน %d ชิ้น', $name, VehicleStockService::MAX_PIECES_PER_OPERATION), 422);
+                    }
                     if (isset($line['qty']) && (int)$line['qty'] !== $pieceCount) {
                         throw new ApiException(sprintf('%s: เติม %d ชิ้น แต่ระบุวันหมดอายุ %d ชิ้น — จำนวนต้องตรงกัน', $name, (int)$line['qty'], $pieceCount), 422);
                     }

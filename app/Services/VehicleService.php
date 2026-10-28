@@ -132,6 +132,10 @@ class VehicleService
             if ($isPiece && floor($delta) != $delta) {
                 throw new ApiException('ของแบบชิ้นต้องเป็นจำนวนเต็ม', 422, ['errors' => ['onboard_qty' => ['ต้องเป็นจำนวนเต็ม']]]);
             }
+            if ($isPiece && $delta > VehicleStockService::MAX_PIECES_PER_OPERATION) {
+                $msg = sprintf('ของแบบชิ้นเพิ่มได้ครั้งละไม่เกิน %d ชิ้น', VehicleStockService::MAX_PIECES_PER_OPERATION);
+                throw new ApiException($msg, 422, ['errors' => ['onboard_qty' => [$msg]]]);
+            }
             // ของแบบชิ้น: วันหมดอายุรายชิ้น (onboard_expiries) จำนวนต้องเท่ากับที่เพิ่ม; หรือวันเดียวใช้กับทุกชิ้น
             $list = $input['onboard_expiries'] ?? null;
             if ($isPiece && is_array($list) && $list) {

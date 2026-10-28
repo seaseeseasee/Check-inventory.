@@ -68,7 +68,7 @@
       <label class="pw-show"><input type="checkbox" id="pwShow"> แสดงรหัสผ่าน</label>
       <div class="auth-error" id="pwError" role="alert" aria-live="polite"></div>
       <button type="submit" class="auth-submit">บันทึกรหัสผ่านใหม่</button>
-      <button type="button" class="small-btn gray pw-logout" onclick="signOut()">ออกจากระบบ</button>
+      <button type="button" class="small-btn gray pw-logout" data-call="signOut">ออกจากระบบ</button>
     </form>
   </div>
 
@@ -77,16 +77,16 @@
     <header id="mainHeader">
       <img class="brand-logo" src="<?= asset('images/logo.png') ?>" alt="โลโก้ระบบ" width="48" height="48" loading="lazy">
       <span id="headerTitle"><span class="header-name">ตรวจเช็กรถ Refer</span></span>
-      <button type="button" class="signout" onclick="signOut()">ออกจากระบบ</button>
+      <button type="button" class="signout" data-call="signOut">ออกจากระบบ</button>
     </header>
 
     <nav class="nav-tabs" aria-label="เมนูหลัก" id="mainNavTabs">
-      <button type="button" class="tab-btn active" id="btnTabDashboard" onclick="switchTab('dashboard')"><span class="tab-ico" aria-hidden="true">🏠</span><span class="tab-txt">หน้าแรก</span></button>
-      <button type="button" class="tab-btn" id="btnTabCheck" onclick="switchTab('check')"><span class="tab-ico" aria-hidden="true">🚑</span><span class="tab-txt">ตรวจเช็ก</span></button>
-      <button type="button" class="tab-btn" id="btnTabRestock" onclick="switchTab('restock')"><span class="tab-ico" aria-hidden="true">🧰</span><span class="tab-txt">เติมของ</span></button>
-      <button type="button" class="tab-btn" id="btnTabReports" onclick="switchTab('reports')"><span class="tab-ico" aria-hidden="true">📋</span><span class="tab-txt">ประวัติ</span></button>
-      <button type="button" class="tab-btn" id="btnTabStock" onclick="switchTab('stock')"><span class="tab-ico" aria-hidden="true">📦</span><span class="tab-txt">รถ</span></button>
-      <button type="button" class="tab-btn" id="btnTabNurses" onclick="switchTab('nurses')"><span class="tab-ico" aria-hidden="true">👥</span><span class="tab-txt">ผู้ใช้</span></button>
+      <button type="button" class="tab-btn active" id="btnTabDashboard" data-call="switchTab" data-arg="dashboard"><span class="tab-ico" aria-hidden="true">🏠</span><span class="tab-txt">หน้าแรก</span></button>
+      <button type="button" class="tab-btn" id="btnTabCheck" data-call="switchTab" data-arg="check"><span class="tab-ico" aria-hidden="true">🚑</span><span class="tab-txt">ตรวจเช็ก</span></button>
+      <button type="button" class="tab-btn" id="btnTabRestock" data-call="switchTab" data-arg="restock"><span class="tab-ico" aria-hidden="true">🧰</span><span class="tab-txt">เติมของ</span></button>
+      <button type="button" class="tab-btn" id="btnTabReports" data-call="switchTab" data-arg="reports"><span class="tab-ico" aria-hidden="true">📋</span><span class="tab-txt">ประวัติ</span></button>
+      <button type="button" class="tab-btn" id="btnTabStock" data-call="switchTab" data-arg="stock"><span class="tab-ico" aria-hidden="true">📦</span><span class="tab-txt">รถ</span></button>
+      <button type="button" class="tab-btn" id="btnTabNurses" data-call="switchTab" data-arg="nurses"><span class="tab-ico" aria-hidden="true">👥</span><span class="tab-txt">ผู้ใช้</span></button>
     </nav>
     <div class="storage-note" id="storageState" role="status" aria-live="polite">กำลังเชื่อมต่อฐานข้อมูลของระบบ…</div>
   </div>
@@ -187,55 +187,7 @@
     <?php endforeach; ?>
   <?php endif; ?>
   
-  <!-- Main App JS -->
-  <script>
-    // Tab switching
-    function switchTab(id) {
-      // หน้าจัดการผู้ใช้เดิมถูกรวมเข้ากับหน้าพยาบาล — ลิงก์/โค้ดเก่าที่เรียก 'users' ไปหน้าเดียวกัน
-      if (id === 'users') id = 'nurses';
-      const tabs = ['Dashboard', 'Check', 'Restock', 'Reports', 'Stock', 'Nurses'];
-      tabs.forEach(name => {
-        const content = document.getElementById('tabContent' + name);
-        const btn = document.getElementById('btnTab' + name);
-        if (content) content.classList.toggle('hidden', name.toLowerCase() !== id);
-        if (btn) btn.classList.toggle('active', name.toLowerCase() === id);
-      });
-      
-      // Initialize page-specific logic
-      switch (id) {
-        case 'dashboard':
-          if (typeof initDashboard === 'function') initDashboard();
-          break;
-        case 'check':
-          if (typeof initInspection === 'function') initInspection();
-          break;
-        case 'restock':
-          if (typeof initRestock === 'function') initRestock();
-          break;
-        case 'reports':
-          if (typeof initHistory === 'function') initHistory();
-          break;
-        case 'stock':
-          if (typeof initVehicles === 'function') initVehicles();
-          break;
-        case 'nurses':
-          if (typeof initNurses === 'function') initNurses();
-          if (typeof initUsers === 'function') initUsers();   // บัญชีที่ไม่ใช่พยาบาลอยู่หน้าเดียวกัน
-          break;
-      }
-    }
-    
-    // Sign out
-    async function signOut() {
-      if (window.auth?.isAuthenticated) {
-        await window.auth.logout();
-      } else {
-        window.location.reload();
-      }
-    }
-    
-    // Global vehicle plate helper → ย้ายไป js/core/vehicle.js (window.vehiclePlate)
-    // เพื่อให้ทุกหน้าใช้กติกาเดียวกัน: plate จากฐานข้อมูลก่อน แล้วค่อย fallback
-  </script>
+  <!-- Main App JS (ไฟล์แยก — CSP ไม่อนุญาต inline script) -->
+  <script src="<?= asset('js/core/shell.js') ?>"></script>
 </body>
 </html>
