@@ -305,6 +305,8 @@ class VehicleService
         $status = $this->status($input['status'] ?? '');
         $odometer = $this->odometer($input['odometer_initial'] ?? null);
         $color = $this->color($input['vehicle_color'] ?? null);
+        $type = $this->vehicleType($input['vehicle_type'] ?? '');
+        $homeDept = $this->homeDepartment($type, $input['home_department_id'] ?? null);
 
         if ($plate === '') {
             throw new ApiException('กรุณากรอกทะเบียนรถ', 422, ['errors' => ['plate' => ['กรุณากรอกทะเบียนรถ']]]);
@@ -337,6 +339,8 @@ class VehicleService
                 'plate' => $plate,
                 'brand_model' => $brand !== '' ? $brand : null,
                 'status' => $status,
+                'vehicle_type' => $type,
+                'home_department_id' => $homeDept,
                 'odometer_initial' => $odometer,
                 'notes' => $notes !== '' ? $notes : null,
             ]);
@@ -745,6 +749,16 @@ class VehicleService
 
             if (array_key_exists('vehicle_color', $input)) {
                 $data['vehicle_color'] = $this->color($input['vehicle_color']);
+            }
+
+            // ประเภทรถ / วอร์ดประจำ: เปลี่ยนเป็นรถ Refer = ล้างวอร์ดประจำทิ้งเสมอ
+            if (array_key_exists('vehicle_type', $input) || array_key_exists('home_department_id', $input)) {
+                $type = array_key_exists('vehicle_type', $input)
+                    ? $this->vehicleType($input['vehicle_type'])
+                    : (string)($existing['vehicle_type'] ?? Vehicle::TYPE_REFER);
+                $data['vehicle_type'] = $type;
+                $data['home_department_id'] = $this->homeDepartment($type,
+                    array_key_exists('home_department_id', $input) ? $input['home_department_id'] : ($existing['home_department_id'] ?? null));
             }
 
             if (empty($data)) {
@@ -1238,6 +1252,33 @@ class VehicleService
                 ['errors' => ['status' => ['สถานะรถไม่ถูกต้อง']]]);
         }
         return $status;
+    }
+
+    /** ประเภทรถ refer | emr — ว่าง = refer (รถเดิมทั้งหมดเป็นรถ Refer) */
+    private function vehicleType(mixed $raw): string
+    {
+        $type = is_scalar($raw) ? strtolower(trim((string)$raw)) : '';
+        if ($type === '') {
+            return Vehicle::TYPE_REFER;
+        }
+        if (!in_array($type, Vehicle::TYPES, true)) {
+            throw new ApiException('ประเภทรถไม่ถูกต้อง (ใช้ได้: refer, emr)', 422,
+                ['errors' => ['vehicle_type' => ['ประเภทรถไม่ถูกต้อง']]]);
+        }
+        return $type;
+    }
+
+    /** วอร์ดประจำของรถ EMR (ไม่บังคับ) — รถ Refer ไม่มีวอร์ดประจำเสมอ */
+    private function homeDepartment(string $type, mixed $raw): ?string
+    {
+        $id = is_scalar($raw) ? trim((string)$raw) : '';
+        if ($type !== Vehicle::TYPE_EMR || $id === '') {
+            return null;
+        }
+        if (!(new \App\Models\Department())->find($id)) {
+            throw new ApiException('ไม่พบวอร์ดที่เลือก', 422, ['errors' => ['home_department_id' => ['ไม่พบวอร์ดที่เลือก']]]);
+        }
+        return $id;
     }
 
     private function odometer(mixed $raw): ?int

@@ -7,7 +7,12 @@ class Vehicle extends Model
 {
     protected string $table = 'refer_vehicles';
     protected string $primaryKey = 'id';
-    protected array $fillable = ['id', 'name', 'vehicle_color', 'plate', 'brand_model', 'status', 'odometer_initial', 'notes'];
+    protected array $fillable = ['id', 'name', 'vehicle_color', 'plate', 'brand_model', 'status', 'vehicle_type', 'home_department_id', 'odometer_initial', 'notes'];
+
+    /** ประเภทรถ: รถ Refer (ส่งต่อผู้ป่วย) | รถ EMR ประจำวอร์ด */
+    public const TYPE_REFER = 'refer';
+    public const TYPE_EMR = 'emr';
+    public const TYPES = [self::TYPE_REFER, self::TYPE_EMR];
     protected array $casts = [
         'odometer_initial' => 'int',
     ];

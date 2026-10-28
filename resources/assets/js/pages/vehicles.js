@@ -229,7 +229,8 @@ class VehiclesPage {
 
     select.innerHTML = this.vehicles.map(v => {
       const status = VEHICLE_STATUS_LABEL[v.status] ? ` • ${VEHICLE_STATUS_LABEL[v.status]}` : '';
-      return `<option value="${UI.escape(v.id)}">${UI.escape(vehiclePlate(v))}${UI.escape(status)}</option>`;
+      const kind = v.vehicle_type === 'emr' ? ' • EMR' : ' • Refer';
+      return `<option value="${UI.escape(v.id)}">${UI.escape(vehiclePlate(v))}${UI.escape(kind + status)}</option>`;
     }).join('');
 
     if (previous && this.vehicles.some(v => String(v.id) === String(previous))) {
@@ -297,8 +298,17 @@ class VehiclesPage {
       stats.push(stat(v.open_restock_count, 'รอเติม', Number(v.open_restock_count) > 0));
     }
 
+    // ประเภทรถ: EMR บอกวอร์ดประจำด้วย (ชื่อวอร์ดโหลดครั้งแรกแล้ววาดใหม่)
+    if (v.vehicle_type === 'emr' && v.home_department_id && !this.departments) {
+      this.loadDepartments().then(() => this.renderVehicleMeta());
+    }
+    const ward = v.vehicle_type === 'emr' ? this.departmentName(v.home_department_id) : '';
+    const kindChip = v.vehicle_type === 'emr'
+      ? `<span class="chip veh-kind-chip is-emr">🏥 EMR${ward ? ` · ${UI.escape(ward)}` : ''}</span>`
+      : '<span class="chip veh-kind-chip">🚑 Refer</span>';
+
     el.innerHTML = `
-      <div class="vcard-top">${window.vehicleChip(v, 'vcard-plate')}<span class="chip ${chip}">${UI.escape(status)}</span></div>
+      <div class="vcard-top">${window.vehicleChip(v, 'vcard-plate')}<span class="chip ${chip}">${UI.escape(status)}</span>${kindChip}</div>
       ${stats.length ? `<div class="vcard-stats">${stats.join('')}</div>` : ''}`;
   }
 
@@ -1920,6 +1930,7 @@ class VehiclesPage {
   vehicleFormFields(mode) {
     const v = mode === 'edit' ? (this.currentVehicle || {}) : {};
     const isEdit = mode === 'edit';
+    const kind = v.vehicle_type === 'emr' ? 'emr' : 'refer';
 
     const statusOptions = Object.keys(VEHICLE_STATUS_LABEL).map(value =>
       `<option value="${value}" ${v.status === value ? 'selected' : ''}>${VEHICLE_STATUS_LABEL[value]}</option>`
@@ -1950,6 +1961,24 @@ class VehiclesPage {
           <label for="vehPlate" class="!mt-0">ทะเบียนรถ <span class="text-red-500" aria-hidden="true">*</span></label>
           <input id="vehPlate" type="text" value="${UI.escape(v.plate || '')}" placeholder="เช่น กข-1234 กรุงเทพฯ" autocomplete="off">
           <p class="mt-1 hidden text-xs font-semibold text-red-600" id="vehPlateError" role="alert"></p>
+        </div>
+        <fieldset class="veh-kind md:col-span-2">
+          <legend>ประเภทรถ</legend>
+          <div class="veh-kind-opts">
+            <label class="veh-kind-opt">
+              <input type="radio" name="vehKind" value="refer" ${kind === 'refer' ? 'checked' : ''}>
+              <span><b>🚑 รถ Refer</b><small>รถส่งต่อผู้ป่วย</small></span>
+            </label>
+            <label class="veh-kind-opt">
+              <input type="radio" name="vehKind" value="emr" ${kind === 'emr' ? 'checked' : ''}>
+              <span><b>🏥 รถ EMR</b><small>อยู่ประจำวอร์ด</small></span>
+            </label>
+          </div>
+        </fieldset>
+        <div class="md:col-span-2 ${kind === 'emr' ? '' : 'hidden'}" id="vehWardWrap">
+          <label for="vehWard">วอร์ดที่รถประจำอยู่</label>
+          <select id="vehWard" data-value="${UI.escape(v.home_department_id || '')}"><option value="">กำลังโหลดรายชื่อวอร์ด…</option></select>
+          <p class="mt-1 text-xs text-slate-500">ไม่บังคับ — เว้นว่างได้ถ้ายังไม่กำหนดวอร์ด</p>
         </div>
         <div>
           <label for="vehBrand">ยี่ห้อ / รุ่น</label>
@@ -2036,6 +2065,12 @@ class VehiclesPage {
     form.querySelector('#vehOdometer')?.addEventListener('input', () => this.setVehicleFieldError('vehOdometer', ''));
     this.bindColorFields(form);
 
+    // ประเภทรถ: เลือก EMR แล้วค่อยโชว์ช่องวอร์ดประจำ
+    form.querySelectorAll('input[name="vehKind"]').forEach(radio => radio.addEventListener('change', () => {
+      form.querySelector('#vehWardWrap')?.classList.toggle('hidden', form.querySelector('input[name="vehKind"]:checked')?.value !== 'emr');
+    }));
+    this.fillWardSelect(form.querySelector('#vehWard'));
+
     if (!isEdit) {
       const source = form.querySelector('#vehItemSource');
       const wrap = form.querySelector('#vehCopyWrap');
@@ -2086,6 +2121,35 @@ class VehiclesPage {
 
   showAddVehicleForm() {
     this.openVehicleForm('create');
+  }
+
+  /** ทะเบียนวอร์ด (โหลดครั้งเดียว ใช้ทั้งฟอร์มรถและป้ายวอร์ดบนการ์ดรถ) */
+  async loadDepartments() {
+    if (this.departments) return this.departments;
+    try {
+      const res = await window.departmentApi.getAll();
+      this.departments = res.data || [];
+    } catch (error) {
+      console.error('โหลดทะเบียนวอร์ดไม่สำเร็จ:', error);
+      return [];
+    }
+    return this.departments;
+  }
+
+  departmentName(id) {
+    return (this.departments || []).find(d => String(d.id) === String(id))?.name || '';
+  }
+
+  async fillWardSelect(select) {
+    if (!select) return;
+    const current = select.dataset.value || '';
+    const wards = await this.loadDepartments();
+    const on = (d) => d.active === true || d.active === 1 || d.active === '1';
+    // วอร์ดที่ปิดใช้งาน: แสดงเฉพาะวอร์ดที่รถคันนี้ประจำอยู่เดิม
+    const list = wards.filter(d => on(d) || String(d.id) === current);
+    select.innerHTML = '<option value="">— ยังไม่กำหนดวอร์ด —</option>'
+      + list.map(d => `<option value="${UI.escape(d.id)}">${UI.escape(d.name)}${on(d) ? '' : ' (ปิดใช้งาน)'}</option>`).join('');
+    select.value = current;
   }
 
   showEditVehicleForm() {
@@ -2191,7 +2255,9 @@ class VehiclesPage {
       status: form.querySelector('#vehStatus')?.value || 'available',
       notes: value('vehNotes'),
       vehicle_color: (value('vehColorHex') || '').toUpperCase(),
+      vehicle_type: form.querySelector('input[name="vehKind"]:checked')?.value === 'emr' ? 'emr' : 'refer',
     };
+    payload.home_department_id = payload.vehicle_type === 'emr' ? value('vehWard') : '';
     if (payload.vehicle_color && !/^#[0-9A-F]{6}$/.test(payload.vehicle_color)) {
       this.setVehicleFieldError('vehColorHex', 'สีต้องอยู่ในรูปแบบ #RRGGBB เช่น #2563EB');
       return null;
@@ -2207,6 +2273,10 @@ class VehiclesPage {
       if (payload.status !== (v.status || '')) patch.status = payload.status;
       if (payload.notes !== (v.notes || '')) patch.notes = payload.notes;
       if (payload.vehicle_color !== String(v.vehicle_color || '').toUpperCase()) patch.vehicle_color = payload.vehicle_color;
+      if (payload.vehicle_type !== (v.vehicle_type || 'refer') || payload.home_department_id !== (v.home_department_id || '')) {
+        patch.vehicle_type = payload.vehicle_type;
+        patch.home_department_id = payload.home_department_id;
+      }
       if (odometerRaw !== '' && Number(odometerRaw) !== Number(v.odometer_initial ?? -1)) {
         patch.odometer_initial = Number(odometerRaw);
       }
