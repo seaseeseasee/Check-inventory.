@@ -7,6 +7,10 @@
  * Works with XAMPP without Virtual Host configuration.
  */
 
+// เวลาไทยก่อนทำอย่างอื่นทั้งหมด (โหลด config / session / log ใช้เวลาเดียวกันทั้งระบบ)
+// Docker ตั้ง date.timezone ใน php.ini ด้วย — ตรงนี้กันกรณีรันบน XAMPP ที่ php.ini เป็นค่าอื่น
+date_default_timezone_set('Asia/Bangkok');
+
 // Load environment variables (simple loader, no Composer required)
 require_once __DIR__ . '/../config/env.php';
 loadEnv();
@@ -61,9 +65,6 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.gc_maxlifetime', (string)(8 * 3600));
     session_start();
 }
-
-// Set default timezone
-date_default_timezone_set('Asia/Bangkok');
 
 // Handle API routes
 $requestUri = $_SERVER['REQUEST_URI'] ?? '/';
