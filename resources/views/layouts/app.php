@@ -43,6 +43,7 @@
       <input type="text" id="systemUsername" name="username" autocomplete="username" placeholder="เช่น 0812345678" autofocus required>
       <label for="systemPassword">รหัสผ่าน</label>
       <input type="password" id="systemPassword" name="password" autocomplete="current-password" required>
+      <label class="pw-show"><input type="checkbox" id="systemPasswordShow"> แสดงรหัสผ่าน</label>
       <div class="auth-error" id="authError" role="alert" aria-live="polite"></div>
       <button type="submit" class="auth-submit">เข้าสู่ระบบ</button>
     </form>

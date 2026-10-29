@@ -64,9 +64,14 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.use_strict_mode', '1');
     // เก็บ session ใน storage/ (Docker เป็น volume ถาวร) แทน /tmp ของ container ที่หายทุกครั้งที่ rebuild/restart
     // และอายุไฟล์ต้องไม่สั้นกว่า session ของแอป (8 ชม. ใน AuthService) — ค่าเริ่มต้น PHP 24 นาทีทำให้หลุดกลางเวร
-    $sessionDir = __DIR__ . '/../storage/sessions';
+    // SESSION_SAVE_PATH: ย้ายไฟล์ session ออกนอกโฟลเดอร์ที่เว็บเข้าถึงได้ (โหมด APP_PATH_INFO บนเซิร์ฟเวอร์ที่ไม่อ่าน .htaccess)
+    $sessionDir = (string)(getenv('SESSION_SAVE_PATH') ?: __DIR__ . '/../storage/sessions');
     if (!is_dir($sessionDir)) {
         @mkdir($sessionDir, 0770, true);
+    }
+    // index.html ว่าง กันเซิร์ฟเวอร์ที่เปิด directory listing แสดงชื่อไฟล์ sess_* (= session ID) ของผู้ใช้
+    if (is_dir($sessionDir) && !is_file($sessionDir . '/index.html')) {
+        @file_put_contents($sessionDir . '/index.html', '');
     }
     if (is_dir($sessionDir) && is_writable($sessionDir)) {
         ini_set('session.save_path', $sessionDir);

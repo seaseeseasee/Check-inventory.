@@ -57,8 +57,15 @@ class ApiClient {
         this.csrfToken = newCsrf;
       }
 
-      const data = await response.json();
-      
+      // ตอบผิดพลาดแบบไม่ใช่ JSON (เช่นหน้า HTML ของ Cloudflare/โฮสต์) → ยังเก็บรหัสสถานะไว้ ไม่กลายเป็น "Network error"
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        if (response.ok) throw parseError;
+        data = {};
+      }
+
       if (!response.ok) {
         let message = data.error || 'Request failed';
         // Append per-field validation details when they're not already

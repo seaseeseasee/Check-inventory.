@@ -241,13 +241,13 @@ class AuthService
     }
 
     /**
-     * IP จริงของผู้ใช้ = REMOTE_ADDR เท่านั้น
-     * (Docker: mod_remoteip แทนค่าให้จาก nginx แล้ว — ห้ามอ่าน X-Forwarded-For เอง เพราะ client ปลอมได้
-     *  เมื่อเข้าถึง Apache ตรง เช่น XAMPP)
+     * IP จริงของผู้ใช้ — ดู request_ip() (REMOTE_ADDR หรือ CF-Connecting-IP เมื่อมาจาก Cloudflare จริง)
+     * ห้ามอ่าน X-Forwarded-For เอง เพราะ client ปลอมได้เมื่อเข้าถึง Apache ตรง เช่น XAMPP
+     * หลัง Cloudflare ถ้าใช้ REMOTE_ADDR ตรงๆ ผู้ใช้ทุกคนจะนับรวมเป็น IP เดียว → ล็อกกันเองทั้งโรงพยาบาล (429)
      */
     private function getClientIp(): string
     {
-        return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        return request_ip();
     }
 
     public function hashIp(string $ip): string
