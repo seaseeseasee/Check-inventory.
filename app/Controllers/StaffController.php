@@ -87,6 +87,8 @@ class StaffController extends Controller
                 'partial' => $partialCount,
             ],
             'pending_requests' => array_slice($pendingRequests, 0, 10), // Top 10 for quick view
+            // ของหมดอายุ/ใกล้หมดอายุ — ผู้ใช้งานทั่วไปต้องเห็นเหมือนแอดมิน (คนตรวจ/เติมของคือพนักงาน)
+            'expiring_items' => $this->restockService->getExpiringItems(),
             'shifts_today' => $this->inspectionService->shiftsDoneOn(InspectionService::currentShift()['check_date']),
         ]);
     }
