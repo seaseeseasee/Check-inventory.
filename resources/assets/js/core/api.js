@@ -38,6 +38,12 @@ class ApiClient {
       ...options,
     };
 
+    // เซิร์ฟเวอร์บางแห่งบล็อก PUT/PATCH/DELETE (403 จาก Apache) → ส่งเป็น POST แล้วบอกเมธอดจริงใน header
+    if (['PUT', 'PATCH', 'DELETE'].includes(method)) {
+      config.method = 'POST';
+      config.headers = { ...config.headers, 'X-HTTP-Method-Override': method };
+    }
+
     if (options.body && typeof options.body !== 'string') {
       config.body = JSON.stringify(options.body);
     }

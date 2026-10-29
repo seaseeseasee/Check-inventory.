@@ -11,6 +11,15 @@
 // Docker ตั้ง date.timezone ใน php.ini ด้วย — ตรงนี้กันกรณีรันบน XAMPP ที่ php.ini เป็นค่าอื่น
 date_default_timezone_set('Asia/Bangkok');
 
+// เซิร์ฟเวอร์บางแห่งอนุญาตแค่ GET/POST → หน้าเว็บส่ง PUT/PATCH/DELETE เป็น POST + X-HTTP-Method-Override
+// รับเฉพาะจาก POST จึงยังผ่านการตรวจ Origin/CSRF ของคำขอที่ไม่ใช่ GET เหมือนเดิม
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    $override = strtoupper((string)($_SERVER['HTTP_X_HTTP_METHOD_OVERRIDE'] ?? ''));
+    if (in_array($override, ['PUT', 'PATCH', 'DELETE'], true)) {
+        $_SERVER['REQUEST_METHOD'] = $override;
+    }
+}
+
 // Load environment variables (simple loader, no Composer required)
 require_once __DIR__ . '/../config/env.php';
 loadEnv();
