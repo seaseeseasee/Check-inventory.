@@ -185,14 +185,7 @@ class DashboardPage {
     const lastInspections = this.data.last_inspections || {};
     const drafts = this.data.drafts || {};
     const restockStats = this.data.restock || {};
-    const expiringItems = this.data.expiring_items || [];
-    
-    // Group expiring by vehicle
-    const expiringByVehicle = {};
-    expiringItems.forEach(item => {
-      if (!expiringByVehicle[item.car_id]) expiringByVehicle[item.car_id] = [];
-      expiringByVehicle[item.car_id].push(item);
-    });
+    const expiringByVehicle = this.groupExpiring();
 
     container.innerHTML = vehicles.map(vehicle => {
       const last = lastInspections[vehicle.id];
@@ -222,13 +215,7 @@ class DashboardPage {
               : 'ยังไม่มีประวัติการตรวจที่บันทึก'
             }
           </p>
-          ${expiring.length > 0 ? `
-            <p class="dash-attn">
-              วันหมดอายุ: ${expiring.slice(0, 3).map(item => 
-                `${UI.escape(item.name)} ${item.days_left < 0 ? 'หมดอายุแล้ว' : 'ใกล้หมดอายุ'} (${UI.escape(UI.formatDateThai(item.expiry_date))})`
-              ).join(' • ')}${expiring.length > 3 ? ` และอีก ${expiring.length - 3} รายการ` : ''}
-            </p>
-          ` : ''}
+          ${this.expiryNote(expiring)}
           ${draft ? `<p class="dash-last">ร่างนี้ทำต่อได้เฉพาะผู้ตรวจและเวรเดิม</p>` : ''}
           <div class="rs-actions">
             ${disabled
@@ -245,6 +232,7 @@ class DashboardPage {
     // รถที่ "งดใช้งาน" ให้เห็นเฉพาะหน้าแอดมิน — ผู้ใช้งานทั่วไปไม่ต้องเห็น (ตรวจไม่ได้อยู่แล้ว)
     const vehicles = (this.data.vehicles || []).filter(v => v.status !== 'disabled');
     const lastInspections = this.data.last_inspections || {};
+    const expiringByVehicle = this.groupExpiring();
     // "ต้องดำเนินการ" ต้องไม่รวมงานที่เติมครบ/ยกเลิกแล้ว — งานเหล่านั้นดูได้ที่แท็บ "เติมอุปกรณ์"/"ประวัติ" แทน
     const pendingRequests = (this.data.pending_requests || [])
       .filter(req => req.status !== 'COMPLETED' && req.status !== 'CANCELLED');
@@ -278,9 +266,10 @@ class DashboardPage {
         ${vehicles.map(vehicle => {
           const last = lastInspections[vehicle.id];
           const isToday = last && new Date(last.completed_at).toDateString() === new Date().toDateString();
+          const expiring = expiringByVehicle[vehicle.id] || [];
 
           return `
-            <article class="dash-car">
+            <article class="dash-car${expiring.length > 0 ? ' is-alert' : ''}">
               <div class="dash-car-head">
                 ${window.vehicleChip(vehicle)} ${this.shiftDots(vehicle.id)}
                 <span class="chip ${isToday ? 'chip-ok' : 'chip-off'}">
@@ -293,6 +282,7 @@ class DashboardPage {
                   : 'ยังไม่มีประวัติการตรวจที่บันทึก'
                 }
               </p>
+              ${this.expiryNote(expiring)}
               <div class="rs-actions">
                 <button type="button" class="act-btn ok" data-call="dashboardPage.startInspection" data-arg="${UI.escape(vehicle.id)}">ตรวจคันนี้</button>
                 <button type="button" class="act-btn gray" data-call="dashboardPage.viewRestock" data-arg="${UI.escape(vehicle.id)}">ดูการเติม</button>
@@ -301,6 +291,27 @@ class DashboardPage {
           `;
         }).join('')}
       </div>
+    `;
+  }
+
+  // ของหมดอายุ/ใกล้หมดอายุ (จาก Lot) แยกตามรถ — ใช้ทั้งหน้าแอดมินและผู้ใช้งานทั่วไป
+  groupExpiring() {
+    const byVehicle = {};
+    (this.data.expiring_items || []).forEach(item => {
+      if (!byVehicle[item.car_id]) byVehicle[item.car_id] = [];
+      byVehicle[item.car_id].push(item);
+    });
+    return byVehicle;
+  }
+
+  expiryNote(expiring) {
+    if (!expiring.length) return '';
+    return `
+      <p class="dash-attn">
+        วันหมดอายุ: ${expiring.slice(0, 3).map(item =>
+          `${UI.escape(item.name)} ${item.days_left < 0 ? 'หมดอายุแล้ว' : 'ใกล้หมดอายุ'} (${UI.escape(UI.formatDateThai(item.expiry_date))})`
+        ).join(' • ')}${expiring.length > 3 ? ` และอีก ${expiring.length - 3} รายการ` : ''}
+      </p>
     `;
   }
 
