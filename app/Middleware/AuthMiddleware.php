@@ -28,7 +28,9 @@ class AuthMiddleware
 
         // Check authentication for API routes
         $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-        $scriptDir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+        // ใช้ base path เดียวกับ public/index.php (รวมกรณี /index.php/api/... บนเซิร์ฟเวอร์ที่ไม่มี rewrite)
+        // ถ้าตัดไม่ตรงกัน path จะไม่ขึ้นต้นด้วย /api/ และข้ามการตรวจ login ไปทั้งที่ router ยังส่งเข้า API
+        $scriptDir = $_ENV['BASE_PATH'] ?? rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
         if ($scriptDir !== '' && str_starts_with($path, $scriptDir . '/')) {
             $path = substr($path, strlen($scriptDir));
         }

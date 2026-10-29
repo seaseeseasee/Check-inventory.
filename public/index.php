@@ -73,11 +73,23 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 // Handle base path for subdirectory installations (e.g., /refer-system/)
 $basePath = '';
-if (isset($_SERVER['SCRIPT_NAME'])) {
-    $scriptDir = dirname($_SERVER['SCRIPT_NAME']);
+$scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
+if ($scriptName !== '') {
+    $scriptDir = dirname($scriptName);
     if ($scriptDir !== '/' && $scriptDir !== '\\') {
         $basePath = rtrim($scriptDir, '/');
     }
+}
+
+// เซิร์ฟเวอร์ที่ไม่มี URL rewrite: ทุก URL ผ่านตัวสคริปต์เอง (PATH_INFO) เช่น /refull/index.php/api/auth/login
+// → ตัดชื่อสคริปต์ทั้งก้อนออกแทนการตัดแค่โฟลเดอร์
+if ($scriptName !== '' && ($path === $scriptName || str_starts_with($path, $scriptName . '/'))) {
+    $basePath = $scriptName;
+}
+
+// APP_PATH_INFO=true: ลิงก์ที่หน้าเว็บสร้าง (API, CSS/JS) ต้องขึ้นต้นด้วยชื่อสคริปต์ด้วย
+if (filter_var(getenv('APP_PATH_INFO') ?: 'false', FILTER_VALIDATE_BOOLEAN) && $scriptName !== '') {
+    $_ENV['URL_BASE'] = rtrim($scriptName, '/');
 }
 
 // Remove base path from request path for routing

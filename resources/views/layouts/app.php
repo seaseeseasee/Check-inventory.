@@ -9,7 +9,7 @@
   
   <!-- CSRF Token -->
   <meta name="csrf-token" content="<?= csrf_token() ?>">
-  <?php $apiBase = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/') . '/api'; ?>
+  <?php $apiBase = ($_ENV['URL_BASE'] ?? rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/')) . '/api'; ?>
   <meta name="api-base" content="<?= escape($apiBase) ?>">
   
   <!-- Stylesheets -->
