@@ -24,7 +24,7 @@ class AuditLog extends Model
                 'target_type' => $targetType,
                 'target_id' => $targetId,
                 'details' => $details ? json_encode($details, JSON_UNESCAPED_UNICODE) : null,
-                'ip' => $_SERVER['REMOTE_ADDR'] ?? null,
+                'ip' => request_ip(),
             ]);
         } catch (\Throwable $e) {
             error_log("AUDIT write failed ({$action} {$targetType}:{$targetId}): " . $e->getMessage());

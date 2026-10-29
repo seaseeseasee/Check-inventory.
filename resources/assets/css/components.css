@@ -349,6 +349,23 @@
   font-weight: 600;
 }
 
+/* มีข้อความ = แสดงเป็นกล่อง (แดง = ผิดพลาด, เขียว = สำเร็จ) */
+.auth-error:not(:empty) {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--bad);
+  background: var(--bad-soft);
+  color: #991b1b;
+  text-align: left;
+  line-height: 1.5;
+}
+
+.auth-error.is-ok:not(:empty) {
+  border-color: var(--ok);
+  background: var(--ok-soft);
+  color: #065f46;
+}
+
 .auth-submit {
   margin: 16px 0 0;
 }

@@ -59,7 +59,7 @@ class AuthManager {
       }
       return { success: false, error: result.error };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, status: error.status, data: error.data };
     }
   }
 
@@ -320,20 +320,50 @@ function initializeRoleUI() {
   }
 }
 
+// ข้อความตอบกลับหน้าเข้าสู่ระบบ: แปลรหัสสถานะจาก server เป็นภาษาที่ผู้ใช้เข้าใจ (server ส่งข้อความภาษาอังกฤษสั้น ๆ)
+function loginErrorMessage(result) {
+  const serverMsg = String(result.error || '');
+  switch (result.status) {
+    case 401: return 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง (ชื่อผู้ใช้คือเบอร์โทรศัพท์)';
+    case 403:
+      if (/deactivated/i.test(serverMsg)) return 'บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ';
+      if (/csrf|origin/i.test(serverMsg)) return 'หน้าเว็บหมดอายุ กรุณาโหลดหน้าใหม่ (ปัดลงเพื่อรีเฟรช) แล้วลองอีกครั้ง';
+      return 'ไม่มีสิทธิ์เข้าสู่ระบบ กรุณาติดต่อผู้ดูแลระบบ';
+    case 429: return 'ใส่รหัสผ่านผิดหลายครั้งเกินไป ระบบล็อกไว้ชั่วคราว — กรุณารอประมาณ 15 นาทีแล้วลองใหม่';
+    case 0: return 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
+    default:
+      if (result.status >= 500) return 'ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง หากยังไม่ได้ให้ติดต่อผู้ดูแลระบบ';
+      return serverMsg || 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่';
+  }
+}
+
 // Login form handler
 document.addEventListener('DOMContentLoaded', () => {
   const loginForm = document.getElementById('authForm');
   if (loginForm) {
+    const passwordEl = document.getElementById('systemPassword');
+    const errorEl = document.getElementById('authError');
+    const showMessage = (text, ok = false) => {
+      if (!errorEl) return;
+      errorEl.textContent = text;
+      errorEl.classList.toggle('is-ok', ok);
+    };
+
+    document.getElementById('systemPasswordShow')?.addEventListener('change', (e) => {
+      if (passwordEl) passwordEl.type = e.target.checked ? 'text' : 'password';
+    });
+    // เริ่มพิมพ์ใหม่ = ล้างข้อความผิดพลาดเดิม
+    loginForm.addEventListener('input', () => { if (errorEl?.textContent) showMessage(''); });
+
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      
+
       const username = document.getElementById('systemUsername')?.value?.trim();
-      const password = document.getElementById('systemPassword')?.value;
-      const errorEl = document.getElementById('authError');
+      const password = passwordEl?.value;
       const submitBtn = loginForm.querySelector('button[type="submit"]');
-      
+
       if (!username || !password) {
-        if (errorEl) errorEl.textContent = 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน';
+        showMessage('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
         return;
       }
 
@@ -342,18 +372,26 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.textContent = 'กำลังเข้าสู่ระบบ...';
       }
 
+      let success = false;
       try {
         const result = await window.auth.login(username, password);
         if (result.success) {
+          success = true;
+          showMessage('เข้าสู่ระบบสำเร็จ กำลังเปิดระบบ...', true);
           // Success - page will reload via auth.init()
           window.location.reload();
         } else {
-          if (errorEl) errorEl.textContent = result.error || 'เข้าสู่ระบบไม่สำเร็จ';
+          showMessage(loginErrorMessage(result));
+          if (result.status === 401 && passwordEl) {
+            passwordEl.value = '';
+            passwordEl.focus();
+          }
         }
       } catch (error) {
-        if (errorEl) errorEl.textContent = 'เกิดข้อผิดพลาด: ' + error.message;
+        showMessage(loginErrorMessage({ status: 0 }));
       } finally {
-        if (submitBtn) {
+        // สำเร็จแล้วไม่ปลดปุ่ม — กันกดซ้ำระหว่างหน้ากำลังโหลดใหม่
+        if (submitBtn && !success) {
           submitBtn.disabled = false;
           submitBtn.textContent = 'เข้าสู่ระบบ';
         }

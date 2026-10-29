@@ -1,0 +1,26 @@
+# ใช้เมื่อเซิร์ฟเวอร์ชี้ URL มาที่โฟลเดอร์โปรเจกต์ (APP_PATH_INFO=true) แทน public/
+# โฟลเดอร์นี้มี .env / storage/sessions / storage/backups / database/*.sql / .git
+# → ปิดทุกไฟล์ เปิดเฉพาะ index.php ที่ root (ทุก URL ของแอปผ่าน /<path>/index.php/...)
+# ใช้ได้เมื่อเซิร์ฟเวอร์เปิด AllowOverride All หรือ AuthConfig (ใช้แค่ Require จึงไม่ทำให้เกิด 500 บนเซิร์ฟเวอร์ที่เปิด AuthConfig อย่างเดียว)
+# ถ้าเป็น AllowOverride None ไฟล์นี้ไม่มีผล — ต้องย้าย .env/sessions ออกนอกโฟลเดอร์เว็บ (ดู .env.example)
+
+Require all denied
+
+# "" = คำขอตัวโฟลเดอร์ (/<path>/) ซึ่ง DirectoryIndex ของเซิร์ฟเวอร์ส่งต่อไป index.php
+<FilesMatch "^(index\.php)?$">
+    Require all granted
+</FilesMatch>
+
+# /<path> (ไม่มี / ท้าย) ต้องผ่านไปให้ Apache redirect เป็น /<path>/ ก่อน — ไม่งั้นได้ 403
+# โฟลเดอร์ย่อยที่ถูก redirect ยังโดนปิดด้วยกฎถัดไป
+<If "-d %{REQUEST_FILENAME} && %{REQUEST_URI} =~ m#[^/]$#">
+    Require all granted
+</If>
+
+# index.php ในโฟลเดอร์ย่อย (เช่น resources/views/.../index.php) ไม่ใช่ทางเข้า — ห้ามเรียกตรง
+# และห้ามเปิดดูรายชื่อไฟล์ในโฟลเดอร์ย่อย (storage/sessions = session ID ของผู้ใช้)
+# ตรวจเฉพาะส่วนก่อน "/index.php" ตัวแรก — ส่วนหลังเป็น PATH_INFO ของแอป (/index.php/api/...)
+# แต่ /resources/.../index.php/x ยังถูกปิด เพราะ /resources/ อยู่ก่อน /index.php
+<If "%{REQUEST_URI} =~ m#^((?!/index\.php).)*/(app|config|database|docker|public|resources|routes|storage|tests|vendor|\.git)(/|$)#i">
+    Require all denied
+</If>
