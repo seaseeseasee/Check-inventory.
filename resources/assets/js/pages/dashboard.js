@@ -304,15 +304,16 @@ class DashboardPage {
     return byVehicle;
   }
 
+  // การ์ดรถแจ้งแค่ว่ามีของหมด/ใกล้หมดอายุ — รายละเอียดทีละชิ้นดูได้ตอนกด "ตรวจคันนี้"
   expiryNote(expiring) {
     if (!expiring.length) return '';
-    return `
-      <p class="dash-attn">
-        วันหมดอายุ: ${expiring.slice(0, 3).map(item =>
-          `${UI.escape(item.name)} ${item.days_left < 0 ? 'หมดอายุแล้ว' : 'ใกล้หมดอายุ'} (${UI.escape(UI.formatDateThai(item.expiry_date))})`
-        ).join(' • ')}${expiring.length > 3 ? ` และอีก ${expiring.length - 3} รายการ` : ''}
-      </p>
-    `;
+    const expired = expiring.filter(item => item.days_left < 0).length;
+    const soon = expiring.length - expired;
+    const parts = [
+      expired && `⛔ มีของหมดอายุแล้ว ${expired} รายการ`,
+      soon && `⚠️ มีของใกล้หมดอายุ ${soon} รายการ`,
+    ].filter(Boolean);
+    return `<p class="dash-attn">${parts.join(' · ')}</p>`;
   }
 
   getStatusLabel(status) {

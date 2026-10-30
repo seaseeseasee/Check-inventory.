@@ -687,14 +687,59 @@ class InspectionPage {
     return head + body + `<p class="check-msg msg-${ev.result}" data-role="msg">${UI.escape(ev.text || '')}</p>`;
   }
 
-  // คำเตือนเรื่องความปลอดภัย (หมดอายุ/ใกล้หมดอายุ) แสดงบนการ์ดเสมอ — ผู้ตรวจไม่ต้องกรอกวันหมดอายุ
+  /**
+   * ล็อตที่จะเหลือบนรถหลังตัด "ใช้ไป/หายไป" — จำลองแบบเดียวกับ server (VehicleStockService::consume)
+   * lots มาจาก server เรียง FEFO แล้ว: ยังไม่หมดอายุ (วันใกล้สุดก่อน) → ไม่ทราบวันหมดอายุ → หมดอายุแล้ว
+   */
+  lotsAfterUse(item) {
+    let left = this.num(item.used);
+    if (!Number.isFinite(left) || left < 0) left = 0;   // ยังไม่กรอก (null) / กรอกผิด = ยังไม่หักอะไร
+    return (item.lots || []).map((lot) => {
+      const take = Math.min(left, Number(lot.qty));
+      left = Math.round((left - take) * 100) / 100;
+      return { ...lot, qty: Math.round((Number(lot.qty) - take) * 100) / 100 };
+    }).filter((lot) => lot.qty > 0);
+  }
+
+  // วันหมดอายุของของที่อยู่บนรถ (ทุกล็อต/ทุกชิ้น) แสดงบนการ์ดเสมอ — ผู้ตรวจไม่ต้องกรอกวันหมดอายุ
+  // นับจากของที่ยังเหลือหลังหัก "ใช้ไป/หายไป" — ชิ้นที่ถูกใช้ไปแล้วจะหายจากรายการ
   stockSummary(item) {
-    const s = item.stock || {};
-    const parts = [];
-    if (Number(s.expired) > 0) parts.push(`<span class="txt-bad">⛔ หมดอายุแล้ว ${this.fmt(s.expired)}</span>`);
-    const soon = (item.lots || []).filter(l => l.state === 'soon');
-    if (soon.length) parts.push(`<span class="txt-warn">⚠️ ใกล้หมดอายุ ${this.fmt(soon.reduce((n, l) => n + Number(l.qty), 0))} (${UI.escape(UI.formatDateThai(soon[0].expiry_date))})</span>`);
-    return parts.length ? `<div class="qty-line">${parts.join(' ')}</div>` : '';
+    const lots = this.lotsAfterUse(item);
+    const unit = item.unit ? ' ' + UI.escape(item.unit) : '';
+    const today = new Date(this.todayIso() + 'T00:00:00');
+    const daysLeft = (iso) => Math.round((new Date(iso + 'T00:00:00') - today) / 86400000);
+    // ล็อตวันเดียวกันรวมเป็นบรรทัดเดียว (รายชิ้น 1 ล็อต = 1 ชิ้น) — ลำดับตาม FEFO ที่ server ส่งมา
+    const groups = new Map();
+    lots.forEach((l) => {
+      const key = `${l.state}|${l.expiry_date || ''}`;
+      const g = groups.get(key) || { state: l.state, date: l.expiry_date, qty: 0 };
+      g.qty = Math.round((g.qty + l.qty) * 100) / 100;
+      groups.set(key, g);
+    });
+    // หมดอายุแล้วขึ้นก่อน (ต้องนำออก) แล้วตามด้วยวันใกล้สุด → ไกลสุด → ไม่ทราบวัน
+    const order = { expired: 0, soon: 1, ok: 2, unknown: 3 };
+    const rows = [...groups.values()]
+      .sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9) || String(a.date).localeCompare(String(b.date)))
+      .map(({ state, date, qty }) => {
+        const amount = `${this.fmt(qty)}${unit}`;
+        if (state === 'unknown') return `<li class="exp-unknown">❔ ${amount} ไม่ทราบวันหมดอายุ — ตรวจสอบที่ฉลาก</li>`;
+        const when = UI.escape(UI.formatDateThai(date));
+        if (state === 'expired') return `<li class="txt-bad">⛔ ${amount} หมดอายุแล้ว ${when} — นำออก/เปลี่ยน</li>`;
+        const d = daysLeft(date);
+        if (state === 'soon') return `<li class="txt-warn">⚠️ ${amount} หมดอายุ ${when} (${d <= 0 ? 'วันนี้' : `อีก ${d} วัน`})</li>`;
+        return `<li class="exp-ok">✓ ${amount} หมดอายุ ${when}</li>`;
+      });
+    if (!rows.length) return '';
+    const alert = [...groups.values()].some((g) => g.state === 'expired' || g.state === 'soon');
+    return `<div class="expiry-alert${alert ? '' : ' is-ok'}">
+        <p class="expiry-alert-title">วันหมดอายุของที่อยู่บนรถ <small>(เตือนล่วงหน้า ${UI.escape(String(item.warn_days ?? 30))} วัน)</small></p>
+        <ul>${rows.join('')}</ul>
+      </div>`;
+  }
+
+  todayIso() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
   renderCounted(item, index) {
@@ -703,7 +748,7 @@ class InspectionPage {
       return '<p class="text-sm text-amber-700">ยังไม่มีของนี้บนรถ — จัดขึ้นรถที่ “เติมของ” (ไม่ต้องกรอก)</p>';
     }
     return `
-      ${this.stockSummary(item)}
+      <div data-role="expiry">${this.stockSummary(item)}</div>
       <div class="check-grid">
         <div>
           <label for="${id('used')}">ใช้ไป / หายไป</label>
@@ -767,6 +812,9 @@ class InspectionPage {
       msg.className = `check-msg msg-${ev.result}`;
       msg.textContent = ev.text || '';
     }
+    // คำเตือนวันหมดอายุตามของที่ยังเหลือ (ใช้ไปแล้วหายจากรายการ)
+    const expiry = card.querySelector('[data-role="expiry"]');
+    if (expiry) expiry.innerHTML = this.stockSummary(this.items[index]);
     const none = card.querySelector('[data-action="none-used"]');
     if (none) {
       const on = this.items[index].used !== '' && Number(this.items[index].used) === 0;

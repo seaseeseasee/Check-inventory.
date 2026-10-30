@@ -98,6 +98,23 @@
 .check-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
 .check-sub { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
 .qty-line { margin-top: 6px; font-size: 0.9rem; }
+/* หน้าตรวจรถ: รายการของที่หมดอายุ/ใกล้หมดอายุ (ตามของที่ยังเหลือหลังหัก "ใช้ไป") */
+.expiry-alert {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  background: #fffbeb;
+  font-size: 0.9rem;
+}
+.expiry-alert-title { margin: 0 0 4px; font-weight: 700; color: #92400e; }
+.expiry-alert-title small { font-weight: 400; color: var(--muted); }
+.expiry-alert ul { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 2px; }
+/* ไม่มีชิ้นไหนหมด/ใกล้หมดอายุ = กรอบสีปกติ */
+.expiry-alert.is-ok { border-color: var(--line); background: #f8fafc; }
+.expiry-alert.is-ok .expiry-alert-title { color: var(--ink); }
+.expiry-alert .exp-ok { color: var(--ink); }
+.expiry-alert .exp-unknown { color: var(--muted); }
 .check-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; margin-top: 6px; }
 .check-grid label, .mismatch-box label { font-size: 0.8rem; margin: 0; }
 .expected-box {

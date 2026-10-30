@@ -378,6 +378,8 @@ class InspectionService
                 'lots' => $lots,
                 'stock' => $details['stock'][$itemId],
                 'expiry' => VehicleStockService::expirySummary($lots),
+                // จำนวนวันที่เตือนล่วงหน้า (ตั้งที่หน้าทะเบียนรถ) — หน้าตรวจใช้บอกว่าเตือนตามเกณฑ์กี่วัน
+                'warn_days' => VehicleStockService::warnDays($item),
                 'has_battery' => VehicleStockService::hasBattery($item),
                 'has_pressure' => VehicleStockService::hasPressure($item),
                 'battery_max_bars' => VehicleStockService::batteryMax($item),

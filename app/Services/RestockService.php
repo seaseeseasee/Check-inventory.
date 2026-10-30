@@ -749,21 +749,29 @@ class RestockService
         return $anyFilled ? RestockRequest::STATUS_PARTIAL : RestockRequest::STATUS_PENDING;
     }
 
-    /** อุปกรณ์ที่หมดอายุแล้ว/ใกล้หมดอายุ — อ่านจาก Lot จริง (ไม่ใช่ข้อความ expiry_text เดิม) */
-    public function getExpiringItems(int $days = 60): array
+    /**
+     * อุปกรณ์ที่หมดอายุแล้ว/ใกล้หมดอายุ — อ่านจาก Lot จริง (ไม่ใช่ข้อความ expiry_text เดิม)
+     * "ใกล้หมดอายุ" ใช้เกณฑ์ของแต่ละอุปกรณ์ (expiry_warn_days, ว่าง = 30 วัน) เหมือนหน้าตรวจรถ
+     * คืน 1 แถวต่ออุปกรณ์ = ล็อตที่หมดอายุเร็วที่สุดที่ยังเหลือของ
+     */
+    public function getExpiringItems(): array
     {
         $db = Database::getConnection();
-        $limit = (new \DateTimeImmutable(VehicleStockService::today()))->modify('+' . max(0, $days) . ' days')->format('Y-m-d');
-        $stmt = $db->prepare(
-            "SELECT i.id, i.car_id, i.name, l.id AS lot_id, l.expiry_date, l.qty_remaining
+        $stmt = $db->query(
+            "SELECT i.id, i.car_id, i.name, i.expiry_warn_days, l.id AS lot_id, l.expiry_date, l.qty_remaining
                FROM refer_item_lots l JOIN refer_items i ON i.id = l.item_id
-              WHERE i.active = 1 AND l.qty_remaining > 0 AND l.expiry_date IS NOT NULL AND l.expiry_date <= ?
+              WHERE i.active = 1 AND l.qty_remaining > 0 AND l.lot_status = 'active' AND l.expiry_date IS NOT NULL
               ORDER BY l.expiry_date"
         );
-        $stmt->execute([$limit]);
         $today = new \DateTimeImmutable(VehicleStockService::today());
-        return array_map(fn($r) => $r + [
-            'days_left' => (int)$today->diff(new \DateTimeImmutable($r['expiry_date']))->format('%r%a'),
-        ], $stmt->fetchAll());
+        $out = [];
+        foreach ($stmt->fetchAll() as $r) {
+            $daysLeft = (int)$today->diff(new \DateTimeImmutable($r['expiry_date']))->format('%r%a');
+            if ($daysLeft > VehicleStockService::warnDays($r) || isset($out[$r['id']])) {
+                continue;   // ยังไม่ถึงเกณฑ์เตือน / อุปกรณ์นี้มีแถวที่เร็วกว่าแล้ว
+            }
+            $out[$r['id']] = $r + ['days_left' => $daysLeft];
+        }
+        return array_values($out);
     }
 }
