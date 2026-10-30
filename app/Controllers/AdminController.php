@@ -181,16 +181,33 @@ class AdminController extends Controller
             $this->error('ต้องมีผู้ดูแลระบบที่ใช้งานอยู่อย่างน้อย 1 บัญชี', 409);
         }
 
+        // เปิดบัญชีของพยาบาลที่ "พักใช้งาน" → เปิดรายชื่อพยาบาลด้วย ไม่งั้นเข้าระบบได้แต่ตรวจรถไม่ได้ (LINKED_NURSE_INACTIVE)
+        // และการบันทึกฟอร์มพยาบาลครั้งถัดไปจะซิงก์สถานะพักใช้งานกลับมาปิดบัญชีอีก
+        $activate = array_key_exists('active', $input) && !in_array($activeRaw, [false, 0, '0', 'false'], true)
+            && empty($existing['active']);
+        $nurseId = (string)($input['nurse_id'] ?? $existing['nurse_id'] ?? '');
+        $nurse = $activate && $nurseId !== '' ? $this->nurseModel->find($nurseId) : null;
+        $reactivateNurse = $nurse !== null && empty($nurse['active']);
+
+        $db = Database::getConnection();
         try {
+            $db->beginTransaction();
             $this->userModel->updateUser($id, $input);
+            if ($reactivateNurse) {
+                $this->nurseModel->update($nurseId, ['active' => 1]);
+            }
+            $db->commit();
             if (isset($input['role']) && $input['role'] !== $existing['role']) {
                 // ไม่มีตาราง audit log ในระบบ — บันทึกการเปลี่ยนบทบาทลง log ของเซิร์ฟเวอร์อย่างน้อย
                 error_log(sprintf('AUDIT role change: user %s (%s) %s -> %s by %s',
                     $id, $existing['username'], $existing['role'], $input['role'],
                     $this->roleMiddleware->getCurrentUser()['username'] ?? '?'));
             }
-            $this->success(['id' => $id]);
+            $this->success(['id' => $id, 'nurse_reactivated' => $reactivateNurse]);
         } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
             error_log('updateUser failed: ' . $e->getMessage());
             $this->error('บันทึกบัญชีไม่สำเร็จ กรุณาลองใหม่', 500);
         }

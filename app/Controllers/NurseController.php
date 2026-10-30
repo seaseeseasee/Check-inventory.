@@ -275,6 +275,54 @@ class NurseController extends Controller
     }
 
     /**
+     * สวิตช์ "เปิดใช้งานพยาบาลคนนี้" — body: { active: bool }
+     * เปิด/ปิดพยาบาลกับบัญชีที่ผูกกันพร้อมกันเสมอ: ปิด = ไม่แสดงตอนเลือกผู้ตรวจ + login ไม่ได้ / เปิด = กลับมาเหมือนเดิม
+     */
+    public function setActive(string $id): void
+    {
+        $this->roleMiddleware->requireAdmin();
+
+        $nurseModel = new Nurse();
+        $nurse = $nurseModel->find($id);
+        if (!$nurse) {
+            $this->notFound('Nurse not found');
+        }
+        $input = $this->getInput();
+        if (!array_key_exists('active', $input) || !is_bool($input['active'])) {
+            $this->validationError(['active' => 'ต้องเป็น true หรือ false']);
+        }
+        $active = $input['active'];
+
+        $userModel = new User();
+        $linked = $userModel->findByNurseId($id);
+        if (!$active && $linked !== null && !empty($linked['active'])) {
+            if ((string)$linked['id'] === (string)($this->roleMiddleware->getCurrentUser()['id'] ?? '')) {
+                $this->error('ปิดใช้งานบัญชีที่คุณกำลังใช้อยู่ไม่ได้', 409);
+            }
+            if ($linked['role'] === User::ROLE_ADMIN && $userModel->countActiveAdmins() <= 1) {
+                $this->error('ต้องมีผู้ดูแลระบบที่ใช้งานอยู่อย่างน้อย 1 บัญชี', 409);
+            }
+        }
+
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $nurseModel->update($id, ['active' => $active ? 1 : 0]);
+            if ($linked !== null && (bool)$linked['active'] !== $active) {
+                $userModel->updateUser((string)$linked['id'], ['active' => $active]);
+            }
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+
+        $this->success(['id' => $id, 'active' => $active, 'account' => $linked !== null]);
+    }
+
+    /**
      * body: { mode: 'disable' | 'delete' } (ไม่ส่ง = disable เหมือนเดิม)
      * disable = พักใช้งานพยาบาล + ปิดบัญชีที่ผูกกัน
      * delete  = ลบถาวร (พร้อมบัญชีที่ผูกกัน) ได้เฉพาะคนที่ยังไม่มีประวัติในระบบ

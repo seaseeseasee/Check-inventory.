@@ -116,6 +116,7 @@ $route = match (true) {
     $path === '/api/nurses' && $method === 'GET' => ['NurseController', 'index'],
     $path === '/api/nurses' && $method === 'POST' => ['NurseController', 'store'],
     preg_match('/^\/api\/nurses\/([^\/]+)$/', $path, $matches) && $method === 'PUT' => ['NurseController', 'update', $matches[1]],
+    preg_match('/^\/api\/nurses\/([^\/]+)\/active$/', $path, $matches) && $method === 'PUT' => ['NurseController', 'setActive', $matches[1]],
     preg_match('/^\/api\/nurses\/([^\/]+)$/', $path, $matches) && $method === 'DELETE' => ['NurseController', 'destroy', $matches[1]],
 
     $path === '/api/vehicles' && $method === 'GET' => ['VehicleController', 'index'],

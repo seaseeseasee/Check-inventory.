@@ -362,6 +362,18 @@
 
 .user-row.is-off {
   opacity: 0.62;
+  filter: grayscale(1);
+}
+
+/* สวิตช์ "เปิดใช้งานพยาบาลคนนี้" บนสุดของหน้าต่างแก้ไข */
+.user-status-row {
+  margin-bottom: 12px;
+}
+
+/* ปิดใช้งาน = ทั้งหน้าต่างเป็นสีเทา ยกเว้นแถวสวิตช์ (กดเปิดกลับได้) */
+.user-form-body.is-off > :not(.user-status-row) {
+  filter: grayscale(1);
+  opacity: 0.55;
 }
 
 .user-av {
