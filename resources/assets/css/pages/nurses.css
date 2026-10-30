@@ -461,6 +461,54 @@ body.users-sheet-open {
   font-size: 1.1rem;
 }
 
+.user-sheet-tools {
+  position: relative;
+  display: flex;
+  gap: 6px;
+}
+
+/* เมนู ⋮ ของหน้าต่างแก้ไขพยาบาล */
+.user-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  min-width: 200px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+.user-menu-item {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font-size: 0.95rem;
+}
+
+.user-menu-item:hover,
+.user-menu-item:focus-visible {
+  background: #f1f5f9;
+  filter: none;
+}
+
+.user-menu-item.is-danger {
+  color: var(--bad);
+}
+
+.user-menu-item.is-danger:hover,
+.user-menu-item.is-danger:focus-visible {
+  background: var(--bad-soft);
+}
+
 .user-sheet-x {
   flex: 0 0 auto;
   width: 40px;
@@ -643,6 +691,19 @@ body.users-sheet-open {
 }
 
 .user-switch small {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.user-switch-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-switch-end small {
+  min-width: 2em;
+  text-align: right;
   font-size: 0.85rem;
   color: var(--muted);
 }
