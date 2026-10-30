@@ -194,7 +194,7 @@ class NursesPage {
       }
     });
     document.getElementById('nRoleBtn')?.addEventListener('click', () => this.editingOriginal && this.changeRole(this.editingOriginal));
-    document.getElementById('nAccountActiveBtn')?.addEventListener('click', () => this.editingOriginal && this.toggleAccount(this.editingOriginal));
+    document.getElementById('nStatusBtn')?.addEventListener('click', () => this.editingOriginal && this.toggleStatus(this.editingOriginal));
 
     document.getElementById('wardManagerBtn')?.addEventListener('click', () => this.openWardManager());
     document.getElementById('deptQuickAddBtn')?.addEventListener('click', () => this.openQuickAddWard());
@@ -604,7 +604,6 @@ class NursesPage {
         const state = document.getElementById(stateId);
         if (state) state.textContent = on ? 'เปิด' : 'ปิด';
       };
-      setSwitch('nAccountActiveBtn', 'nAccountActiveState', Boolean(acc.active));
       setSwitch('nRoleBtn', 'nRoleState', acc.role === 'admin');
       const last = document.getElementById('nLastLogin');
       if (last) {
@@ -618,24 +617,51 @@ class NursesPage {
     }
   }
 
-  // ---------- บัญชีของพยาบาล (ใช้ API ผู้ใช้เดิม — server ตรวจสิทธิ์ admin / กันปิดบัญชีตัวเอง / admin คนสุดท้าย) ----------
+  // ---------- สวิตช์ "เปิดใช้งานพยาบาลคนนี้" (พยาบาล + บัญชีที่ผูกกัน เปิด/ปิดพร้อมกันเสมอ) ----------
 
-  async toggleAccount(nurse) {
-    const acc = nurse.account;
-    if (!acc) return;
-    const action = acc.active ? 'ปิดใช้งาน' : 'เปิดใช้งาน';
+  /** เปิดอยู่ = พยาบาลปฏิบัติงาน และบัญชี (ถ้ามี) ไม่ถูกปิด — ข้อมูลเก่าที่สองฝั่งไม่ตรงกันนับเป็นปิด กดเปิดครั้งเดียวก็ตรงกัน */
+  static isPersonOn(nurse) {
+    return Boolean(nurse?.active) && (!nurse.account || Boolean(nurse.account.active));
+  }
+
+  renderStatusSwitch() {
+    const nurse = this.editingOriginal;
+    document.getElementById('nStatusRow')?.classList.toggle('hidden', !nurse);
+    const on = nurse ? NursesPage.isPersonOn(nurse) : true;
+    document.getElementById('nActive').value = nurse ? String(Boolean(nurse.active)) : 'true';
+    document.getElementById('nStatusBtn')?.setAttribute('aria-checked', String(on));
+    const state = document.getElementById('nStatusState');
+    if (state) state.textContent = on ? 'เปิด' : 'ปิด';
+    const hint = document.getElementById('nStatusHint');
+    if (hint) {
+      hint.textContent = on
+        ? (nurse?.account ? 'เข้าสู่ระบบได้ · เลือกเป็นผู้ตรวจได้' : 'เลือกเป็นผู้ตรวจได้')
+        : 'พักใช้งาน — เข้าสู่ระบบไม่ได้ · ไม่แสดงตอนเลือกผู้ตรวจ';
+    }
+    // ปิดใช้งาน = หน้าต่างเป็นสีเทา (ยกเว้นแถวสวิตช์)
+    document.getElementById('nurseEditor')?.classList.toggle('is-off', Boolean(nurse) && !on);
+  }
+
+  async toggleStatus(nurse) {
+    const next = !NursesPage.isPersonOn(nurse);
+    const action = next ? 'เปิดใช้งาน' : 'ปิดใช้งาน';
     const ok = await window.confirmDialog(
-      `${action}บัญชี ${acc.username} ของ ${nurse.name}?\n` +
-      (acc.active ? 'ผู้ใช้จะเข้าสู่ระบบไม่ได้ — ประวัติการตรวจเช็คและข้อมูลเดิมยังอยู่ครบ' : 'ผู้ใช้จะกลับมาเข้าสู่ระบบได้'),
-      { confirmText: action }
+      `${action} ${nurse.name}?\n` + (next
+        ? 'กลับมาเข้าสู่ระบบได้ และเลือกเป็นผู้ตรวจได้เหมือนเดิม'
+        : 'จะเข้าสู่ระบบไม่ได้ และไม่แสดงตอนเลือกผู้ตรวจ — ประวัติเดิมยังอยู่ครบ เปิดกลับได้ทุกเมื่อ'),
+      { title: `${action}พยาบาล`, confirmText: action, tone: next ? 'ok' : undefined }
     );
     if (!ok) return;
+    const btn = document.getElementById('nStatusBtn');
+    if (btn) btn.disabled = true;
     try {
-      await window.adminApi.updateUser(acc.id, { active: !acc.active });
-      window.toast.success(`${action}บัญชีเรียบร้อย`);
+      await window.nurseApi.setActive(nurse.id, next);
+      window.toast.success(`${action} ${nurse.name} แล้ว`);
       await this.reloadAll();
     } catch (error) {
       window.toast.error(`${action}ไม่สำเร็จ: ` + error.message);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -668,6 +694,7 @@ class NursesPage {
     // หน้าต่างแก้ไขยังเปิดอยู่ (เช่น เพิ่งเปลี่ยนบทบาท/ปิดบัญชี) — อัปเดตส่วนบัญชีให้ตรงข้อมูลใหม่
     if (this.editingId) {
       this.editingOriginal = this.nurses.find((n) => String(n.id) === String(this.editingId)) || this.editingOriginal;
+      this.renderStatusSwitch();
       this.renderAccountSection();
     }
   }
@@ -727,7 +754,7 @@ class NursesPage {
 
     document.getElementById('nName').value = nurse.name || '';
     document.getElementById('nPhone').value = nurse.phone || '';
-    document.getElementById('nActive').value = nurse.active ? 'true' : 'false';
+    this.renderStatusSwitch();
     document.getElementById('nNote').value = nurse.note || '';
     document.getElementById('nEnd').value = nurse.end_text || '';
     document.getElementById('nUsername').value = nurse.login_username || '';
@@ -753,9 +780,9 @@ class NursesPage {
       legacyHint.classList.toggle('hidden', !legacyText);
     }
 
-    // มีวันเริ่ม/หมายเหตุ/พักใช้งาน หรือค่าเดิมแบบเก่า → กาง "ข้อมูลเพิ่มเติม" ให้เห็นเลย
+    // มีวันเริ่ม/หมายเหตุ หรือค่าเดิมแบบเก่า → กาง "ข้อมูลเพิ่มเติม" ให้เห็นเลย
     const extra = document.getElementById('nurseExtra');
-    if (extra) extra.open = Boolean(nurse.start_text || nurse.note || !nurse.active);
+    if (extra) extra.open = Boolean(nurse.start_text || nurse.note);
 
     this.clearAllErrors();
     this.renderAccountSection();
@@ -774,7 +801,7 @@ class NursesPage {
 
     document.getElementById('nName').value = '';
     document.getElementById('nPhone').value = '';
-    document.getElementById('nActive').value = 'true';
+    this.renderStatusSwitch();
     document.getElementById('nStart').value = '';
     document.getElementById('nEnd').value = '';
     document.getElementById('nNote').value = '';

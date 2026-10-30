@@ -348,6 +348,19 @@
       <form id="nurseForm" class="user-form" novalidate>
         <h3 id="nurseFormTitle" class="sr-only">เพิ่มพยาบาลใหม่</h3>
         <div id="nurseEditor" class="user-form-body">
+          <!-- แก้ไขพยาบาล: สวิตช์เดียวคุมทั้งรายชื่อผู้ตรวจและการเข้าสู่ระบบ — กดแล้วมีผลทันที -->
+          <div class="user-switch user-status-row hidden" id="nStatusRow">
+            <div>
+              <b>เปิดใช้งานพยาบาลคนนี้</b>
+              <small id="nStatusHint"></small>
+            </div>
+            <span class="user-switch-end">
+              <small id="nStatusState" aria-hidden="true"></small>
+              <button type="button" class="user-toggle" id="nStatusBtn" role="switch" aria-checked="true" aria-label="เปิดใช้งานพยาบาลคนนี้"></button>
+            </span>
+          </div>
+          <input type="hidden" id="nActive" value="true">
+
           <section class="user-sec">
             <h4>ข้อมูลพื้นฐาน</h4>
             <div class="user-grid">
@@ -381,23 +394,19 @@
           </section>
 
           <details class="user-sec user-extra" id="nurseExtra">
-            <summary>ข้อมูลเพิ่มเติม (วันเริ่มงาน, สถานะ, หมายเหตุ)</summary>
+            <summary>ข้อมูลเพิ่มเติม (วันเริ่มงาน, หมายเหตุ)</summary>
             <div class="user-grid">
-              <div>
+              <div class="user-wide">
                 <label for="nStart">วันเริ่มปฏิบัติงาน</label>
                 <input id="nStart" type="date">
                 <p class="user-hint user-hint-warn hidden" id="nStartLegacy"></p>
-              </div>
-              <div>
-                <label for="nActive">สถานะ</label>
-                <select id="nActive"><option value="true">ปฏิบัติงาน</option><option value="false">พักใช้งาน</option></select>
               </div>
               <div class="user-wide">
                 <label for="nNote">หมายเหตุ</label>
                 <input id="nNote" type="text" placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)">
               </div>
             </div>
-            <p class="user-hint">ครบ 6 เดือนคำนวณจากวันเริ่มให้อัตโนมัติ · พักใช้งาน = ไม่แสดงตอนเลือกผู้ตรวจ แต่ประวัติเดิมยังอยู่</p>
+            <p class="user-hint">ครบ 6 เดือนคำนวณจากวันเริ่มให้อัตโนมัติ</p>
           </details>
 
           <section class="user-sec">
@@ -423,15 +432,8 @@
               <p class="user-hint user-wide" id="nAccountHint">ผู้ใช้จะถูกให้ตั้งรหัสใหม่ตอนเข้าสู่ระบบครั้งแรก</p>
               <p id="nLoginStatus" class="user-hint user-wide hidden"></p>
             </div>
-            <!-- บัญชีที่มีอยู่แล้ว: สวิตช์เปิด-ปิดบัญชี / สิทธิ์ Admin — กดแล้วถามยืนยันและมีผลทันที -->
+            <!-- บัญชีที่มีอยู่แล้ว: สิทธิ์ Admin — กดแล้วถามยืนยันและมีผลทันที (เปิด/ปิดการเข้าสู่ระบบใช้สวิตช์บนสุด) -->
             <div id="nAccountActions" class="user-acc-actions hidden">
-              <div class="user-switch">
-                <b>อนุญาตให้เข้าสู่ระบบ</b>
-                <span class="user-switch-end">
-                  <small id="nAccountActiveState" aria-hidden="true"></small>
-                  <button type="button" class="user-toggle" id="nAccountActiveBtn" role="switch" aria-checked="false" aria-label="อนุญาตให้เข้าสู่ระบบ"></button>
-                </span>
-              </div>
               <div class="user-switch">
                 <b>สิทธิ์ผู้ดูแลระบบ (Admin)</b>
                 <span class="user-switch-end">

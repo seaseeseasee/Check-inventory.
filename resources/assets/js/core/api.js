@@ -153,6 +153,8 @@ window.nurseApi = {
   getAll: () => api.get('/nurses'),
   create: (data) => api.post('/nurses', data),
   update: (id, data) => api.put(`/nurses/${id}`, data),
+  // เปิด/ปิดพยาบาล + บัญชีที่ผูกกันพร้อมกัน
+  setActive: (id, active) => api.put(`/nurses/${encodeURIComponent(id)}/active`, { active }),
   // data: { mode: 'delete' } = ลบถาวร / ไม่ส่ง = พักใช้งาน (ดู NurseController::destroy)
   delete: (id, data) => api.delete(`/nurses/${encodeURIComponent(id)}`, data),
 };
