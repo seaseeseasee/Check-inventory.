@@ -234,7 +234,16 @@ class AuthService
                 && in_array(parse_url($requestOrigin, PHP_URL_HOST), $loopback, true)
                 && parse_url($requestOrigin, PHP_URL_SCHEME) === ($secure ? 'https' : 'http')
                 && parse_url($requestOrigin, PHP_URL_PORT) === $port;
-            if ($requestOrigin !== $expected && !$isLoopbackAlias) {
+            // Same-origin กับโดเมนที่เบราว์เซอร์เปิดอยู่จริง (Host) — กันกรณี .env บน production ไม่มี/ตั้ง APP_ORIGIN ผิด
+            // แล้วทุก POST ได้ 403 "Origin rejected" ทั้งที่มาจากหน้าเว็บของระบบเอง
+            // ยังกัน CSRF ได้เหมือนเดิม: เว็บอื่นที่ส่งคำขอข้ามมา Origin จะเป็นโดเมนของเว็บนั้น ไม่ตรงกับ Host
+            $originHost = parse_url($requestOrigin, PHP_URL_HOST);
+            $originPort = parse_url($requestOrigin, PHP_URL_PORT);
+            $originHostPort = $originHost ? strtolower($originHost . ($originPort ? ':' . $originPort : '')) : '';
+            $requestHost = strtolower((string)($_SERVER['HTTP_HOST'] ?? ''));
+            $isSameHost = $originHostPort !== '' && $requestHost !== ''
+                && in_array($requestHost, [$originHostPort, $originHostPort . ':443', $originHostPort . ':80'], true);
+            if ($requestOrigin !== $expected && !$isLoopbackAlias && !$isSameHost) {
                 Response::forbidden('Origin rejected');
             }
         }
