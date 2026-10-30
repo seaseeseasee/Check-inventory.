@@ -118,6 +118,24 @@ class NursesPage {
     if (form) {
       form.addEventListener('submit', (e) => this.handleSubmit(e));
     }
+    document.getElementById('nurseMenuBtn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      NursesPage.setNurseMenu(document.getElementById('nurseMenu')?.classList.contains('hidden'));
+    });
+    document.getElementById('nurseDeleteBtn')?.addEventListener('click', () => {
+      NursesPage.setNurseMenu(false);
+      this.deleteNurse();
+    });
+    // กดที่อื่น / Esc = ปิดเมนู
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest?.('#nurseMenu')) NursesPage.setNurseMenu(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !document.getElementById('nurseMenu')?.classList.contains('hidden')) {
+        NursesPage.setNurseMenu(false);
+        document.getElementById('nurseMenuBtn')?.focus();
+      }
+    });
 
     const search = document.getElementById('nurseSearch');
     if (search) {
@@ -531,6 +549,15 @@ class NursesPage {
     const nurse = !document.getElementById('nurseForm')?.classList.contains('hidden');
     const editing = nurse ? window.nursesPage?.editingId : window.usersPage?.editingId;
     title.textContent = editing ? (nurse ? 'แก้ไขพยาบาล' : 'แก้ไขบัญชีผู้ใช้') : 'เพิ่มผู้ใช้';
+    // เมนู ⋮ (ลบพยาบาล) มีเฉพาะตอนแก้ไขพยาบาลที่มีอยู่แล้ว
+    document.getElementById('nurseMenuBtn')?.classList.toggle('hidden', !(nurse && editing));
+    NursesPage.setNurseMenu(false);
+  }
+
+  static setNurseMenu(open) {
+    document.getElementById('nurseMenu')?.classList.toggle('hidden', !open);
+    document.getElementById('nurseMenuBtn')?.setAttribute('aria-expanded', String(Boolean(open)));
+    if (open) document.getElementById('nurseDeleteBtn')?.focus();
   }
 
   static closeSheet() {
@@ -571,17 +598,19 @@ class NursesPage {
     actions?.classList.toggle('hidden', !acc);
     if (acc) {
       document.getElementById('nAccountFields')?.classList.remove('hidden');
-      const role = document.getElementById('nRoleBtn');
-      if (role) role.textContent = acc.role === 'admin' ? '⬇️ เปลี่ยนเป็น Staff' : '👑 ให้สิทธิ์ Admin';
-      const active = document.getElementById('nAccountActiveBtn');
-      if (active) {
-        active.textContent = acc.active ? '🔒 ปิดบัญชี (เข้าสู่ระบบไม่ได้)' : '🔓 เปิดบัญชี';
-        active.classList.toggle('is-danger', Boolean(acc.active));
-      }
+      // ตัวหนังสือ เปิด/ปิด ข้างสวิตช์ — ไม่ต้องอาศัยสีอย่างเดียว
+      const setSwitch = (btnId, stateId, on) => {
+        document.getElementById(btnId)?.setAttribute('aria-checked', String(on));
+        const state = document.getElementById(stateId);
+        if (state) state.textContent = on ? 'เปิด' : 'ปิด';
+      };
+      setSwitch('nAccountActiveBtn', 'nAccountActiveState', Boolean(acc.active));
+      setSwitch('nRoleBtn', 'nRoleState', acc.role === 'admin');
       const last = document.getElementById('nLastLogin');
       if (last) {
-        last.textContent = (acc.active ? '' : 'บัญชีปิดอยู่ · ')
-          + (acc.last_login_at ? `เข้าสู่ระบบล่าสุด ${UI.formatDateTimeThai(acc.last_login_at)}` : 'ยังไม่เคยเข้าสู่ระบบ');
+        last.textContent = acc.last_login_at
+          ? `เข้าสู่ระบบล่าสุด ${UI.formatDateTimeThai(acc.last_login_at)}`
+          : 'ยังไม่เคยเข้าสู่ระบบ';
       }
     } else {
       // แก้ไขพยาบาลที่ยังไม่มีบัญชี: ปิดสวิตช์ไว้ก่อน | เพิ่มคนใหม่: เปิดไว้ (ชื่อผู้ใช้ = เบอร์โทรอัตโนมัติ)
@@ -870,6 +899,10 @@ class NursesPage {
     }
 
     // ปิดหน้าต่าง (รวม resetForm) หลัง setLoading(false) ไม่งั้นข้อความปุ่มจะถูกทับกลับเป็นค่าเดิม
+    await this.closeAndReload();
+  }
+
+  async closeAndReload() {
     NursesPage.closeSheet();
     await Promise.all([this.loadNurses(), this.loadDepartments()]);
     this.render();
@@ -878,6 +911,57 @@ class NursesPage {
       await window.usersPage.loadData();
       window.usersPage.render();
     }
+  }
+
+  // เซิร์ฟเวอร์เป็นผู้ตัดสินจริง (นับประวัติ + FK) — มีประวัติแล้วลบไม่ได้ เสนอ "พักใช้งาน" แทน
+  async deleteNurse() {
+    const nurse = this.editingOriginal;
+    if (!nurse) return;
+    const account = nurse.login_username ? ` และบัญชีเข้าใช้งาน ${nurse.login_username}` : '';
+    const ok = await window.confirmDialog(
+      `ลบ “${nurse.name}”${account} ถาวรหรือไม่? ย้อนกลับไม่ได้`,
+      { title: 'ลบพยาบาล', confirmText: 'ลบถาวร' }
+    );
+    if (!ok) return;
+
+    const btn = document.getElementById('nurseDeleteBtn');
+    UI.setLoading(btn, true);
+    try {
+      const res = await window.nurseApi.delete(nurse.id, { mode: 'delete' });
+      // เซิร์ฟเวอร์เวอร์ชันเก่า (ยังไม่อัป NurseController.php) ไม่รู้จัก mode=delete → พักใช้งานแทนแล้วตอบ 200 เฉย ๆ
+      if (res?.data?.mode !== 'deleted') {
+        window.toast.error(`ยังลบ “${nurse.name}” ไม่ได้ — เซิร์ฟเวอร์ยังไม่ได้อัปเดต NurseController.php จึงเปลี่ยนเป็นพักใช้งานแทน`);
+      } else {
+        window.toast.success(`ลบ “${nurse.name}” แล้ว`);
+      }
+    } catch (error) {
+      if (error.status === 409 && error.data?.suggestion === 'disable') {
+        UI.setLoading(btn, false);
+        // พักใช้งานอยู่แล้ว → ไม่มีอะไรให้ทำต่อ แค่บอกเหตุผล
+        if (!nurse.active) {
+          window.toast.error(error.message);
+          return;
+        }
+        const disable = await window.confirmDialog(
+          `${error.message}\n\nกด "พักใช้งานแทน" เพื่อปิดการเข้าสู่ระบบและซ่อนจากรายชื่อผู้ตรวจ โดยประวัติเดิมยังอยู่ครบ`,
+          { title: 'ลบไม่ได้เพราะมีประวัติ', confirmText: 'พักใช้งานแทน' }
+        );
+        if (!disable) return;
+        try {
+          await window.nurseApi.delete(nurse.id, { mode: 'disable' });
+          window.toast.success(`พักใช้งาน “${nurse.name}” แล้ว`);
+        } catch (disableError) {
+          window.toast.error('พักใช้งานไม่สำเร็จ: ' + disableError.message);
+          return;
+        }
+      } else {
+        window.toast.error('ลบไม่สำเร็จ: ' + error.message);
+        return;
+      }
+    } finally {
+      UI.setLoading(btn, false);
+    }
+    await this.closeAndReload();
   }
 
   // ---------- ทะเบียนวอร์ด (Ward / Department management) ----------

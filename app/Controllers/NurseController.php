@@ -9,6 +9,7 @@ use App\Config\Database;
 use App\Helpers\Response;
 use App\Helpers\Validator;
 use App\Middleware\RoleMiddleware;
+use App\Models\AuditLog;
 use App\Models\Nurse;
 use App\Models\User;
 
@@ -273,6 +274,12 @@ class NurseController extends Controller
         return [$username, $password];
     }
 
+    /**
+     * body: { mode: 'disable' | 'delete' } (ไม่ส่ง = disable เหมือนเดิม)
+     * disable = พักใช้งานพยาบาล + ปิดบัญชีที่ผูกกัน
+     * delete  = ลบถาวร (พร้อมบัญชีที่ผูกกัน) ได้เฉพาะคนที่ยังไม่มีประวัติในระบบ
+     *           ถ้ามีจะตอบ 409 พร้อมจำนวน และ UI เสนอ "พักใช้งานแทน" — ประวัติตรวจรถ/คำขอเติมต้องอยู่ครบ
+     */
     public function destroy(string $id): void
     {
         // พักใช้งานพยาบาล + ปิดบัญชีที่ผูกกัน ต้องสำเร็จทั้งคู่ ไม่งั้นข้อมูลจะขัดกัน
@@ -288,6 +295,12 @@ class NurseController extends Controller
         $linked = $userModel->findByNurseId($id);
 
         $db = Database::getConnection();
+        if (($this->getInput()['mode'] ?? '') === 'delete') {
+            $this->deletePermanently($db, $existing, $linked);
+            return;
+        }
+
+
         $db->beginTransaction();
         try {
             // Soft delete - just mark as inactive
@@ -306,5 +319,68 @@ class NurseController extends Controller
         }
 
         $this->success(['id' => $id]);
+    }
+
+    private function deletePermanently(\PDO $db, array $nurse, ?array $linked): void
+    {
+        $id = (string)$nurse['id'];
+        $currentUser = $this->roleMiddleware->getCurrentUser();
+        if ($linked !== null && (string)$linked['id'] === (string)($currentUser['id'] ?? '')) {
+            $this->error('ลบไม่ได้ เพราะเป็นบัญชีที่คุณกำลังใช้งานอยู่', 409, ['reason' => 'self']);
+        }
+
+        $count = function (string $sql, string $value) use ($db): int {
+            $stmt = $db->prepare($sql);
+            $stmt->execute([$value]);
+            return (int)$stmt->fetchColumn();
+        };
+        $usage = [
+            'checks' => $count('SELECT COUNT(*) FROM refer_checks WHERE nurse_id = ?', $id),
+            'drafts' => $count('SELECT COUNT(*) FROM refer_drafts WHERE nurse_id = ?', $id),
+            'restock' => $count('SELECT COUNT(*) FROM refer_restock_requests WHERE created_by = ?', $id),
+            'restock_actions' => $linked !== null
+                ? $count('SELECT COUNT(*) FROM refer_restock_actions WHERE by_id = ?', (string)$linked['id'])
+                : 0,
+        ];
+        $inUse = function () use ($nurse, $usage): void {
+            $this->error(
+                'ลบ "' . $nurse['name'] . '" ถาวรไม่ได้ เพราะมีประวัติในระบบแล้ว (ตรวจรถ ' . $usage['checks']
+                . ' ครั้ง, คำขอเติม ' . ($usage['restock'] + $usage['restock_actions']) . ' รายการ'
+                . ($usage['drafts'] ? ', แบบร่างค้าง ' . $usage['drafts'] . ' รายการ' : '') . ')',
+                409,
+                ['reason' => 'nurse_in_use', 'usage' => $usage, 'suggestion' => 'disable', 'name' => $nurse['name']]
+            );
+        };
+        if (array_sum($usage) > 0) {
+            $inUse();
+        }
+
+        $db->beginTransaction();
+        try {
+            if ($linked !== null) {
+                $db->prepare('DELETE FROM refer_users WHERE id = ?')->execute([(string)$linked['id']]);
+            }
+            $db->prepare('DELETE FROM refer_nurses WHERE id = ?')->execute([$id]);
+            $db->commit();
+        } catch (\PDOException $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            // ฐานข้อมูลเก่าบางแห่งมี FK อื่นชี้มาที่พยาบาล/บัญชี (เช่น restock_actions → nurses) — ถือว่ามีประวัติ
+            if ($e->getCode() === '23000') {
+                $inUse();
+            }
+            throw $e;
+        }
+
+        if ($linked !== null) {
+            AuditLog::record('user.delete', 'user', (string)$linked['id'], [
+                'username' => $linked['username'],
+                'nurse_id' => $id,
+            ]);
+        }
+        AuditLog::record('nurse.delete', 'nurse', $id, ['name' => $nurse['name']]);
+
+        $this->success(['id' => $id, 'mode' => 'deleted', 'account_deleted' => $linked !== null]);
     }
 }

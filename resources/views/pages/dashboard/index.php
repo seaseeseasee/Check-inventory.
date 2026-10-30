@@ -330,7 +330,14 @@
       <div class="user-sheet-head">
         <div class="user-sheet-title">
           <h3 id="userSheetTitle">เพิ่มผู้ใช้</h3>
-          <button type="button" class="user-sheet-x" data-call="closeUserSheet" aria-label="ปิดหน้าต่าง">✕</button>
+          <div class="user-sheet-tools">
+            <!-- แก้ไขพยาบาล: คำสั่งที่ใช้นาน ๆ ครั้ง (ลบ) เก็บไว้ในเมนู ไม่วางใกล้ปุ่มบันทึก -->
+            <button type="button" class="user-sheet-x hidden" id="nurseMenuBtn" aria-label="คำสั่งเพิ่มเติม" aria-haspopup="menu" aria-expanded="false" aria-controls="nurseMenu">⋮</button>
+            <div id="nurseMenu" class="user-menu hidden" role="menu" aria-label="คำสั่งเพิ่มเติม">
+              <button type="button" id="nurseDeleteBtn" class="user-menu-item is-danger" role="menuitem">🗑 ลบพยาบาลคนนี้</button>
+            </div>
+            <button type="button" class="user-sheet-x" data-call="closeUserSheet" aria-label="ปิดหน้าต่าง">✕</button>
+          </div>
         </div>
         <div class="user-kind" id="userKind" role="group" aria-label="ประเภทผู้ใช้">
           <button type="button" data-kind="nurse" aria-pressed="true">👩‍⚕️ พยาบาล</button>
@@ -416,10 +423,22 @@
               <p class="user-hint user-wide" id="nAccountHint">ผู้ใช้จะถูกให้ตั้งรหัสใหม่ตอนเข้าสู่ระบบครั้งแรก</p>
               <p id="nLoginStatus" class="user-hint user-wide hidden"></p>
             </div>
-            <!-- บัญชีที่มีอยู่แล้ว: เปลี่ยนบทบาท / เปิด-ปิดบัญชี (เดิมเป็นปุ่มบนการ์ด) -->
+            <!-- บัญชีที่มีอยู่แล้ว: สวิตช์เปิด-ปิดบัญชี / สิทธิ์ Admin — กดแล้วถามยืนยันและมีผลทันที -->
             <div id="nAccountActions" class="user-acc-actions hidden">
-              <button type="button" id="nRoleBtn" class="user-acc-btn"></button>
-              <button type="button" id="nAccountActiveBtn" class="user-acc-btn"></button>
+              <div class="user-switch">
+                <b>อนุญาตให้เข้าสู่ระบบ</b>
+                <span class="user-switch-end">
+                  <small id="nAccountActiveState" aria-hidden="true"></small>
+                  <button type="button" class="user-toggle" id="nAccountActiveBtn" role="switch" aria-checked="false" aria-label="อนุญาตให้เข้าสู่ระบบ"></button>
+                </span>
+              </div>
+              <div class="user-switch">
+                <b>สิทธิ์ผู้ดูแลระบบ (Admin)</b>
+                <span class="user-switch-end">
+                  <small id="nRoleState" aria-hidden="true"></small>
+                  <button type="button" class="user-toggle" id="nRoleBtn" role="switch" aria-checked="false" aria-label="สิทธิ์ผู้ดูแลระบบ (Admin)"></button>
+                </span>
+              </div>
               <p id="nLastLogin" class="user-hint"></p>
             </div>
           </section>
