@@ -422,110 +422,11 @@ class VehiclesPage {
     const container = document.getElementById('stockTable');
     if (!container) return;
 
-    container.innerHTML = this.items.map((item) => {
-      const counted = item.stock_updated_at ? String(item.stock_updated_at) : '';
+    container.innerHTML = this.items.map((item) => this.renderItemCard(item)).join('')
+      || '<p class="empty">ยังไม่มีอุปกรณ์ในรถคันนี้</p>';
+    this.bindItemCards(container);
+    this.lotSheet = null;   // ข้อมูลล็อตโหลดใหม่ทุกครั้งที่ render รายการ (ยอดอาจเปลี่ยนจากการตรวจ/เติม)
 
-      // ยอดคงเหลือ + วันหมดอายุมาจาก Lot / รายเครื่อง (แก้ผ่านการเติมของ/การตรวจเช็คเท่านั้น)
-      const type = item.item_type || (item.is_battery ? 'non_expiring' : 'individual');
-      const unitWord = item.has_pressure ? ' ถัง' : ' เครื่อง';
-      const viewLabel = type === 'non_expiring' ? (item.has_pressure ? '🔧 จัดการถัง' : '🔧 จัดการเครื่อง') : (type === 'individual' ? '📦 ดูรายชิ้น' : '📦 ดูล็อต');
-      const expiry = String(item.expiry_text ?? '');
-      const qtyNum = String(Math.round(Number(item.current_qty || 0) * 100) / 100);
-      const qtyText = counted ? `${UI.escape(qtyNum)}${type === 'non_expiring' ? unitWord : ''}` : 'ยังไม่ได้จัดขึ้นรถ';
-      const target = item.target_qty === null || item.target_qty === undefined || item.target_qty === '' ? null : item.target_qty;
-      const minText = target !== null
-        ? `ขั้นต่ำ ${UI.escape(String(Math.round(Number(target) * 100) / 100))}${type === 'non_expiring' ? unitWord : (item.unit ? ' ' + UI.escape(item.unit) : '')}`
-        : (String(item.standard || '').trim() ? `ขั้นต่ำ ${UI.escape(item.standard)}` : '');
-
-      // โครงการ์ดตอนขยาย: 1) ของบนรถตอนนี้ (ใช้บ่อยสุด อยู่บน) 2) ตั้งค่าอุปกรณ์ 3) บันทึก + เมนู ⋯ (พัก/ลบ)
-      return `
-      <article class="stock-card${item.active ? '' : ' is-off'}" data-item-id="${item.id}">
-        <details class="stock-collapse" data-item-id="${item.id}" ${this.openItems.has(item.id) ? 'open' : ''}>
-        ${this.renderItemSummary(item, type, counted, expiry, unitWord)}
-        <!-- ประเภทอยู่บนสุด: กำหนดว่ากล่องของบนรถด้านล่างนับแบบไหน (รายชิ้น / ล็อต / รายเครื่อง) -->
-        <div class="stock-type">
-          <label for="typ-${item.id}">ประเภท</label>
-          <select id="typ-${item.id}" data-item-id="${item.id}" data-field="item_type">
-            <option value="individual" ${type === 'individual' ? 'selected' : ''}>🧩 รายชิ้น (วันหมดอายุรายชิ้น)</option>
-            <option value="box" ${type === 'box' ? 'selected' : ''}>📦 กล่อง/ล็อต (วันหมดอายุทั้งกล่อง)</option>
-            <option value="non_expiring" ${type === 'non_expiring' ? 'selected' : ''}>🩺 ไม่มีวันหมดอายุ (รายเครื่อง)</option>
-          </select>
-        </div>
-        <section class="stock-onboard" aria-label="ของบนรถตอนนี้">
-          <div class="stock-onboard-head">
-            <label ${type === 'non_expiring' ? '' : `for="onb-${item.id}"`}>ของบนรถตอนนี้</label>
-            ${minText ? `<small>${minText}</small>` : ''}
-          </div>
-          ${type === 'non_expiring'
-            ? `<div class="stock-onboard-qty">${qtyText}</div>`
-            : `${UI.stepper(`id="onb-${item.id}" min="0" data-item-id="${item.id}" data-field="onboard_qty" value="${counted ? UI.escape(qtyNum) : ''}" placeholder="${counted ? '' : 'ยังไม่ได้จัด'}"`, 'ยอดบนรถ')}
-          <div class="add-dates" data-role="add-dates" data-item-id="${item.id}">${this.renderAddDates(item, 0)}</div>`}
-          <div class="stock-facts">
-            <div><span>หมดอายุเร็วสุด</span><b>${type === 'non_expiring' ? 'ไม่มีวันหมดอายุ' : (expiry ? UI.escape(UI.formatDateThai(expiry)) : '—')}</b></div>
-            <div><span>นับล่าสุด</span><b>${counted ? UI.escape(this.fmtStamp(counted)) : 'ยังไม่เคย'}</b></div>
-          </div>
-          <button type="button" class="stock-link-btn" data-action="lots" data-item-id="${item.id}" aria-expanded="false" data-label="${viewLabel} →">${viewLabel} →</button>
-          <div class="item-lots hidden" data-role="lots" aria-live="polite"></div>
-        </section>
-
-        <p class="stock-set-title">ตั้งค่าอุปกรณ์</p>
-        <div class="stock-fields">
-          <div class="stock-wide">
-            <label for="nm-${item.id}">ชื่ออุปกรณ์</label>
-            <input id="nm-${item.id}" type="text" value="${UI.escape(item.name)}" data-item-id="${item.id}" data-field="name">
-          </div>
-          <div>
-            <label for="std-${item.id}">ขั้นต่ำที่ต้องมี</label>
-            <input id="std-${item.id}" type="text" value="${UI.escape(item.standard)}" data-item-id="${item.id}" data-field="standard" placeholder="เช่น 5 หรือ 1 ชุด">
-          </div>
-          ${this.renderThresholdFields(item, type)}
-          ${type === 'non_expiring' ? `
-          <div class="flag-row">
-            <label><input type="checkbox" data-item-id="${item.id}" data-field="is_battery" ${item.is_battery ? 'checked' : ''}> 🔋 มีแบตเตอรี่</label>
-            <label><input type="checkbox" data-item-id="${item.id}" data-field="has_pressure" ${item.has_pressure ? 'checked' : ''}> 🫧 วัดแรงดัน (PSI)</label>
-          </div>` : ''}
-        </div>
-
-        <div class="stock-actions">
-          <p class="stock-dirty hidden" data-role="dirty">● มีการแก้ไขที่ยังไม่บันทึก</p>
-          <button type="button" class="stock-save" data-action="save" data-item-id="${item.id}" disabled>บันทึก</button>
-          <details class="stock-more">
-            <summary class="small-btn" aria-label="ตัวเลือกเพิ่มเติมของอุปกรณ์นี้" title="ตัวเลือกเพิ่มเติม">⋯</summary>
-            <div class="stock-more-menu">
-              <button type="button" class="stock-more-item" data-action="toggle" data-item-id="${item.id}">${item.active ? '⏸ พักใช้งาน' : '▶️ เปิดใช้งาน'}</button>
-              <button type="button" class="stock-more-item is-danger" data-action="delete" data-item-id="${item.id}">🗑 ลบอุปกรณ์</button>
-            </div>
-          </details>
-        </div>
-        </details>
-      </article>
-    `;
-    }).join('') || '<p class="empty">ยังไม่มีอุปกรณ์ในรถคันนี้</p>';
-
-    // จำว่าเปิดการ์ดไหนไว้ — render ใหม่ (เช่น แก้ล็อต/พักใช้งาน) แล้วยังเปิดอยู่ (ปิดเองเมื่อบันทึกสำเร็จ)
-    container.querySelectorAll('details.stock-collapse').forEach(el => {
-      el.addEventListener('toggle', () => {
-        if (el.open) this.openItems.add(el.dataset.itemId); else this.openItems.delete(el.dataset.itemId);
-      });
-    });
-
-    // Bind events
-    container.querySelectorAll('[data-action="save"]').forEach(btn => {
-      btn.addEventListener('click', () => this.saveItem(btn.dataset.itemId));
-    });
-
-    container.querySelectorAll('[data-action="toggle"]').forEach(btn => {
-      btn.addEventListener('click', () => this.toggleItemActive(btn.dataset.itemId));
-    });
-
-    // ดูล็อต/รายชิ้น/เครื่อง = เปิดในการ์ดนี้เลย แก้ เพิ่ม นำออก ได้ที่นี่ (ไม่ย้ายหน้า)
-    container.querySelectorAll('[data-action="lots"]').forEach(btn => {
-      btn.addEventListener('click', () => this.toggleLots(btn));
-    });
-    // ยอดบนรถเพิ่มขึ้น → แสดงช่องวันหมดอายุ (กล่อง: 1 ช่อง | รายชิ้น: 1 ช่องต่อ 1 ชิ้นที่เพิ่ม)
-    container.querySelectorAll('[data-field="onboard_qty"]').forEach(input => {
-      input.addEventListener('input', () => this.refreshAddDates(input.dataset.itemId));
-    });
     if (!container.dataset.boundDates) {   // container อยู่ถาวร — ผูกครั้งเดียว
       container.dataset.boundDates = '1';
       container.addEventListener('click', (e) => {
@@ -548,6 +449,12 @@ class VehiclesPage {
       container.addEventListener('input', markDirty);
       container.addEventListener('change', markDirty);
 
+      // เปลี่ยนประเภท → วาดการ์ดใหม่ตามประเภทที่เลือกทันที (ยังไม่บันทึกจนกว่าจะกด "บันทึก")
+      container.addEventListener('change', (e) => {
+        const select = e.target.closest('[data-field="item_type"]');
+        if (select) this.previewItemType(select.dataset.itemId, select.value);
+      });
+
       // เมนู ⋯ (พักใช้งาน / ลบ): ปิดเมื่อเลือกคำสั่ง หรือแตะนอกเมนู
       document.addEventListener('click', (e) => {
         container.querySelectorAll('details.stock-more[open]').forEach(menu => {
@@ -555,13 +462,165 @@ class VehiclesPage {
         });
       });
     }
+  }
+
+  /** ประเภทที่เลือกอยู่ในการ์ด (อาจยังไม่บันทึก) — ไม่มีการ์ด = ประเภทที่บันทึกไว้ */
+  selectedItemType(item) {
+    const select = document.querySelector(`[data-item-id="${item.id}"][data-field="item_type"]`);
+    return select?.value || item.item_type || (item.is_battery ? 'non_expiring' : 'individual');
+  }
+
+  /**
+   * วาดการ์ดใหม่ตามประเภทที่เลือก โดยเก็บค่าที่กรอกค้างไว้ (ชื่อ / ขั้นต่ำ / เกณฑ์เตือน / ธง)
+   * ช่องยอดบนรถ + วันหมดอายุเริ่มใหม่ เพราะรูปแบบต่างกันตามประเภท
+   */
+  previewItemType(itemId, type) {
+    const item = this.items.find(i => i.id === itemId);
+    const card = document.querySelector(`.stock-card[data-item-id="${itemId}"]`);
+    if (!item || !card) return;
+
+    const keep = {};
+    card.querySelectorAll('[data-field]').forEach((el) => {
+      if (el.closest('[data-role="lots"]') || el.closest('.stock-onboard')) return;
+      keep[el.dataset.field] = el.type === 'checkbox' ? el.checked : el.value;
+    });
+
+    const preview = { ...item, item_type: type, is_battery: type === 'non_expiring' ? item.is_battery : 0, has_pressure: type === 'non_expiring' ? item.has_pressure : 0 };
+    const holder = document.createElement('div');
+    holder.innerHTML = this.renderItemCard(preview).trim();
+    const fresh = holder.firstElementChild;
+    card.replaceWith(fresh);
+    this.bindItemCards(fresh);
+
+    fresh.querySelector('details.stock-collapse').open = true;
+    fresh.querySelectorAll('[data-field]').forEach((el) => {
+      if (!(el.dataset.field in keep) || el.dataset.field === 'item_type') return;
+      if (el.type === 'checkbox') el.checked = keep[el.dataset.field];
+      else el.value = keep[el.dataset.field];
+    });
+    // การ์ดใหม่ยังเป็น "แก้ไขแล้วยังไม่บันทึก" — ยกเว้นเลือกกลับเป็นประเภทเดิม
+    const changed = type !== (item.item_type || (item.is_battery ? 'non_expiring' : 'individual'));
+    const save = fresh.querySelector('[data-action="save"]');
+    if (save) save.disabled = false;
+    fresh.querySelector('[data-role="dirty"]')?.classList.remove('hidden');
+    // server เปลี่ยนประเภทให้เฉพาะตอนยังไม่มีของบนรถ — บอกไว้ก่อนกดบันทึก
+    const hint = fresh.querySelector('[data-role="type-hint"]');
+    if (hint) hint.classList.toggle('hidden', !(changed && Number(item.current_qty || 0) > 0));
+    fresh.querySelector('[data-field="item_type"]')?.focus();
+  }
+
+  renderItemCard(item) {
+    const counted = item.stock_updated_at ? String(item.stock_updated_at) : '';
+
+    // ยอดคงเหลือ + วันหมดอายุมาจาก Lot / รายเครื่อง (แก้ผ่านการเติมของ/การตรวจเช็คเท่านั้น)
+    const type = item.item_type || (item.is_battery ? 'non_expiring' : 'individual');
+    const unitWord = item.has_pressure ? ' ถัง' : ' เครื่อง';
+    const viewLabel = type === 'non_expiring' ? (item.has_pressure ? '🔧 จัดการถัง' : '🔧 จัดการเครื่อง') : (type === 'individual' ? '📦 ดูรายชิ้น' : '📦 ดูล็อต');
+    const expiry = String(item.expiry_text ?? '');
+    const qtyNum = String(Math.round(Number(item.current_qty || 0) * 100) / 100);
+    const qtyText = counted ? `${UI.escape(qtyNum)}${type === 'non_expiring' ? unitWord : ''}` : 'ยังไม่ได้จัดขึ้นรถ';
+    const target = item.target_qty === null || item.target_qty === undefined || item.target_qty === '' ? null : item.target_qty;
+    const minText = target !== null
+      ? `ขั้นต่ำ ${UI.escape(String(Math.round(Number(target) * 100) / 100))}${type === 'non_expiring' ? unitWord : (item.unit ? ' ' + UI.escape(item.unit) : '')}`
+      : (String(item.standard || '').trim() ? `ขั้นต่ำ ${UI.escape(item.standard)}` : '');
+
+    // โครงการ์ดตอนขยาย: 1) ของบนรถตอนนี้ (ใช้บ่อยสุด อยู่บน) 2) ตั้งค่าอุปกรณ์ 3) บันทึก + เมนู ⋯ (พัก/ลบ)
+    return `
+    <article class="stock-card${item.active ? '' : ' is-off'}" data-item-id="${item.id}">
+      <details class="stock-collapse" data-item-id="${item.id}" ${this.openItems.has(item.id) ? 'open' : ''}>
+      ${this.renderItemSummary(item, type, counted, expiry, unitWord)}
+      <!-- ประเภทอยู่บนสุด: กำหนดว่ากล่องของบนรถด้านล่างนับแบบไหน (รายชิ้น / ล็อต / รายเครื่อง) -->
+      <div class="stock-type">
+        <label for="typ-${item.id}">ประเภท</label>
+        <select id="typ-${item.id}" data-item-id="${item.id}" data-field="item_type">
+          <option value="individual" ${type === 'individual' ? 'selected' : ''}>🧩 รายชิ้น (วันหมดอายุรายชิ้น)</option>
+          <option value="box" ${type === 'box' ? 'selected' : ''}>📦 กล่อง/ล็อต (วันหมดอายุทั้งกล่อง)</option>
+          <option value="non_expiring" ${type === 'non_expiring' ? 'selected' : ''}>🩺 ไม่มีวันหมดอายุ (รายเครื่อง)</option>
+        </select>
+        <p class="stock-type-hint txt-warn hidden" data-role="type-hint">⚠️ ยังมีของบนรถอยู่ — ต้องนำของออกให้หมดก่อน ถึงจะบันทึกการเปลี่ยนประเภทได้</p>
+      </div>
+      <section class="stock-onboard" aria-label="ของบนรถตอนนี้">
+        <div class="stock-onboard-head">
+          <label ${type === 'non_expiring' ? '' : `for="onb-${item.id}"`}>ของบนรถตอนนี้</label>
+          ${minText ? `<small>${minText}</small>` : ''}
+        </div>
+        ${type === 'non_expiring'
+          ? `<div class="stock-onboard-qty">${qtyText}</div>`
+          : `${UI.stepper(`id="onb-${item.id}" min="0" data-item-id="${item.id}" data-field="onboard_qty" value="${counted ? UI.escape(qtyNum) : ''}" placeholder="${counted ? '' : 'ยังไม่ได้จัด'}"`, 'ยอดบนรถ')}
+        <div class="add-dates" data-role="add-dates" data-item-id="${item.id}">${this.renderAddDates(item, 0)}</div>`}
+        <div class="stock-facts">
+          <div><span>หมดอายุเร็วสุด</span><b>${type === 'non_expiring' ? 'ไม่มีวันหมดอายุ' : (expiry ? UI.escape(UI.formatDateThai(expiry)) : '—')}</b></div>
+          <div><span>นับล่าสุด</span><b>${counted ? UI.escape(this.fmtStamp(counted)) : 'ยังไม่เคย'}</b></div>
+        </div>
+        <button type="button" class="stock-link-btn" data-action="lots" data-item-id="${item.id}" aria-expanded="false" data-label="${viewLabel} →">${viewLabel} →</button>
+        <div class="item-lots hidden" data-role="lots" aria-live="polite"></div>
+      </section>
+
+      <p class="stock-set-title">ตั้งค่าอุปกรณ์</p>
+      <div class="stock-fields">
+        <div class="stock-wide">
+          <label for="nm-${item.id}">ชื่ออุปกรณ์</label>
+          <input id="nm-${item.id}" type="text" value="${UI.escape(item.name)}" data-item-id="${item.id}" data-field="name">
+        </div>
+        <div>
+          <label for="std-${item.id}">ขั้นต่ำที่ต้องมี</label>
+          <input id="std-${item.id}" type="text" value="${UI.escape(item.standard)}" data-item-id="${item.id}" data-field="standard" placeholder="เช่น 5 หรือ 1 ชุด">
+        </div>
+        ${this.renderThresholdFields(item, type)}
+        ${type === 'non_expiring' ? `
+        <div class="flag-row">
+          <label><input type="checkbox" data-item-id="${item.id}" data-field="is_battery" ${item.is_battery ? 'checked' : ''}> 🔋 มีแบตเตอรี่</label>
+          <label><input type="checkbox" data-item-id="${item.id}" data-field="has_pressure" ${item.has_pressure ? 'checked' : ''}> 🫧 วัดแรงดัน (PSI)</label>
+        </div>` : ''}
+      </div>
+
+      <div class="stock-actions">
+        <p class="stock-dirty hidden" data-role="dirty">● มีการแก้ไขที่ยังไม่บันทึก</p>
+        <button type="button" class="stock-save" data-action="save" data-item-id="${item.id}" disabled>บันทึก</button>
+        <details class="stock-more">
+          <summary class="small-btn" aria-label="ตัวเลือกเพิ่มเติมของอุปกรณ์นี้" title="ตัวเลือกเพิ่มเติม">⋯</summary>
+          <div class="stock-more-menu">
+            <button type="button" class="stock-more-item" data-action="toggle" data-item-id="${item.id}">${item.active ? '⏸ พักใช้งาน' : '▶️ เปิดใช้งาน'}</button>
+            <button type="button" class="stock-more-item is-danger" data-action="delete" data-item-id="${item.id}">🗑 ลบอุปกรณ์</button>
+          </div>
+        </details>
+      </div>
+      </details>
+    </article>
+  `;
+  }
+
+  /** ผูกปุ่มในการ์ด — root = ทั้งรายการ (render ทั้งหมด) หรือการ์ดเดียว (เปลี่ยนประเภท) */
+  bindItemCards(root) {
+    // จำว่าเปิดการ์ดไหนไว้ — render ใหม่ (เช่น แก้ล็อต/พักใช้งาน) แล้วยังเปิดอยู่ (ปิดเองเมื่อบันทึกสำเร็จ)
+    root.querySelectorAll('details.stock-collapse').forEach(el => {
+      el.addEventListener('toggle', () => {
+        if (el.open) this.openItems.add(el.dataset.itemId); else this.openItems.delete(el.dataset.itemId);
+      });
+    });
+
+    root.querySelectorAll('[data-action="save"]').forEach(btn => {
+      btn.addEventListener('click', () => this.saveItem(btn.dataset.itemId));
+    });
+
+    root.querySelectorAll('[data-action="toggle"]').forEach(btn => {
+      btn.addEventListener('click', () => this.toggleItemActive(btn.dataset.itemId));
+    });
+
+    // ดูล็อต/รายชิ้น/เครื่อง = เปิดในการ์ดนี้เลย แก้ เพิ่ม นำออก ได้ที่นี่ (ไม่ย้ายหน้า)
+    root.querySelectorAll('[data-action="lots"]').forEach(btn => {
+      btn.addEventListener('click', () => this.toggleLots(btn));
+    });
+    // ยอดบนรถเพิ่มขึ้น → แสดงช่องวันหมดอายุ (กล่อง: 1 ช่อง | รายชิ้น: 1 ช่องต่อ 1 ชิ้นที่เพิ่ม)
+    root.querySelectorAll('[data-field="onboard_qty"]').forEach(input => {
+      input.addEventListener('input', () => this.refreshAddDates(input.dataset.itemId));
+    });
     // แก้/นำออกรายล็อต-รายชิ้น ในการ์ดเลย
-    container.querySelectorAll('[data-role="lots"]').forEach(box => {
+    root.querySelectorAll('[data-role="lots"]').forEach(box => {
       box.addEventListener('click', (e) => this.onLotViewClick(e, box));
     });
-    this.lotSheet = null;   // ข้อมูลล็อตโหลดใหม่ทุกครั้งที่ render รายการ (ยอดอาจเปลี่ยนจากการตรวจ/เติม)
 
-    container.querySelectorAll('[data-action="delete"]').forEach(btn => {
+    root.querySelectorAll('[data-action="delete"]').forEach(btn => {
       btn.addEventListener('click', () => this.deleteItem(btn.dataset.itemId));
     });
   }
@@ -635,7 +694,7 @@ class VehiclesPage {
     const box = document.querySelector(`[data-role="add-dates"][data-item-id="${itemId}"]`);
     if (!item || !box) return;
     const keep = [...box.querySelectorAll('input[type="date"]')].map(i => i.value);   // ไม่ล้างวันที่กรอกไว้แล้ว
-    box.innerHTML = this.renderAddDates(item, this.addCountFor(itemId));
+    box.innerHTML = this.renderAddDates({ ...item, item_type: this.selectedItemType(item) }, this.addCountFor(itemId));
     box.querySelectorAll('input[type="date"]').forEach((i, k) => { if (keep[k]) i.value = keep[k]; });
   }
 
@@ -1263,13 +1322,13 @@ class VehiclesPage {
       const current = Math.round(Number(item.current_qty || 0) * 100) / 100;
       if (!counted || Math.round(n * 100) / 100 !== current) {
         data.onboard_qty = Math.round(n * 100) / 100;
-        if (item.item_type === 'individual' && !Number.isInteger(data.onboard_qty)) {
+        if (this.selectedItemType(item) === 'individual' && !Number.isInteger(data.onboard_qty)) {
           window.toast.error('ของแบบชิ้นต้องเป็นจำนวนเต็ม');
           return null;
         }
         if (data.onboard_qty > current) {
           const today = this.todayIso();
-          if (item.item_type === 'individual') {
+          if (this.selectedItemType(item) === 'individual') {
             // 1 ช่อง = 1 ชิ้น — ทุกชิ้นต้องมีวันหมดอายุ
             const inputs = [...document.querySelectorAll(`[data-item-id="${itemId}"][data-field="piece_expiry"]`)];
             const empty = inputs.find(i => !i.value);

@@ -345,6 +345,11 @@
   margin: 0;
 }
 
+#stockTable .stock-type-hint {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+}
+
 #stockTable .stock-onboard {
   display: grid;
   gap: 8px;
