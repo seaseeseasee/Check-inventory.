@@ -50,7 +50,7 @@ class NotificationCenter {
     if (!this.badge || !this.fab) return;
     this.badge.textContent = count > 99 ? '99+' : String(count);
     this.badge.classList.toggle('hidden', count === 0);
-    this.fab.setAttribute('aria-label', count > 0 ? `ขอความช่วยเหลือ · รอเติม ${count} รายการ` : 'ขอความช่วยเหลือ');
+    this.fab.setAttribute('aria-label', count > 0 ? `การแจ้งเตือนและความช่วยเหลือ · รอเติม ${count} รายการ` : 'การแจ้งเตือนและความช่วยเหลือ');
     if (this.text) this.text.textContent = count > 0 ? `รอเติม ${count} รายการ` : 'ไม่มีรายการรอเติม';
     this.goBtn?.classList.toggle('has-items', count > 0);
   }

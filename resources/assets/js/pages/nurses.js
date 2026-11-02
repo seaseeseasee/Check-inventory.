@@ -475,8 +475,8 @@ class NursesPage {
       const sub = [
         `รหัส ${UI.escape(nurse.id)}`,
         UI.escape((nurse.department || '').trim() || 'ไม่ระบุวอร์ด'),
-        acc ? `🔑 ${UI.escape(acc.username)}` : '',
-        nurse.phone && (!acc || acc.username !== NursesPage.phoneUsername(nurse.phone)) ? `📞 ${UI.escape(nurse.phone)}` : '',
+        acc ? `${UI.escape(acc.username)}` : '',
+        nurse.phone && (!acc || acc.username !== NursesPage.phoneUsername(nurse.phone)) ? `${UI.escape(nurse.phone)}` : '',
       ].filter(Boolean).join(' · ');
       return `
       <button type="button" class="user-row${statusKey === 'inactive' ? ' is-off' : ''}" data-index="${index}" data-id="${UI.escape(nurse.id)}"
@@ -500,7 +500,7 @@ class NursesPage {
   static rowBadge(personActive, acc) {
     if (!personActive) return '<span class="user-badge is-off">พักใช้งาน</span>';
     if (acc && !acc.active) return '<span class="user-badge is-off">ปิดบัญชี</span>';
-    if (acc?.role === 'admin') return '<span class="user-badge is-admin">👑 Admin</span>';
+    if (acc?.role === 'admin') return '<span class="user-badge is-admin">Admin</span>';
     if (acc) return '<span class="user-badge is-staff">Staff</span>';
     return '<span class="user-badge is-none">ยังไม่มีบัญชี</span>';
   }
@@ -837,7 +837,7 @@ class NursesPage {
     if (!el) return;
     let text = '';
     if (this.editingLoginUsername) {
-      text = `🔑 บัญชีปัจจุบัน: ${this.editingLoginUsername} — เว้นช่องรหัสผ่านว่างไว้เพื่อใช้รหัสเดิม`;
+      text = `บัญชีปัจจุบัน: ${this.editingLoginUsername} — เว้นช่องรหัสผ่านว่างไว้เพื่อใช้รหัสเดิม`;
     } else if (this.editingId) {
       text = 'ยังไม่มีบัญชีเข้าใช้งาน — กรอกเบอร์โทรเป็นชื่อผู้ใช้เพื่อสร้างบัญชี (รหัสเริ่มต้น = เบอร์โทร ผู้ใช้จะถูกบังคับเปลี่ยนตอนเข้าครั้งแรก)';
     }
@@ -1668,7 +1668,7 @@ class NursesPage {
     failureNotes.slice(0, 3).forEach((note) => console.warn('นำเข้าไม่สำเร็จ —', note));
 
     if (imported > 0) {
-      this.showFileStatus(file, failed ? 'warn' : 'done', `${failed ? '⚠' : '✓'} ${summaryParts.join(' · ')}`);
+      this.showFileStatus(file, failed ? 'warn' : 'done', `${failed ? '' : '✓'} ${summaryParts.join(' · ')}`);
       window.toast.success(imported === pending.length
         ? `นำเข้าสำเร็จครบ ${imported} รายชื่อ`
         : `${summaryParts.join(' · ')} — ดูรายละเอียดในแถบสถานะไฟล์`);

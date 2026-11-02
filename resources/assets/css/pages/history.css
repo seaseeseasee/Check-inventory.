@@ -26,7 +26,7 @@
 .report-toolbar {
   background: #f8fafc;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid var(--line);
   margin-bottom: 12px;
 }

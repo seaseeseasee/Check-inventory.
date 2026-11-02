@@ -3,41 +3,50 @@
    ======================================== */
 
 :root {
-  /* Colors - Teal Theme */
-  --teal-900: #134e4a;
-  --teal-800: #115e59;
-  --teal-700: #0f766e;
-  --teal-600: #0d9488;
-  --teal-500: #14b8a6;
-  --teal-400: #2dd4bf;
-  --teal-300: #5eead4;
-  --teal-200: #99f6e4;
-  --teal-100: #ccfbf1;
-  --teal-50: #f0fdfa;
+  /* Colors - Clinical Navy (เดิมเป็นโทนเขียวมิ้นต์)
+     คงชื่อ --teal-* ไว้เพราะทุกไฟล์อ้างถึง — ค่าเป็นสเกลน้ำเงินกรมท่า (700 บนพื้นขาว 7.5:1) */
+  --teal-900: #0b1f3a;
+  --teal-800: #13305a;
+  --teal-700: #1a4f9c;
+  --teal-600: #1f5fb8;
+  --teal-500: #3b7bd4;
+  --teal-400: #6ea0e3;
+  --teal-300: #a9c5ee;
+  --teal-200: #ccddf5;
+  --teal-100: #e3ecf9;
+  --teal-50: #f3f7fd;
+
+  /* Brand */
+  --navy-900: #0b1f3a;   /* แถบเมนู */
+  --navy-800: #13294a;
+  --navy-700: #1c3d6b;   /* เมนูที่เลือก */
+  --navy-line: #1f3656;
+  --navy-text: #c3cedd;  /* ตัวอักษรบนพื้นกรมท่า 9.6:1 */
+  --navy-muted: #a9b8cf;
 
   /* Semantic Colors */
   --ink: #0f172a;
-  --muted: #64748b;
-  --line: #e2e8f0;
+  --muted: #5b6b82;      /* บนพื้นขาว 5.3:1 */
+  --line: #dde3ea;
   --card: #ffffff;
-  --bg: #f8fafc;
+  --bg: #f4f6f9;
 
   /* Status Colors */
-  --ok: #059669;
-  --ok-soft: #d1fae5;
-  --warn: #d97706;
-  --warn-soft: #fef3c7;
-  --bad: #dc2626;
-  --bad-soft: #fee2e2;
-  --info: #0284c7;
-  --info-soft: #e0f2fe;
+  --ok: #166534;
+  --ok-soft: #e6f4ea;
+  --warn: #b45309;
+  --warn-soft: #fdf1d8;
+  --bad: #b42318;
+  --bad-soft: #fde8e6;
+  --info: #1a4f9c;
+  --info-soft: #e7eef9;
 
   /* พื้นทึบ + ตัวอักษรขาวเสมอ (status.css) — แดง = ของขาด/ผิดพลาดร้ายแรง, น้ำเงิน = ปุ่มหลัก/ปุ่มดำเนินการ */
-  --danger: #dc2626;          /* ขาว 4.83:1 */
-  --danger-strong: #b91c1c;   /* ขาว 6.47:1 — ขอบ/hover */
+  --danger: #b42318;          /* ขาว 6.5:1 */
+  --danger-strong: #912018;   /* ขาว 8.6:1 — ขอบ/hover */
   --on-danger: #ffffff;
-  --primary: #2563eb;         /* ขาว 5.17:1 */
-  --primary-strong: #1d4ed8;  /* ขาว 6.70:1 */
+  --primary: #1a4f9c;         /* ขาว 7.5:1 */
+  --primary-strong: #13305a;  /* ขาว 12:1 */
   --on-primary: #ffffff;
 
   /* Spacing */
@@ -50,16 +59,16 @@
   --space-8: 32px;
 
   /* Border Radius */
-  --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 22px;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
   --radius-full: 999px;
 
   /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
-  --shadow: 0 2px 12px rgba(13, 148, 136, 0.10);
-  --shadow-lg: 0 8px 30px rgba(15, 23, 42, 0.15);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.14);
   --shadow-xl: 0 24px 70px rgba(0, 0, 0, 0.4);
 
   /* Transitions */
@@ -74,6 +83,12 @@
   --z-modal: 1100;
   --z-toast: 1200;
   --z-auth-gate: 10000;
+
+  /* ฟอนต์ในเครื่อง (CSP font-src 'self' — ไม่โหลดจาก Google Fonts) */
+  --font-sans: "IBM Plex Sans Thai", "Noto Sans Thai", "Leelawadee UI", "Sarabun", "Segoe UI", Tahoma, system-ui, -apple-system, sans-serif;
+
+  /* ความกว้างแถบเมนูซ้าย (จอ ≥ 1024px) */
+  --sidebar-w: 248px;
 }
 
 *,
@@ -90,8 +105,8 @@ html {
 
 body {
   margin: 0;
-  font-family: "Segoe UI", Tahoma, system-ui, -apple-system, sans-serif;
-  background: linear-gradient(180deg, var(--teal-50) 0%, var(--teal-50) 240px, var(--bg) 100%);
+  font-family: var(--font-sans);
+  background: var(--bg);
   color: var(--ink);
   line-height: 1.5;
   min-height: 100vh;
@@ -131,16 +146,16 @@ a:hover {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--teal-50);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--teal-300);
+  background: #cbd5e1;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--teal-400);
+  background: #94a3b8;
 }
 
 /* Utility Classes */

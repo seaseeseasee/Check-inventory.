@@ -128,5 +128,5 @@ window.vehicleChip = function (ref, extraClass) {
   const fg = window.vehicleTextColor(bg);
   const label = String(window.vehiclePlate(ref))
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  return `<span class="vehicle-chip ${extraClass || ''}" style="background:${bg};color:${fg}">🚑 ${label}</span>`;
+  return `<span class="vehicle-chip ${extraClass || ''}" style="background:${bg};color:${fg}">${label}</span>`;
 };

@@ -34,8 +34,8 @@ textarea {
 }
 input[type="checkbox"], input[type="radio"] { width: 24px; height: 24px; accent-color: var(--teal-700); vertical-align: middle; }
 /* ปุ่มทั่วไปกะทัดรัดขึ้น แต่ยังกดง่าย (≥ 40px ผ่าน WCAG 2.2 target size) — ปุ่มหลักของหน้าตรวจ/แถบบันทึกกำหนดขนาดเองด้านล่าง */
-button { font-size: 0.95rem; min-height: 44px; padding: 8px 16px; border-radius: 12px; }
-.small-btn { font-size: 0.85rem; min-height: 40px; padding: 6px 12px; border-radius: 10px; }
+button { font-size: 0.95rem; min-height: 44px; padding: 8px 16px; border-radius: 8px; }
+.small-btn { font-size: 0.85rem; min-height: 40px; padding: 6px 12px; border-radius: 6px; }
 .chip-btn, .seg-btn { min-height: 40px; font-size: 0.85rem; }
 .bat-btn { min-height: 52px; font-size: 0.95rem; }
 .signout { min-height: 48px; font-size: 0.8rem; }
@@ -58,7 +58,7 @@ summary { min-height: 48px; display: flex; align-items: center; cursor: pointer;
 .stepper button:active { background: #cbd5e1; }
 
 /* ---------- การ์ดตรวจ/เติมของ: ชื่อและจำนวนเด่น ---------- */
-.check-card, .refill-card, .request-card { padding: 14px; border-radius: 16px; }
+.check-card, .refill-card, .request-card { padding: 14px; border-radius: 6px; }
 .check-card-head strong, .refill-card .check-card-head strong { font-size: 1.1rem; line-height: 1.35; }
 .qty-big { font-size: 1.05rem; margin: 6px 0 2px; }
 .qty-big b { font-size: 1.3rem; }
@@ -100,7 +100,7 @@ summary { min-height: 48px; display: flex; align-items: center; cursor: pointer;
     gap: 3px;
     line-height: 1.15;
     font-size: 0.8rem;
-    border-radius: 12px;
+    border-radius: 8px;
   }
   .tab-ico { font-size: 1.4rem; }
   body { padding-bottom: 88px; }
@@ -124,7 +124,7 @@ summary { min-height: 48px; display: flex; align-items: center; cursor: pointer;
   align-items: center;
   background: rgba(255, 255, 255, 0.96);
   border: 1.5px solid var(--teal-100);
-  border-radius: 16px;
+  border-radius: 6px;
   padding: 8px;
   box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.10);
 }
@@ -210,7 +210,7 @@ html, body { overflow-x: hidden; }
 /* หน้าตั้งค่ารถ: ดูล็อตในการ์ด */
 .item-lots-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .item-lots-actions .small-btn { flex: 1 1 130px; }
-.item-lots { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.item-lots { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .lot-view { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 0.9rem; }
 .lot-view .lot-state { font-weight: 700; }
 .lot-view .lv-expired .lot-state { color: var(--bad); }
@@ -271,7 +271,7 @@ html, body { overflow-x: hidden; }
 .wiz h2 { font-size: 1.35rem; line-height: 1.35; margin: 4px 0 6px; color: #0f172a; }   /* ~24px */
 .wiz-sub { margin: 0 0 12px; color: #334155; font-weight: 600; }
 .wiz-picked { margin: 0 0 12px; font-weight: 700; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.wiz-lock { margin: 8px 0 4px; padding: 14px; border-radius: 14px; background: var(--teal-50); border: 2px solid var(--teal-300); font-weight: 800; color: var(--teal-800); }
+.wiz-lock { margin: 8px 0 4px; padding: 14px; border-radius: 8px; background: var(--teal-50); border: 2px solid var(--teal-300); font-weight: 800; color: var(--teal-800); }
 .wiz-lock.is-error { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
 
 .pick-list { display: grid; gap: 10px; margin-top: 10px; }
@@ -304,7 +304,7 @@ html, body { overflow-x: hidden; }
 .wiz-bar .shift-hint:empty { display: none; }
 .wiz-bar button:disabled { opacity: 0.55; }
 
-.sum-block { margin: 0 0 12px; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--line); background: #fff; }
+.sum-block { margin: 0 0 12px; padding: 12px 14px; border-radius: 8px; border: 2px solid var(--line); background: #fff; }
 .sum-block.is-ok { border-color: #6ee7b7; background: #ecfdf5; }
 .sum-block.is-warn { border-color: #fcd34d; background: #fffbeb; }
 .sum-block.is-bad { border-color: #fca5a5; background: #fef2f2; }
@@ -316,10 +316,6 @@ html, body { overflow-x: hidden; }
 
 .wiz-done { text-align: center; padding: 24px 8px 8px; }
 .wiz-done-icon { font-size: 64px; line-height: 1; margin-bottom: 12px; }
-.wiz-done-mascot { position: relative; width: 150px; margin: 0 auto 8px; animation: help-cat-pop 0.3s ease-out; }
-.wiz-done-mascot img { display: block; width: 150px; height: auto; }
-.wiz-done-badge { position: absolute; right: -6px; bottom: 6px; font-size: 40px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.2)); }
-@media (prefers-reduced-motion: reduce) { .wiz-done-mascot { animation: none; } }
 .wiz-done p { font-size: 1.05rem; color: #1e293b; }
 .wiz-done-actions { display: grid; gap: 14px; margin-top: 16px; }
 .wiz-done-actions button { margin: 0; min-height: 56px; font-size: 1.1rem; }
@@ -329,7 +325,7 @@ html, body { overflow-x: hidden; }
 .help-steps { margin: 0 0 14px; padding-left: 22px; display: grid; gap: 8px; line-height: 1.6; }
 #inspectionHelp .sheet > button, .wiz-call { width: 100%; margin: 8px 0 0; min-height: 56px; }
 .wiz-call {
-  display: flex; align-items: center; justify-content: center; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center; border-radius: 8px;
   background: #c2410c; color: #fff; font-weight: 800; font-size: 1.1rem; text-decoration: none;
 }
 .check-card.is-focus { border: 2px solid #f59e0b; box-shadow: 0 0 0 4px #fde68a; }
@@ -343,12 +339,12 @@ html, body { overflow-x: hidden; }
 .item-type-pick { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; }
 .item-type-pick legend { font-weight: 700; color: #1e293b; margin-bottom: 6px; padding: 0; }
 /* หน้าต่างเพิ่มอุปกรณ์: รายละเอียดตามประเภท (จำนวน / วันหมดอายุ / เครื่อง-ถัง) */
-.item-details { margin: 0; padding: 12px; border: 2px dashed #cbd5e1; border-radius: 12px; display: grid; gap: 12px; }
+.item-details { margin: 0; padding: 12px; border: 2px dashed #cbd5e1; border-radius: 8px; display: grid; gap: 12px; }
 .item-details legend { font-weight: 700; color: #1e293b; padding: 0 6px; }
 .item-details legend small { font-weight: 600; color: #475569; }
 .item-type-opt {
   display: flex; align-items: center; gap: 12px; margin: 0; min-height: 60px; padding: 10px 14px;
-  border: 2px solid #cbd5e1; border-radius: 14px; background: #fff; cursor: pointer;
+  border: 2px solid #cbd5e1; border-radius: 8px; background: #fff; cursor: pointer;
 }
 .item-type-opt span { display: flex; flex-direction: column; gap: 2px; }
 .item-type-opt b { font-size: 1.05rem; color: #0f172a; }

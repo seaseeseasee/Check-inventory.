@@ -7,7 +7,7 @@
   position: sticky;
   top: 0;
   z-index: var(--z-sticky);
-  box-shadow: 0 4px 18px rgba(15, 118, 110, 0.18);
+  box-shadow: none;
 }
 
 #mainHeader {
@@ -15,7 +15,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
-  background: linear-gradient(135deg, var(--teal-700), var(--teal-600) 55%, var(--teal-500));
+  background: var(--navy-900);
   color: #fff;
 }
 
@@ -24,7 +24,7 @@
   height: 48px;
   flex-shrink: 0;
   background: #fff;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 4px;
   object-fit: contain;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
@@ -83,7 +83,7 @@
   background: #f8fafc;
   color: var(--muted);
   border: 1.5px solid transparent;
-  border-radius: 12px;
+  border-radius: 8px;
   transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
@@ -131,7 +131,7 @@
 /* Card */
 .card {
   background: var(--card);
-  border: 1px solid rgba(13, 148, 136, 0.10);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
   padding: 18px;
@@ -167,7 +167,7 @@ textarea {
   min-height: 46px;
   font-size: 16px;
   border: 1.5px solid #d1d5db;
-  border-radius: 10px;
+  border-radius: 6px;
   background: #fff;
   color: var(--ink);
   font-family: inherit;
@@ -193,7 +193,7 @@ input[type="file"] {
   font-size: 14px;
   padding: 18px 12px;
   border: 1.5px dashed var(--teal-200);
-  border-radius: 10px;
+  border-radius: 6px;
   background: var(--teal-50);
 }
 
@@ -217,9 +217,9 @@ button {
   font-size: 15px;
   font-weight: 700;
   border: none;
-  border-radius: 12px;
+  border-radius: 8px;
   color: #fff;
-  background: linear-gradient(135deg, var(--teal-600), var(--teal-700));
+  background: var(--primary);
   transition: transform 0.06s, filter 0.15s;
 }
 
@@ -243,7 +243,7 @@ button:disabled {
 }
 
 button.secondary {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  background: var(--primary);
 }
 
 button.gray {
@@ -266,7 +266,7 @@ button.warning {
   margin: 0;
   padding: 8px 14px;
   font-size: 13px;
-  border-radius: 10px;
+  border-radius: 6px;
   background: #f1f5f9;
   color: #334155;
   border: 1.5px solid var(--line);
@@ -289,8 +289,8 @@ button.warning {
 }
 .small-btn.secondary,
 .small-btn.secondary:is(:hover, :active, :disabled) {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
-  border-color: #1d4ed8;
+  background: var(--primary);
+  border-color: var(--primary);
 }
 .small-btn.danger,
 .small-btn.danger:is(:hover, :active, :disabled) {
@@ -319,7 +319,7 @@ button.warning {
   color: var(--muted);
   background: #f8fafc;
   border: 1px dashed var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 /* Muted Text */

@@ -1,0 +1,322 @@
+/* ========================================
+   THEME: Clinical Navy (enterprise)
+   โหลดหลัง a11y.css และก่อน status.css — ปรับหน้าตาอย่างเดียว ไม่แตะ id/class ที่ JS ใช้
+   โครงเมนู: จอ ≥ 1024px = แถบเมนูซ้าย · 761–1023px = แท็บด้านบน · ≤ 760px = เมนูล่าง (a11y.css)
+   ======================================== */
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible, button:focus-visible, .small-btn:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--teal-500) !important;
+  outline-offset: 2px;
+}
+
+/* ---------- ปุ่ม: สีทึบ ไม่ไล่สี มุมโค้งน้อย ---------- */
+button {
+  background: var(--primary);
+  border-radius: var(--radius);
+  font-weight: 600;
+  letter-spacing: 0.005em;
+}
+button:hover { background: var(--primary-strong); filter: none; }
+button:active { transform: none; filter: brightness(0.96); }
+button.secondary,
+.small-btn.secondary,
+.small-btn.secondary:is(:hover, :active, :disabled) {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+button.secondary:hover, .small-btn.secondary:hover { background: var(--primary-strong); filter: none; }
+button.gray,
+.small-btn,
+.small-btn.gray {
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius);
+}
+button.gray:hover, .small-btn:hover, .small-btn.gray:hover { background: #f1f5f9; color: #1e293b; }
+button.danger, .small-btn.danger { background: var(--danger); border-color: var(--danger); }
+button.danger:hover, .small-btn.danger:hover { background: var(--danger-strong); filter: none; }
+
+/* ---------- ช่องกรอก ---------- */
+input:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius);
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  border-color: var(--teal-600);
+  outline: 3px solid var(--teal-200) !important;
+  outline-offset: 0;
+}
+input[type="file"] { border: 1px dashed var(--teal-300); border-radius: var(--radius-lg); background: var(--teal-50); }
+label { font-weight: 600; color: #334155; }
+
+/* ---------- การ์ด / หัวข้อ ---------- */
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+.card h2 { color: var(--ink); font-weight: 700; letter-spacing: -0.005em; }
+.card h3 { color: var(--ink); }
+.page-title h1 { color: var(--ink); }
+.sheet { border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+.sheet h3 { color: var(--ink); }
+.empty { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: var(--radius-lg); }
+
+/* ป้ายสถานะ: สี่เหลี่ยมมุมมน 4px อ่านเร็วในตาราง/รายการ */
+.chip, .result-chip, .plate-chip, .car-stat, .type-badge, .stock-chip, .std-chip, .detail-chip {
+  border-radius: var(--radius-sm) !important;
+}
+.plate-chip { background: var(--teal-100); color: var(--teal-800); }
+
+/* สรุปตัวเลข */
+.stat {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 12px 10px;
+}
+.stat b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.progress-fill { background: var(--teal-700); }
+
+/* การ์ดเลือกรถ */
+.car-symbol {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--ink);
+}
+.car-symbol:hover { background: #f8fafc; }
+.car-symbol img { width: 48px; height: 48px; }
+.car-symbol[aria-pressed="true"] {
+  background: var(--teal-50);
+  border-color: var(--teal-700);
+  box-shadow: 0 0 0 2px var(--teal-700);
+  transform: none;
+}
+
+/* หน้าตรวจ: ปุ่มช่วยเหลือเป็นปุ่มรอง ไม่ใช่สีส้ม */
+.wiz-help { background: #fff; color: var(--teal-800); border: 1px solid var(--teal-300); }
+.wiz-help:hover { background: var(--teal-50); color: var(--teal-800); }
+.wiz-dots li { height: 6px; }
+.wiz-call { background: var(--primary); border-radius: var(--radius); }
+.save-bar { border: 1px solid var(--line); border-radius: var(--radius-lg); }
+
+/* ช่องสถานะไฟล์นำเข้า: ไอคอนเดิมเป็น emoji ถูกนำออก */
+.user-file-status > span[aria-hidden="true"]:empty { display: none; }
+.user-dropzone-ico { display: flex; justify-content: center; color: var(--teal-700); }
+
+/* ปุ่มเอาออกในรายการรอคัดลอก (ไอคอนถังขยะ) */
+.copy-row-remove { display: inline-flex; align-items: center; justify-content: center; }
+
+/* utility สี teal ใน tailwind.css ถูกคอมไพล์เป็นค่าเขียวตายตัว → ชี้กลับมาที่สเกลน้ำเงิน */
+.bg-teal-50 { background-color: var(--teal-50) !important; }
+.bg-teal-100 { background-color: var(--teal-100) !important; }
+.bg-teal-600 { background-color: var(--teal-600) !important; }
+.border-teal-200 { border-color: var(--teal-200) !important; }
+.border-teal-300 { border-color: var(--teal-300) !important; }
+.border-teal-500 { border-color: var(--teal-500) !important; }
+.text-teal-600 { color: var(--teal-600) !important; }
+.text-teal-700 { color: var(--teal-700) !important; }
+.text-teal-800 { color: var(--teal-800) !important; }
+
+/* ---------- หน้าเข้าสู่ระบบ ---------- */
+#authGate, #pwGate:not([hidden]) { background: var(--navy-900); }
+.auth-card { border-radius: var(--radius-xl); padding: 28px 24px 24px; }
+.auth-card h2 { color: var(--ink); font-weight: 700; }
+
+/* ========================================
+   SHELL: หัวเว็บ + เมนู
+   ======================================== */
+.app-top { box-shadow: none; }
+/* auth.js ซ่อนหัวเว็บด้วย [hidden] ตอนบังคับเปลี่ยนรหัสผ่าน — display:flex ด้านล่างต้องไม่ทับ */
+.app-top[hidden] { display: none !important; }
+@media (min-width: 1024px) {
+  body:has(.app-top[hidden]) { padding-left: 0; }
+}
+
+#mainHeader {
+  background: var(--navy-900);
+  color: #fff;
+  gap: 12px;
+}
+/* ตรากรมสุขภาพจิต (images/dmh-seal.png ตัดเป็นวงกลมพื้นโปร่งใส) — วางบนวงกลมขาวให้เห็นชัดบนพื้นกรมท่า */
+.brand-mark {
+  flex-shrink: 0;
+  display: block;
+  width: 40px;
+  height: 40px;
+  padding: 2px;
+  border-radius: 50%;
+  background: #fff;
+  object-fit: contain;
+}
+.header-name { font-weight: 700; letter-spacing: 0.005em; }
+.header-user { color: var(--navy-muted); font-weight: 500; opacity: 1; }
+
+.signout {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid var(--navy-line);
+  color: var(--navy-text);
+  font-weight: 600;
+}
+.signout:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.signout:active { background: rgba(255, 255, 255, 0.1); }
+
+.tab-ico { display: flex; align-items: center; justify-content: center; }
+.tab-ico svg { width: 20px; height: 20px; }
+
+.storage-note {
+  color: var(--muted);
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+}
+.storage-note[data-state="error"] { color: #912018; background: var(--bad-soft); border-bottom-color: #f5c2bc; }
+
+/* ---------- แท็บเล็ต (761–1023px): หัวกรมท่า + แท็บขาวขีดเส้นใต้ ---------- */
+@media (min-width: 761px) and (max-width: 1023px) {
+  .nav-tabs { gap: 4px; padding: 0 12px; background: #fff; }
+  .tab-btn {
+    flex: 1 1 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 52px;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+  }
+  .tab-btn:hover { background: #f8fafc; color: var(--ink); }
+  .tab-btn.active { background: transparent; color: var(--teal-700); border-bottom-color: var(--teal-700); }
+}
+
+/* ---------- จอใหญ่ (≥ 1024px): แถบเมนูซ้าย ---------- */
+@media (min-width: 1024px) {
+  /* แถบ sticky ในหน้าวัดความสูงหัวเว็บด้วย JS (--app-top-h) — แถบซ้ายไม่บังด้านบน จึงบังคับเป็น 0
+     (!important ในสไตล์ชีตชนะค่า inline ที่ JS ตั้งบน <html>) */
+  :root { --app-top-h: 0px !important; }
+
+  body { padding-left: var(--sidebar-w); }
+
+  .app-top {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--sidebar-w);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 16px 84px;   /* เว้นล่างให้ปุ่มออกจากระบบ */
+    background: var(--navy-900);
+    overflow-y: auto;
+  }
+  #mainHeader {
+    padding: 0 4px 20px;
+    background: transparent;
+    align-items: center;
+  }
+  #headerTitle { min-width: 0; }
+  .header-name { font-size: 0.95rem; }
+  .header-user { white-space: normal; font-size: 0.8rem; }
+  .signout {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    width: auto;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .nav-tabs {
+    flex-direction: column;
+    gap: 4px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    overflow: visible;
+  }
+  .tab-btn {
+    flex: none;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    margin: 0;
+    padding: 0 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-align: left;
+    color: var(--navy-text);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius);
+  }
+  .tab-btn:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+  .tab-btn.active { background: var(--navy-700); color: #fff; font-weight: 600; border: 0; }
+  .tab-btn:focus-visible { outline-color: var(--teal-400) !important; }
+
+  .storage-note {
+    margin-top: auto;
+    padding: 12px 4px 0;
+    background: transparent;
+    border: 0;
+    color: var(--navy-muted);
+    white-space: normal;
+  }
+  .storage-note[data-state="error"] { background: transparent; color: #fca5a5; }
+
+  .container { max-width: 1120px; padding: 12px 20px 48px; }
+  .card { margin: 16px 0; padding: 20px 24px; }
+}
+
+/* ---------- มือถือ (≤ 760px): หัวกรมท่าแบบย่อ + เมนูล่างพื้นขาว ---------- */
+@media (max-width: 760px) {
+  #mainHeader { padding: 10px 12px; }
+  .brand-mark { width: 36px; height: 36px; }
+  .signout { width: 44px; min-height: 44px; padding: 0; justify-content: center; }
+  .signout-txt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  .nav-tabs { background: #fff; box-shadow: 0 -1px 0 var(--line); }
+  .tab-btn {
+    position: relative;
+    background: transparent;
+    color: var(--muted);
+    border: 0;
+    border-radius: 0;
+    font-weight: 600;
+  }
+  .tab-btn:hover { background: transparent; color: var(--ink); }
+  .tab-btn.active { background: transparent; color: var(--teal-700); border: 0; }
+  .tab-btn.active::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: 28%;
+    right: 28%;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--teal-700);
+  }
+  .tab-ico svg { width: 22px; height: 22px; }
+  .tab-txt-long { display: none; }
+}

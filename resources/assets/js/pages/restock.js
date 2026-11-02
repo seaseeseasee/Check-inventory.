@@ -6,10 +6,10 @@
 //   ส่งซ้ำ/กดซ้ำ/เน็ตหลุดแล้วลองใหม่ด้วย token เดิม → ได้ผลเดิม ไม่เติมซ้ำ
 // - ไม่มีการลบล็อต: ยกเลิก/จำหน่ายหมดอายุ/ปรับยอด เป็น movement ที่ย้อนดูได้
 
-const REFILL_TYPE_LABEL = { box: '📦 กล่อง', individual: '🧩 รายชิ้น', non_expiring: '🩺 ไม่มีวันหมดอายุ' };
+const REFILL_TYPE_LABEL = { box: 'กล่อง', individual: 'รายชิ้น', non_expiring: 'ไม่มีวันหมดอายุ' };
 const UNIT_TYPES = ['non_expiring'];
 const LOT_STATE_LABEL = { expired: 'หมดอายุแล้ว', soon: 'ใกล้หมดอายุ', ok: 'ใช้ได้', unknown: 'รอตรวจสอบวันหมดอายุ', na: 'ไม่มีวันหมดอายุ' };
-const UNIT_STATUS_LABEL = { ready: '✅ พร้อมใช้', not_ready: '⛔ ไม่พร้อมใช้', no_power: '🔋 เปิดไม่ติด', pending: '⏳ รอตรวจ' };
+const UNIT_STATUS_LABEL = { ready: 'พร้อมใช้', not_ready: 'ไม่พร้อมใช้', no_power: 'เปิดไม่ติด', pending: 'รอตรวจ' };
 const MOVEMENT_LABEL = {
   INIT: 'ยอดตั้งต้น', REFILL: 'รับเข้า/เติม', USE: 'ใช้ไป', ADJUST: 'ปรับยอด', REVERSAL: 'ย้อนผลรอบตรวจ',
   EXPIRE: 'จำหน่ายหมดอายุ', VOID: 'ยกเลิกล็อต', LOT_EDIT: 'แก้ข้อมูลล็อต', RESET: 'ล้างสต็อกเริ่มระบบใหม่',
@@ -236,12 +236,12 @@ class RefillPage {
     const list = document.getElementById('refillItems');
     if (list) {
       const clearBtn = narrowed ? '<button type="button" class="small-btn gray" data-call="clearRefillNarrow">ล้างการค้นหา / ประเภท</button>' : '';
-      list.innerHTML = (hiddenDrafts ? `<p class="refill-hidden-note">✏️ มีรายการที่กรอกไว้แต่ถูกซ่อนด้วยตัวกรอง ${hiddenDrafts} รายการ — จะถูกบันทึกด้วยเมื่อกดบันทึก</p>` : '')
+      list.innerHTML = (hiddenDrafts ? `<p class="refill-hidden-note">มีรายการที่กรอกไว้แต่ถูกซ่อนด้วยตัวกรอง ${hiddenDrafts} รายการ — จะถูกบันทึกด้วยเมื่อกดบันทึก</p>` : '')
         + (shown.length
           ? shown.map(item => `<div class="refill-card" data-id="${UI.escape(item.id)}">${this.renderItem(item)}</div>`).join('')
           : (this.filter === 'all'
             ? `<div class="empty">${narrowed ? 'ไม่พบอุปกรณ์ที่ตรงกับการค้นหา / ประเภท' : 'ไม่พบรายการ'} ${clearBtn}</div>`
-            : `<div class="empty">${this.filter === 'need' ? '✅ ไม่มีของขาด' : 'ไม่พบรายการ'}${narrowed ? ' (ในกลุ่มที่เลือก)' : ''}
+            : `<div class="empty">${this.filter === 'need' ? 'ไม่มีของขาด' : 'ไม่พบรายการ'}${narrowed ? ' (ในกลุ่มที่เลือก)' : ''}
                 <button type="button" class="small-btn" data-call="setRefillFilter" data-arg="all">แสดงทั้งหมด (เติมรายการอื่น)</button> ${clearBtn}</div>`));
     }
     this.renderSummary();
@@ -250,12 +250,12 @@ class RefillPage {
   // สถานะที่ต้องเห็นทันที (ของขาด/หมดอายุ/ใกล้หมดอายุ) — แสดงบนการ์ดเสมอ ไม่ซ่อนในรายละเอียด
   statusChips(item, unit) {
     const chips = [];
-    if (!item.counted) chips.push('<span class="result-chip result-pending">📭 ยังไม่ได้จัดขึ้นรถ</span>');
-    if (item.not_ready > 0) chips.push(`<span class="result-chip result-anomaly">⛔ ไม่พร้อมใช้ ${item.not_ready} — ตรวจสอบ/เปลี่ยน</span>`);
-    if (item.low > 0) chips.push(`<span class="result-chip result-needs_refill">🔋 แบต/แรงดันต่ำ ${item.low} — ชาร์จ/เติม</span>`);
-    if (item.shortfall > 0) chips.push(`<span class="result-chip result-needs_refill">⚠️ ของขาด ${this.fmt(item.shortfall)}${unit}</span>`);
-    if (item.stock && item.stock.expired > 0) chips.push(`<span class="result-chip result-anomaly">⛔ หมดอายุแล้ว ${this.fmt(item.stock.expired)}</span>`);
-    else if (item.expiry && item.expiry.state === 'soon') chips.push('<span class="result-chip result-warn">⚠️ ใกล้หมดอายุ</span>');
+    if (!item.counted) chips.push('<span class="result-chip result-pending">ยังไม่ได้จัดขึ้นรถ</span>');
+    if (item.not_ready > 0) chips.push(`<span class="result-chip result-anomaly">ไม่พร้อมใช้ ${item.not_ready} — ตรวจสอบ/เปลี่ยน</span>`);
+    if (item.low > 0) chips.push(`<span class="result-chip result-needs_refill">แบต/แรงดันต่ำ ${item.low} — ชาร์จ/เติม</span>`);
+    if (item.shortfall > 0) chips.push(`<span class="result-chip result-needs_refill">ของขาด ${this.fmt(item.shortfall)}${unit}</span>`);
+    if (item.stock && item.stock.expired > 0) chips.push(`<span class="result-chip result-anomaly">หมดอายุแล้ว ${this.fmt(item.stock.expired)}</span>`);
+    else if (item.expiry && item.expiry.state === 'soon') chips.push('<span class="result-chip result-warn">ใกล้หมดอายุ</span>');
     if (item.over_target) chips.push('<span class="result-chip result-pending">เกินมาตรฐาน</span>');
     return chips.length ? `<div class="chip-line">${chips.join('')}</div>` : '';
   }
@@ -287,7 +287,7 @@ class RefillPage {
 
     return `<details class="refill-collapse" data-id="${UI.escape(item.id)}" ${this.openCards.has(item.id) ? 'open' : ''}>`
       + head + (isUnit ? this.renderUnitSection(item, d) : this.renderLotSection(item, d, unit))
-      + '<div class="card-foot"><button type="button" class="small-btn gray" data-action="history">🕘 ประวัติ</button></div></details>';
+      + '<div class="card-foot"><button type="button" class="small-btn gray" data-action="history">ประวัติ</button></div></details>';
   }
 
   // ---------- ล็อต (กล่อง) / รายชิ้น (1 แถว = 1 ชิ้น มีวันหมดอายุของตัวเอง) ----------
@@ -302,7 +302,7 @@ class RefillPage {
           <b>${piece ? 'ชิ้นที่' : 'ล็อต'} ${i + 1}${lot.lot_number ? ' · ' + UI.escape(lot.lot_number) : ''}</b>
           <span>${lot.expiry_date ? 'หมดอายุ ' + UI.escape(UI.formatDateThai(lot.expiry_date)) : 'ไม่ทราบวันหมดอายุ'}</span>
           <span>เหลือ <b>${this.fmt(lot.qty)}</b>${unit}</span>
-          <span class="lot-state">${{ expired: '⛔ ', soon: '⚠️ ', unknown: '❓ ' }[lot.state] || ''}${LOT_STATE_LABEL[lot.state] || ''}</span>
+          <span class="lot-state">${{ expired: '', soon: '', unknown: '' }[lot.state] || ''}${LOT_STATE_LABEL[lot.state] || ''}</span>
         </div>
         <div class="lot-meta">${lot.received_date ? 'รับเข้า ' + UI.escape(UI.formatDateThai(lot.received_date)) : ''}${lot.note ? ' • ' + UI.escape(lot.note) : ''}</div>
         <div class="lot-actions">
@@ -326,11 +326,11 @@ class RefillPage {
     const newRows = d.lots.map((lot, i) => {
       const existing = lot.lot_id ? lots.find(l => l.id === lot.lot_id) : null;
       const expired = piece ? (lot.expiries || []).some(e => e && e < today) : (lot.expiry_date && lot.expiry_date < today);
-      const warn = !existing && expired ? '<p class="lot-warn">⛔ หมดอายุแล้ว — เติมไม่ได้</p>' : '';
+      const warn = !existing && expired ? '<p class="lot-warn">หมดอายุแล้ว — เติมไม่ได้</p>' : '';
       const fid = (f) => `rf-${UI.escape(item.id)}-${i}-${f}`;
       return `
       <div class="lot-input-card" data-row="${i}">
-        <p class="lot-input-title">${existing ? '🔁 เติมล็อตเดิม' : (piece ? '➕ ชิ้นใหม่ (บันทึกแยกทีละชิ้น)' : '➕ ล็อตใหม่')}</p>
+        <p class="lot-input-title">${existing ? 'เติมล็อตเดิม' : (piece ? 'ชิ้นใหม่ (บันทึกแยกทีละชิ้น)' : 'ล็อตใหม่')}</p>
         <div class="lot-input-grid">
           ${existing ? `
           <div><label for="${fid('lot')}">ล็อต</label>
@@ -359,8 +359,8 @@ class RefillPage {
 
     return lotBlock + newRows + `
       <div class="add-row">
-        <button type="button" class="small-btn add-btn" data-action="add-lot">${piece ? '➕ เพิ่มชิ้น (วันหมดอายุ)' : '➕ เพิ่มล็อตใหม่'}</button>
-        ${topUpable.length ? '<button type="button" class="small-btn add-btn" data-action="add-topup">🔁 เติมล็อตเดิม</button>' : ''}
+        <button type="button" class="small-btn add-btn" data-action="add-lot">${piece ? 'เพิ่มชิ้น (วันหมดอายุ)' : 'เพิ่มล็อตใหม่'}</button>
+        ${topUpable.length ? '<button type="button" class="small-btn add-btn" data-action="add-topup">เติมล็อตเดิม</button>' : ''}
       </div>`;
   }
 
@@ -395,18 +395,18 @@ class RefillPage {
           <span class="text-xs">(ติ๊กเพื่อปลดออก)</span>
         </label>
         ${upd ? `<div class="lot-input-card" data-update="${UI.escape(u.id)}">
-            <p class="lot-input-title">✏️ อัปเดต ${UI.escape(u.label || word)}</p>
+            <p class="lot-input-title">อัปเดต ${UI.escape(u.label || word)}</p>
             <div class="lot-input-grid">${this.unitFields(item, upd, fid)}</div>
             <button type="button" class="small-btn gray" data-action="cancel-update">✕ ไม่อัปเดต</button>
           </div>`
-          : `<button type="button" class="small-btn gray" data-action="update-unit">✏️ อัปเดตสถานะ${item.has_battery ? '/แบต' : ''}${item.has_pressure ? '/แรงดัน' : ''}</button>`}
+          : `<button type="button" class="small-btn gray" data-action="update-unit">อัปเดตสถานะ${item.has_battery ? '/แบต' : ''}${item.has_pressure ? '/แรงดัน' : ''}</button>`}
       </div>`;
     }).join('') || `<p class="text-sm text-slate-500">ยังไม่มี${word}บนรถ</p>`;
     const newUnits = d.units.map((u, i) => {
       const fid = (f) => `ru-${UI.escape(item.id)}-${i}-${f}`;
       return `
       <div class="lot-input-card" data-row="${i}">
-        <p class="lot-input-title">➕ ${word}ใหม่</p>
+        <p class="lot-input-title">${word}ใหม่</p>
         <div class="lot-input-grid">
           <div><label for="${fid('label')}">รหัส/เลข${word}</label>
             <input id="${fid('label')}" type="text" maxlength="100" data-field="label" value="${UI.escape(u.label)}"></div>
@@ -416,7 +416,7 @@ class RefillPage {
       </div>`;
     }).join('');
     return `<div class="unit-list">${units}</div>${newUnits}
-      <div class="add-row"><button type="button" class="small-btn add-btn" data-action="add-unit">➕ เพิ่ม${word}</button></div>`;
+      <div class="add-row"><button type="button" class="small-btn add-btn" data-action="add-unit">เพิ่ม${word}</button></div>`;
   }
 
   /** ของแบบชิ้น: ช่องวันหมดอายุ 1 ช่องต่อ 1 ชิ้น ตามจำนวนชิ้นที่กรอก (ค่าที่กรอกแล้วเก็บใน lot.expiries ไม่หายเมื่อแก้จำนวน) */
@@ -756,7 +756,7 @@ class RefillPage {
       || (f === 'open' && ['PENDING', 'IN_PROGRESS', 'PARTIAL'].includes(r.status))
       || r.status === f);
     list.innerHTML = rows.length ? rows.map(r => {
-      // บรรทัดที่เติมครบแล้ว: ขึ้น ✅ สีจาง และย้ายไปท้ายการ์ด — บรรทัดที่ยังค้างอยู่ด้านบนเสมอ
+      // บรรทัดที่เติมครบแล้ว: ขึ้น สีจาง และย้ายไปท้ายการ์ด — บรรทัดที่ยังค้างอยู่ด้านบนเสมอ
       const isDone = (i) => Number(i.qty_requested) > 0 && Number(i.qty_filled) >= Number(i.qty_requested);
       const all = r.items || [];
       const ordered = [...all.filter(i => !isDone(i)), ...all.filter(isDone)];
@@ -764,9 +764,9 @@ class RefillPage {
       const note = (i) => (i.note ? ` <small>(${UI.escape(i.note)})</small>` : '');
       const lines = ordered.map(i => {
         if (isDone(i)) {
-          return `<li class="is-done">✅ ${UI.escape(i.name)} — ${i.line_type === 'replace' ? 'ตรวจสอบ/เปลี่ยนเสร็จแล้ว' : `เติมครบ ${UI.escape(i.qty_filled)}`}</li>`;
+          return `<li class="is-done">${UI.escape(i.name)} — ${i.line_type === 'replace' ? 'ตรวจสอบ/เปลี่ยนเสร็จแล้ว' : `เติมครบ ${UI.escape(i.qty_filled)}`}</li>`;
         }
-        if (i.line_type === 'replace') return `<li>${UI.escape(i.name)} — 🔧 ตรวจสอบ/เปลี่ยน${note(i)}</li>`;
+        if (i.line_type === 'replace') return `<li>${UI.escape(i.name)} — ตรวจสอบ/เปลี่ยน${note(i)}</li>`;
         const left = Math.round((Number(i.qty_requested || 0) - Number(i.qty_filled || 0)) * 100) / 100;
         return `<li>${UI.escape(i.name)} — ต้องเติม <b>${UI.escape(String(left))}</b>`
           + `${Number(i.qty_filled) > 0 ? ` <small>(ขอ ${UI.escape(i.qty_requested)} • เติมแล้ว ${UI.escape(i.qty_filled)})</small>` : ''}${note(i)}</li>`;
@@ -781,7 +781,7 @@ class RefillPage {
         ${all.length ? `<p class="request-progress">เติมแล้ว <b>${doneCount}/${all.length}</b> รายการ</p>` : ''}
         <ul class="request-lines">${lines}</ul>
         ${open ? `<div class="btn-row">
-          <button type="button" class="small-btn" data-action="fill" data-car="${UI.escape(r.car_id)}">🧰 เติมรถคันนี้</button>
+          <button type="button" class="small-btn" data-action="fill" data-car="${UI.escape(r.car_id)}">เติมรถคันนี้</button>
           <button type="button" class="small-btn gray" data-action="cancel">ยกเลิกรายการ</button></div>` : ''}
       </div>`;
     }).join('') : '<p class="empty">ไม่มีรายการ</p>';

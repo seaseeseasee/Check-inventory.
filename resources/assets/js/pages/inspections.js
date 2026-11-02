@@ -6,17 +6,17 @@
 //  ไม่มีวันหมดอายุ: พร้อม/ไม่พร้อมใช้ รายเครื่อง + แบต (ถ้ามีแบต) / แรงดัน PSI (ถ้าวัดแรงดัน) — ไม่ตัดสต็อก
 
 const SHIFT_LABEL = { morning: 'เวรเช้า', afternoon: 'เวรบ่าย', night: 'เวรดึก' };
-const ITEM_TYPE_LABEL = { box: '📦 กล่อง', individual: '🧩 รายชิ้น', non_expiring: '🩺 ไม่มีวันหมดอายุ' };
+const ITEM_TYPE_LABEL = { box: 'กล่อง', individual: 'รายชิ้น', non_expiring: 'ไม่มีวันหมดอายุ' };
 const RESULT_LABEL = {
-  pending: '⏳ ยังไม่ตรวจ',
-  complete: '✅ ตรวจแล้ว',
-  needs_refill: '⚠️ ของขาด',
-  anomaly: '⛔ ผิดปกติ',
+  pending: 'ยังไม่ตรวจ',
+  complete: 'ตรวจแล้ว',
+  needs_refill: 'ของขาด',
+  anomaly: 'ผิดปกติ',
 };
 const EXPIRY_LABEL = { expired: 'หมดอายุแล้ว', soon: 'ใกล้หมดอายุ', ok: '', unknown: 'ไม่ทราบวันหมดอายุ' };
 
 // หน้าตรวจแบ่งเป็นหมวดตามประเภทของ — หน้าละไม่กี่รายการ ไม่ต้องเลื่อนยาวจนหลงว่าตรวจถึงไหน
-const GROUP_TITLE = { box: '📦 ของแบบกล่อง', individual: '🧩 ของแบบรายชิ้น', non_expiring: '🩺 เครื่องมือ / ถัง' };
+const GROUP_TITLE = { box: 'ของแบบกล่อง', individual: 'ของแบบรายชิ้น', non_expiring: 'เครื่องมือ / ถัง' };
 const GROUP_ORDER = ['box', 'individual', 'non_expiring'];
 const PAGE_SIZE = { counted: 6, units: 3 };   // การ์ดเครื่อง/ถังสูงกว่า จึงต่อหน้าน้อยกว่า
 const STEP_NO = { car: 1, who: 2, check: 3, summary: 4 };
@@ -139,7 +139,7 @@ class InspectionPage {
     if (text) {
       text.textContent = no
         ? `ขั้นที่ ${no} จาก ${STEP_COUNT}` + (step === 'check' && this.pages.length > 1 ? ` · หมวด ${this.pageIndex + 1} จาก ${this.pages.length}` : '')
-        : '✅ เสร็จเรียบร้อย';
+        : 'เสร็จเรียบร้อย';
     }
     document.querySelectorAll('#inspectionStepDots li').forEach((dot, i) => {
       dot.classList.toggle('on', no ? i < no : true);
@@ -187,7 +187,7 @@ class InspectionPage {
     if (call) {
       call.classList.toggle('hidden', !tel);
       call.href = tel ? 'tel:' + tel.replace(/[^\d+]/g, '') : '#';
-      call.textContent = `📞 โทรหาเจ้าหน้าที่ ${tel}`;
+      call.textContent = `โทรหาเจ้าหน้าที่ ${tel}`;
     }
     overlay.classList.remove('hidden');
     overlay.querySelector('button')?.focus();
@@ -269,7 +269,7 @@ class InspectionPage {
       btn.setAttribute('aria-pressed', btn.dataset.carId === this.selectedCarId);
     });
     const picked = document.getElementById('inspectionPickedCar');
-    if (picked && vehicle) picked.innerHTML = `🚑 รถที่เลือก: ${window.vehicleChip(vehicle)}`;
+    if (picked && vehicle) picked.innerHTML = `รถที่เลือก: ${window.vehicleChip(vehicle)}`;
     this.renderShiftHint();
     this.goStep('who');
   }
@@ -303,9 +303,9 @@ class InspectionPage {
     }
     const done = this.doneFor(this.selectedCarId)[shift];
     if (done) {
-      hint.textContent = `✅ ${SHIFT_LABEL[shift]}ตรวจแล้วโดย ${done.nurse_name} — กดปุ่มด้านล่างเพื่อเช็คซ้ำ/แก้ไขผลได้`;
+      hint.textContent = `${SHIFT_LABEL[shift]}ตรวจแล้วโดย ${done.nurse_name} — กดปุ่มด้านล่างเพื่อเช็คซ้ำ/แก้ไขผลได้`;
       hint.className = 'shift-hint is-done';
-      if (btn) btn.textContent = '✏️ เช็คซ้ำ / แก้ไขผลการตรวจ →';
+      if (btn) btn.textContent = 'เช็คซ้ำ / แก้ไขผลการตรวจ →';
     } else {
       hint.textContent = `${SHIFT_LABEL[shift]}ยังไม่ได้ตรวจ`;
       hint.className = 'shift-hint';
@@ -345,7 +345,7 @@ class InspectionPage {
       ? shown.map(nurse => {
         const on = String(nurse.id) === selected;
         return `<button type="button" class="pick-btn ${on ? 'on' : ''}" data-nurse-id="${UI.escape(nurse.id)}" aria-pressed="${on}">
-          <span class="pick-name">👤 ${UI.escape(nurse.name)}</span>
+          <span class="pick-name">${UI.escape(nurse.name)}</span>
           ${nurse.department ? `<span class="pick-sub">${UI.escape(nurse.department)}</span>` : ''}
           ${on ? '<span class="pick-mark" aria-hidden="true">✓</span>' : ''}
         </button>`;
@@ -389,14 +389,14 @@ class InspectionPage {
       input.value = nurse.id;
       this.inspectorLocked = true;
       if (note) {
-        note.textContent = `👤 ผู้ตรวจ: ${nurse.name} 🔒 (ตามบัญชีที่เข้าสู่ระบบ)`;
+        note.textContent = `ผู้ตรวจ: ${nurse.name} (ตามบัญชีที่เข้าสู่ระบบ)`;
         note.className = 'wiz-lock';
       }
     } else {
       input.value = '';
       this.inspectorLockError = true;
       if (note) {
-        note.textContent = '⚠️ บัญชีนี้ยังไม่ได้เชื่อมกับรายชื่อพยาบาล จึงยังเริ่มตรวจไม่ได้ กรุณาแจ้งผู้ดูแลระบบ';
+        note.textContent = 'บัญชีนี้ยังไม่ได้เชื่อมกับรายชื่อพยาบาล จึงยังเริ่มตรวจไม่ได้ กรุณาแจ้งผู้ดูแลระบบ';
         note.className = 'wiz-lock is-error';
       }
     }
@@ -404,7 +404,8 @@ class InspectionPage {
 
   getVehicleIcon() {
     // ต้อง URL-encode: double quote ใน data URI จะปิด attribute src ของ <img>
-    const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚑</text></svg>";
+    // ไอคอนรถพยาบาลแบบเส้น (สีเดียวกับ --teal-700 ใน base.css)
+    const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='#1a4f9c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M2 7h11v9H2z'/><path d='M13 10h4l4 4v2h-8'/><circle cx='6' cy='17.5' r='1.8'/><circle cx='17' cy='17.5' r='1.8'/><path d='M7.5 9.5v3M6 11h3'/></svg>";
     return 'data:image/svg+xml,' + encodeURIComponent(svg);
   }
 
@@ -463,8 +464,8 @@ class InspectionPage {
     this.pages = this.buildPages();
 
     const vehicle = this.vehicles.find(v => String(v.id) === String(data.car_id)) || { id: data.car_id, name: data.car_name };
-    const infoHtml = `${window.vehicleChip(vehicle)} <span>👤 <b>${UI.escape(data.nurse_name)}</b></span>
-        <span>📅 ${UI.escape(UI.formatDateThai(data.check_date))}</span>
+    const infoHtml = `${window.vehicleChip(vehicle)} <span><b>${UI.escape(data.nurse_name)}</b></span>
+        <span>${UI.escape(UI.formatDateThai(data.check_date))}</span>
         <span class="shift-badge">${UI.escape(SHIFT_LABEL[data.shift_code] || data.shift_name)}</span>`;
     ['inspectionLoginInfo', 'inspectionSummaryInfo'].forEach(id => {
       const el = document.getElementById(id);
@@ -473,7 +474,7 @@ class InspectionPage {
     const modeNote = document.getElementById('inspectionModeNote');
     if (modeNote) {
       const text = {
-        edit: `✏️ แก้ไขรายการตรวจเดิม (ครั้งที่แก้ #${data.revision}) — เมื่อบันทึก ระบบจะคำนวณยอดใหม่จากส่วนต่าง ไม่หักซ้ำ และเก็บค่าเดิมไว้ในประวัติ`,
+        edit: `แก้ไขรายการตรวจเดิม (ครั้งที่แก้ #${data.revision}) — เมื่อบันทึก ระบบจะคำนวณยอดใหม่จากส่วนต่าง ไม่หักซ้ำ และเก็บค่าเดิมไว้ในประวัติ`,
         draft: '↩️ ทำต่อจากร่างที่บันทึกไว้',
         new: '',
       }[data.mode] || '';
@@ -506,7 +507,7 @@ class InspectionPage {
       for (let p = 0; p < parts; p++) {
         pages.push({
           type,
-          title: (GROUP_TITLE[type] || '📋 อุปกรณ์อื่นๆ') + (parts > 1 ? ` (ส่วนที่ ${p + 1}/${parts})` : ''),
+          title: (GROUP_TITLE[type] || 'อุปกรณ์อื่นๆ') + (parts > 1 ? ` (ส่วนที่ ${p + 1}/${parts})` : ''),
           indexes: indexes.slice(p * size, (p + 1) * size),
         });
       }
@@ -662,7 +663,7 @@ class InspectionPage {
 
   typeBadge(item) {
     if (item.item_type === 'non_expiring') {
-      return item.has_pressure ? '🫧 ไม่มีวันหมดอายุ · PSI' : (item.has_battery ? '🔋 ไม่มีวันหมดอายุ · แบต' : '🩺 ไม่มีวันหมดอายุ');
+      return item.has_pressure ? 'ไม่มีวันหมดอายุ · PSI' : (item.has_battery ? 'ไม่มีวันหมดอายุ · แบต' : 'ไม่มีวันหมดอายุ');
     }
     return ITEM_TYPE_LABEL[item.item_type] || '';
   }
@@ -680,7 +681,7 @@ class InspectionPage {
           <strong>${UI.escape(item.name)}</strong>
           <span class="type-badge type-${UI.escape(item.item_type)}">${this.typeBadge(item)}</span>
         </div>
-        <span class="result-chip result-${ev.result}" data-role="chip">${RESULT_LABEL[ev.result] || '⚠️ แก้ไข'}</span>
+        <span class="result-chip result-${ev.result}" data-role="chip">${RESULT_LABEL[ev.result] || 'แก้ไข'}</span>
       </div>
       <p class="qty-big">มาตรฐาน <b>${std}</b> · บนรถ <b>${onHand}</b></p>`;
     const body = this.isUnitType(item) ? this.renderUnits(item) : this.renderCounted(item, index);
@@ -722,11 +723,11 @@ class InspectionPage {
       .sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9) || String(a.date).localeCompare(String(b.date)))
       .map(({ state, date, qty }) => {
         const amount = `${this.fmt(qty)}${unit}`;
-        if (state === 'unknown') return `<li class="exp-unknown">❔ ${amount} ไม่ทราบวันหมดอายุ — ตรวจสอบที่ฉลาก</li>`;
+        if (state === 'unknown') return `<li class="exp-unknown">${amount} ไม่ทราบวันหมดอายุ — ตรวจสอบที่ฉลาก</li>`;
         const when = UI.escape(UI.formatDateThai(date));
-        if (state === 'expired') return `<li class="txt-bad">⛔ ${amount} หมดอายุแล้ว ${when} — นำออก/เปลี่ยน</li>`;
+        if (state === 'expired') return `<li class="txt-bad">${amount} หมดอายุแล้ว ${when} — นำออก/เปลี่ยน</li>`;
         const d = daysLeft(date);
-        if (state === 'soon') return `<li class="txt-warn">⚠️ ${amount} หมดอายุ ${when} (${d <= 0 ? 'วันนี้' : `อีก ${d} วัน`})</li>`;
+        if (state === 'soon') return `<li class="txt-warn">${amount} หมดอายุ ${when} (${d <= 0 ? 'วันนี้' : `อีก ${d} วัน`})</li>`;
         return `<li class="exp-ok">✓ ${amount} หมดอายุ ${when}</li>`;
       });
     if (!rows.length) return '';
@@ -805,7 +806,7 @@ class InspectionPage {
     const chip = card.querySelector('[data-role="chip"]');
     if (chip) {
       chip.className = `result-chip result-${ev.result}`;
-      chip.textContent = RESULT_LABEL[ev.result] || '⚠️ กรอกไม่ถูกต้อง';
+      chip.textContent = RESULT_LABEL[ev.result] || 'กรอกไม่ถูกต้อง';
     }
     const msg = card.querySelector('[data-role="msg"]');
     if (msg) {
@@ -964,9 +965,9 @@ class InspectionPage {
     const note = document.getElementById('inspectionAutosaveNote');
     try {
       await window.staffApi.saveDraft({ car_id: this.session.car_id, results: this.payloadLines() });
-      if (note) note.textContent = '💾 บันทึกร่างอัตโนมัติแล้ว ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+      if (note) note.textContent = 'บันทึกร่างอัตโนมัติแล้ว ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
     } catch (error) {
-      if (note) note.textContent = '⚠️ บันทึกร่างไม่สำเร็จ: ' + error.message;
+      if (note) note.textContent = 'บันทึกร่างไม่สำเร็จ: ' + error.message;
     }
   }
 
@@ -978,23 +979,23 @@ class InspectionPage {
       const evs = this.items.map((item, index) => ({ item, index, ev: this.evaluate(item) }));
       const open = evs.filter(({ ev }) => this.isOpen(ev.result));
       const groups = [
-        ['is-bad', '⏳ ยังตรวจไม่เสร็จ', open.map(({ item, index, ev }) => [index, `${item.name} — ${ev.text}`])],
-        ['', '📉 ใช้ไป / หายไป', evs.filter(({ ev }) => ev.used > 0).map(({ item, index, ev }) => [index, `${item.name} — ใช้ไป ${this.fmt(ev.used)}${unitOf(item)}`])],
-        ['is-warn', '🧰 ต้องเติม', evs.filter(({ ev }) => ev.short > 0).map(({ item, index, ev }) => [index, `${item.name} — เติม ${this.fmt(ev.short)}${unitOf(item)}`])],
-        ['is-bad', '⛔ ไม่พร้อมใช้', evs.filter(({ ev }) => ev.notReady).map(({ item, index, ev }) => [index, `${item.name} (${ev.notReady.join(', ')})`])],
-        ['is-warn', '🔋 แบต / แรงดันต่ำ', evs.filter(({ ev }) => ev.low).map(({ item, index }) => [index, item.name])],
+        ['is-bad', 'ยังตรวจไม่เสร็จ', open.map(({ item, index, ev }) => [index, `${item.name} — ${ev.text}`])],
+        ['', 'ใช้ไป / หายไป', evs.filter(({ ev }) => ev.used > 0).map(({ item, index, ev }) => [index, `${item.name} — ใช้ไป ${this.fmt(ev.used)}${unitOf(item)}`])],
+        ['is-warn', 'ต้องเติม', evs.filter(({ ev }) => ev.short > 0).map(({ item, index, ev }) => [index, `${item.name} — เติม ${this.fmt(ev.short)}${unitOf(item)}`])],
+        ['is-bad', 'ไม่พร้อมใช้', evs.filter(({ ev }) => ev.notReady).map(({ item, index, ev }) => [index, `${item.name} (${ev.notReady.join(', ')})`])],
+        ['is-warn', 'แบต / แรงดันต่ำ', evs.filter(({ ev }) => ev.low).map(({ item, index }) => [index, item.name])],
       ].filter(([, , rows]) => rows.length);
 
       const done = evs.length - open.length;
-      container.innerHTML = `<div class="sum-block is-ok"><p class="sum-title">✅ ตรวจแล้ว ${done} จาก ${evs.length} รายการ</p></div>`
+      container.innerHTML = `<div class="sum-block is-ok"><p class="sum-title">ตรวจแล้ว ${done} จาก ${evs.length} รายการ</p></div>`
         + groups.map(([cls, title, rows]) => `
           <div class="sum-block ${cls}">
             <p class="sum-title">${title} ${rows.length} รายการ</p>
             <ul class="sum-list">${rows.map(([index, text]) => `
-              <li><span>${UI.escape(text)}</span><button type="button" class="small-btn gray" data-goto="${index}">✏️ แก้ไข</button></li>`).join('')}
+              <li><span>${UI.escape(text)}</span><button type="button" class="small-btn gray" data-goto="${index}">แก้ไข</button></li>`).join('')}
             </ul>
           </div>`).join('')
-        + (groups.length ? '' : '<div class="sum-block is-ok"><p class="sum-title">👍 ไม่มีของที่ใช้ไปหรือขาด</p></div>');
+        + (groups.length ? '' : '<div class="sum-block is-ok"><p class="sum-title">ไม่มีของที่ใช้ไปหรือขาด</p></div>');
 
       const submit = document.getElementById('inspectionSubmitBtn');
       if (submit) submit.disabled = open.length > 0;

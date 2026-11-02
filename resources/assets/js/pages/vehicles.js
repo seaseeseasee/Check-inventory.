@@ -16,9 +16,9 @@ const VEHICLE_STATUS_CHIP = {
 
 // [ค่าที่ส่ง server, ป้ายในหน้าจอ, คำที่รับได้ในไฟล์นำเข้า]
 const VEHICLE_ITEM_TYPES = [
-  ['individual', '🧩 รายชิ้น', ['รายชิ้น', 'ชิ้น', 'individual']],
-  ['box', '📦 กล่อง / ล็อต', ['กล่อง', 'ล็อต', 'กล่อง/ล็อต', 'box']],
-  ['non_expiring', '🩺 ไม่มีวันหมดอายุ', ['ไม่มีวันหมดอายุ', 'non_expiring']],
+  ['individual', 'รายชิ้น', ['รายชิ้น', 'ชิ้น', 'individual']],
+  ['box', 'กล่อง / ล็อต', ['กล่อง', 'ล็อต', 'กล่อง/ล็อต', 'box']],
+  ['non_expiring', 'ไม่มีวันหมดอายุ', ['ไม่มีวันหมดอายุ', 'non_expiring']],
 ];
 
 // คอลัมน์ไฟล์นำเข้าอุปกรณ์ (ไฟล์ต้นแบบใช้หัวคอลัมน์ตามลำดับนี้ — ตอนอ่านจับคู่จากชื่อหัว ไม่สนลำดับ)
@@ -304,8 +304,8 @@ class VehiclesPage {
     }
     const ward = v.vehicle_type === 'emr' ? this.departmentName(v.home_department_id) : '';
     const kindChip = v.vehicle_type === 'emr'
-      ? `<span class="chip veh-kind-chip is-emr">🏥 EMR${ward ? ` · ${UI.escape(ward)}` : ''}</span>`
-      : '<span class="chip veh-kind-chip">🚑 Refer</span>';
+      ? `<span class="chip veh-kind-chip is-emr">EMR${ward ? ` · ${UI.escape(ward)}` : ''}</span>`
+      : '<span class="chip veh-kind-chip">Refer</span>';
 
     el.innerHTML = `
       <div class="vcard-top">${window.vehicleChip(v, 'vcard-plate')}<span class="chip ${chip}">${UI.escape(status)}</span>${kindChip}</div>
@@ -319,12 +319,12 @@ class VehiclesPage {
     const v = this.currentVehicle;
     if (!v) {
       btn.disabled = true;
-      btn.textContent = '🚫 ปิดใช้งานรถ';
+      btn.textContent = 'ปิดใช้งานรถ';
       return;
     }
     btn.disabled = false;
     // อยู่ในเมนู ⋯ แล้ว จึงไม่ต้องทาสีแดง (สีแดงเหลือไว้ให้ "ลบรถ" อย่างเดียว)
-    btn.textContent = v.status === 'disabled' ? '✅ เปิดใช้งานรถ' : '🚫 ปิดใช้งานรถ';
+    btn.textContent = v.status === 'disabled' ? 'เปิดใช้งานรถ' : 'ปิดใช้งานรถ';
   }
 
   /**
@@ -515,7 +515,7 @@ class VehiclesPage {
     // ยอดคงเหลือ + วันหมดอายุมาจาก Lot / รายเครื่อง (แก้ผ่านการเติมของ/การตรวจเช็คเท่านั้น)
     const type = item.item_type || (item.is_battery ? 'non_expiring' : 'individual');
     const unitWord = item.has_pressure ? ' ถัง' : ' เครื่อง';
-    const viewLabel = type === 'non_expiring' ? (item.has_pressure ? '🔧 จัดการถัง' : '🔧 จัดการเครื่อง') : (type === 'individual' ? '📦 ดูรายชิ้น' : '📦 ดูล็อต');
+    const viewLabel = type === 'non_expiring' ? (item.has_pressure ? 'จัดการถัง' : 'จัดการเครื่อง') : (type === 'individual' ? 'ดูรายชิ้น' : 'ดูล็อต');
     const expiry = String(item.expiry_text ?? '');
     const qtyNum = String(Math.round(Number(item.current_qty || 0) * 100) / 100);
     const qtyText = counted ? `${UI.escape(qtyNum)}${type === 'non_expiring' ? unitWord : ''}` : 'ยังไม่ได้จัดขึ้นรถ';
@@ -533,11 +533,11 @@ class VehiclesPage {
       <div class="stock-type">
         <label for="typ-${item.id}">ประเภท</label>
         <select id="typ-${item.id}" data-item-id="${item.id}" data-field="item_type">
-          <option value="individual" ${type === 'individual' ? 'selected' : ''}>🧩 รายชิ้น (วันหมดอายุรายชิ้น)</option>
-          <option value="box" ${type === 'box' ? 'selected' : ''}>📦 กล่อง/ล็อต (วันหมดอายุทั้งกล่อง)</option>
-          <option value="non_expiring" ${type === 'non_expiring' ? 'selected' : ''}>🩺 ไม่มีวันหมดอายุ (รายเครื่อง)</option>
+          <option value="individual" ${type === 'individual' ? 'selected' : ''}>รายชิ้น (วันหมดอายุรายชิ้น)</option>
+          <option value="box" ${type === 'box' ? 'selected' : ''}>กล่อง/ล็อต (วันหมดอายุทั้งกล่อง)</option>
+          <option value="non_expiring" ${type === 'non_expiring' ? 'selected' : ''}>ไม่มีวันหมดอายุ (รายเครื่อง)</option>
         </select>
-        <p class="stock-type-hint txt-warn hidden" data-role="type-hint">⚠️ ยังมีของบนรถอยู่ — ต้องนำของออกให้หมดก่อน ถึงจะบันทึกการเปลี่ยนประเภทได้</p>
+        <p class="stock-type-hint txt-warn hidden" data-role="type-hint">ยังมีของบนรถอยู่ — ต้องนำของออกให้หมดก่อน ถึงจะบันทึกการเปลี่ยนประเภทได้</p>
       </div>
       <section class="stock-onboard" aria-label="ของบนรถตอนนี้">
         <div class="stock-onboard-head">
@@ -569,8 +569,8 @@ class VehiclesPage {
         ${this.renderThresholdFields(item, type)}
         ${type === 'non_expiring' ? `
         <div class="flag-row">
-          <label><input type="checkbox" data-item-id="${item.id}" data-field="is_battery" ${item.is_battery ? 'checked' : ''}> 🔋 มีแบตเตอรี่</label>
-          <label><input type="checkbox" data-item-id="${item.id}" data-field="has_pressure" ${item.has_pressure ? 'checked' : ''}> 🫧 วัดแรงดัน (PSI)</label>
+          <label><input type="checkbox" data-item-id="${item.id}" data-field="is_battery" ${item.is_battery ? 'checked' : ''}> มีแบตเตอรี่</label>
+          <label><input type="checkbox" data-item-id="${item.id}" data-field="has_pressure" ${item.has_pressure ? 'checked' : ''}> วัดแรงดัน (PSI)</label>
         </div>` : ''}
       </div>
 
@@ -580,8 +580,8 @@ class VehiclesPage {
         <details class="stock-more">
           <summary class="small-btn" aria-label="ตัวเลือกเพิ่มเติมของอุปกรณ์นี้" title="ตัวเลือกเพิ่มเติม">⋯</summary>
           <div class="stock-more-menu">
-            <button type="button" class="stock-more-item" data-action="toggle" data-item-id="${item.id}">${item.active ? '⏸ พักใช้งาน' : '▶️ เปิดใช้งาน'}</button>
-            <button type="button" class="stock-more-item is-danger" data-action="delete" data-item-id="${item.id}">🗑 ลบอุปกรณ์</button>
+            <button type="button" class="stock-more-item" data-action="toggle" data-item-id="${item.id}">${item.active ? 'พักใช้งาน' : '▶️ เปิดใช้งาน'}</button>
+            <button type="button" class="stock-more-item is-danger" data-action="delete" data-item-id="${item.id}">ลบอุปกรณ์</button>
           </div>
         </details>
       </div>
@@ -627,7 +627,7 @@ class VehiclesPage {
 
   /** แถวย่อของการ์ดอุปกรณ์ (กดเพื่อขยาย): ชื่อ • ประเภท • ยอดบนรถ/ขั้นต่ำ • หมดอายุเร็วสุด */
   renderItemSummary(item, type, counted, expiry, unitWord) {
-    const TYPE = { individual: '🧩 รายชิ้น', box: '📦 กล่อง', non_expiring: '🩺 ไม่มีวันหมดอายุ' };
+    const TYPE = { individual: 'รายชิ้น', box: 'กล่อง', non_expiring: 'ไม่มีวันหมดอายุ' };
     const fmt = (n) => String(Math.round(Number(n || 0) * 100) / 100);
     const unit = type === 'non_expiring' ? unitWord : (item.unit ? ' ' + item.unit : '');
     const target = item.target_qty === null || item.target_qty === undefined || item.target_qty === '' ? null : Number(item.target_qty);
@@ -642,7 +642,7 @@ class VehiclesPage {
       const soon = new Date(today + 'T00:00:00');
       soon.setDate(soon.getDate() + warnDays);
       const soonIso = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, '0')}-${String(soon.getDate()).padStart(2, '0')}`;
-      const state = expiry < today ? ['txt-bad', '⛔ หมดอายุ '] : (expiry <= soonIso ? ['txt-warn', '⚠️ ใกล้หมดอายุ '] : ['', 'หมดอายุ ']);
+      const state = expiry < today ? ['txt-bad', 'หมดอายุ '] : (expiry <= soonIso ? ['txt-warn', 'ใกล้หมดอายุ '] : ['', 'หมดอายุ ']);
       exp = `<span class="${state[0]}">${state[1]}${UI.escape(UI.formatDateThai(expiry))}</span>`;
     }
     return `
@@ -706,7 +706,7 @@ class VehiclesPage {
     const open = box.classList.contains('hidden');
     box.classList.toggle('hidden', !open);
     btn.setAttribute('aria-expanded', String(open));
-    btn.textContent = open ? '📦 ซ่อน' : (btn.dataset.label || '📦 ดูล็อต');
+    btn.textContent = open ? 'ซ่อน' : (btn.dataset.label || 'ดูล็อต');
     if (open) await this.loadLotView(box, btn.dataset.itemId);
   }
 
@@ -730,7 +730,7 @@ class VehiclesPage {
     const unit = item.unit ? ' ' + UI.escape(item.unit) : '';
     if (item.item_type === 'non_expiring') {
       const word = item.has_pressure ? 'ถัง' : 'เครื่อง';
-      const label = { ready: '✅ พร้อมใช้', not_ready: '⛔ ไม่พร้อม', no_power: '🔋 เปิดไม่ติด', pending: '⏳ รอตรวจ' };
+      const label = { ready: 'พร้อมใช้', not_ready: 'ไม่พร้อม', no_power: 'เปิดไม่ติด', pending: 'รอตรวจ' };
       const rows = (item.units || []).map((u, i) => `
         <li class="${u.status !== 'ready' ? 'lv-expired' : ''}" data-unit="${UI.escape(u.id)}">
           <div><b>${UI.escape(u.label || `${word}ที่ ${i + 1}`)}</b> — ${label[u.status] || UI.escape(u.status)}
@@ -738,25 +738,25 @@ class VehiclesPage {
             ${item.has_pressure && u.pressure_psi !== null && u.pressure_psi !== undefined ? ` • ${u.pressure_psi} PSI` : ''}
             ${u.note ? ` • ${UI.escape(u.note)}` : ''}</div>
           <div class="lot-actions">
-            <button type="button" class="small-btn gray" data-unit-action="update">✏️ อัปเดตสถานะ${item.has_battery ? '/แบต' : ''}${item.has_pressure ? '/แรงดัน' : ''}</button>
-            <button type="button" class="small-btn danger" data-unit-action="retire">🗑 นำ${word}นี้ออก</button>
+            <button type="button" class="small-btn gray" data-unit-action="update">อัปเดตสถานะ${item.has_battery ? '/แบต' : ''}${item.has_pressure ? '/แรงดัน' : ''}</button>
+            <button type="button" class="small-btn danger" data-unit-action="retire">นำ${word}นี้ออก</button>
           </div></li>`).join('');
       return (rows ? `<ul class="lot-view">${rows}</ul>` : `<p class="text-sm text-slate-500">ยังไม่มี${word}บนรถ</p>`)
-        + `<button type="button" class="small-btn add-btn" data-unit-action="add">➕ เพิ่ม${word}</button>`;
+        + `<button type="button" class="small-btn add-btn" data-unit-action="add">เพิ่ม${word}</button>`;
     }
     const piece = item.item_type === 'individual';
-    const state = { expired: '⛔ หมดอายุแล้ว', soon: '⚠️ ใกล้หมดอายุ', unknown: '❓ ไม่ทราบวันหมดอายุ', ok: '', na: '' };
+    const state = { expired: 'หมดอายุแล้ว', soon: 'ใกล้หมดอายุ', unknown: 'ไม่ทราบวันหมดอายุ', ok: '', na: '' };
     const rows = (item.lots || []).map((lot, i) => `
       <li class="lv-${UI.escape(lot.state)}" data-lot="${UI.escape(lot.id)}">
         <div><b>${piece ? 'ชิ้นที่' : 'ล็อต'} ${i + 1}${lot.lot_number ? ' · ' + UI.escape(lot.lot_number) : ''}</b>
           — ${lot.expiry_date ? 'หมดอายุ ' + UI.escape(UI.formatDateThai(lot.expiry_date)) : 'ไม่ทราบวันหมดอายุ'}
           ${piece ? '' : `• เหลือ <b>${fmt(lot.qty)}</b>${unit}`} ${state[lot.state] ? `<span class="lot-state">${state[lot.state]}</span>` : ''}</div>
         <div class="lot-actions">
-          <button type="button" class="small-btn gray" data-lot-action="edit">✏️ แก้วันหมดอายุ</button>
-          ${piece ? '' : '<button type="button" class="small-btn gray" data-lot-action="adjust">🔢 แก้จำนวน</button>'}
+          <button type="button" class="small-btn gray" data-lot-action="edit">แก้วันหมดอายุ</button>
+          ${piece ? '' : '<button type="button" class="small-btn gray" data-lot-action="adjust">แก้จำนวน</button>'}
           ${lot.state === 'expired'
             ? '<button type="button" class="small-btn danger" data-lot-action="expire">นำออก (หมดอายุ)</button>'
-            : `<button type="button" class="small-btn danger" data-lot-action="void">🗑 นำ${piece ? 'ชิ้นนี้' : 'ล็อตนี้'}ออก</button>`}
+            : `<button type="button" class="small-btn danger" data-lot-action="void">นำ${piece ? 'ชิ้นนี้' : 'ล็อตนี้'}ออก</button>`}
         </div></li>`).join('');
     return rows
       ? `<ul class="lot-view">${rows}</ul><p class="text-sm">รวม <b>${fmt(item.current_qty || 0)}</b>${unit} • ทุกการแก้บันทึกในประวัติ</p>`
@@ -772,7 +772,7 @@ class VehiclesPage {
     if (!btnView || !box) return;
     box.classList.remove('hidden');
     btnView.setAttribute('aria-expanded', 'true');
-    btnView.textContent = '📦 ซ่อน';
+    btnView.textContent = 'ซ่อน';
     await this.loadLotView(box, itemId, true);
   }
 
@@ -954,12 +954,12 @@ class VehiclesPage {
   // ---------- เพิ่มอุปกรณ์: pop up แบบเดียวกับ "เพิ่มรถใหม่" ----------
   itemFormFields() {
     const types = [
-      ['individual', '🧩 รายชิ้น', 'แต่ละชิ้นมีวันหมดอายุของตัวเอง'],
-      ['box', '📦 กล่อง / ล็อต', 'ทั้งกล่องวันหมดอายุเดียวกัน'],
-      ['non_expiring', '🩺 ไม่มีวันหมดอายุ', 'ตรวจรายเครื่อง: สถานะ / แบต / แรงดัน'],
+      ['individual', 'รายชิ้น', 'แต่ละชิ้นมีวันหมดอายุของตัวเอง'],
+      ['box', 'กล่อง / ล็อต', 'ทั้งกล่องวันหมดอายุเดียวกัน'],
+      ['non_expiring', 'ไม่มีวันหมดอายุ', 'ตรวจรายเครื่อง: สถานะ / แบต / แรงดัน'],
     ];
     return `
-      <p class="item-form-car">🚑 เพิ่มในรถ: ${window.vehicleChip(this.currentVehicle || { id: this.currentVehicleId })}</p>
+      <p class="item-form-car">เพิ่มในรถ: ${window.vehicleChip(this.currentVehicle || { id: this.currentVehicleId })}</p>
       <div class="grid gap-4">
         <div>
           <label for="itemName" class="!mt-0">ชื่ออุปกรณ์ <span class="text-red-500" aria-hidden="true">*</span></label>
@@ -980,8 +980,8 @@ class VehiclesPage {
           </label>`).join('')}
         </fieldset>
         <div class="flag-row hidden" id="itemFlags">
-          <label><input type="checkbox" id="itemIsBattery"> 🔋 มีแบตเตอรี่</label>
-          <label><input type="checkbox" id="itemHasPressure"> 🫧 วัดแรงดัน (PSI)</label>
+          <label><input type="checkbox" id="itemIsBattery"> มีแบตเตอรี่</label>
+          <label><input type="checkbox" id="itemHasPressure"> วัดแรงดัน (PSI)</label>
         </div>
         <fieldset class="item-details" id="itemDetails"></fieldset>
       </div>
@@ -1025,13 +1025,13 @@ class VehiclesPage {
       const status = keep[id('status')] || 'ready';
       return `
         <div class="lot-input-card">
-          <p class="lot-input-title">🩺 เครื่อง/ถังที่ ${k + 1}</p>
+          <p class="lot-input-title">เครื่อง/ถังที่ ${k + 1}</p>
           <div class="lot-input-grid">
             <div><label for="${id('label')}">ชื่อ / เลขเครื่อง</label>
               <input id="${id('label')}" type="text" maxlength="100" value="${v(id('label'))}" placeholder="เช่น ถัง O2 #1"></div>
             <div><label for="${id('status')}">สถานะ</label>
               <select id="${id('status')}" data-rerender>
-                ${[['ready', '✅ พร้อมใช้'], ['not_ready', '⛔ ไม่พร้อมใช้']].concat(battery ? [['no_power', '🔋 เปิดไม่ติด']] : [])
+                ${[['ready', 'พร้อมใช้'], ['not_ready', 'ไม่พร้อมใช้']].concat(battery ? [['no_power', 'เปิดไม่ติด']] : [])
                   .map(([val, label]) => `<option value="${val}" ${status === val ? 'selected' : ''}>${label}</option>`).join('')}
               </select></div>
             ${battery && status !== 'no_power' ? num(id('bat'), `แบตเตอรี่ (0-${maxBars} ขีด) *`, `min="0" max="${maxBars}"`) : ''}
@@ -1509,7 +1509,7 @@ class VehiclesPage {
           <p class="mb-2">คุณต้องการคัดลอกรายการอุปกรณ์จากรถคัน <strong>${UI.escape(sourceLabel)}</strong> ใช่หรือไม่?</p>
           <p class="mb-2">ระบบจะนำอุปกรณ์ทั้งหมด <strong>${count} รายการ</strong> มาแสดงในรถคัน <strong>${UI.escape(targetLabel)}</strong> เพื่อให้ตรวจสอบ/แก้ไขก่อนบันทึก — ยังไม่มีการบันทึกจนกว่าจะกด “ยืนยันเพิ่ม…ลงรถ”</p>
           <p class="mb-2 text-sm">สิ่งที่คัดลอกมาด้วย: ชื่อ, จำนวนมาตรฐาน, ประเภทอุปกรณ์ และสถานะใช้งาน/พัก — <strong>ไม่คัดลอกยอดคงเหลือ/Lot</strong> (รถปลายทางเริ่มเป็น "ยังไม่เคยตรวจนับ" จนกว่าจะเติมของหรือตรวจนับ)</p>
-          ${replacing ? '<p class="mb-2 text-sm" style="color: var(--warn);">⚠️ มีรายการรอคัดลอกอยู่ก่อนแล้ว — รายการชุดใหม่นี้จะแทนที่ชุดเดิม</p>' : ''}
+          ${replacing ? '<p class="mb-2 text-sm" style="color: var(--warn);">มีรายการรอคัดลอกอยู่ก่อนแล้ว — รายการชุดใหม่นี้จะแทนที่ชุดเดิม</p>' : ''}
         `,
         onClose: () => resolve(false),
       }).render();
@@ -1563,7 +1563,7 @@ class VehiclesPage {
       const type = row.item_type || 'individual';
       const nonExpiring = type === 'non_expiring';
       const fill = nonExpiring
-        ? '<p class="copy-row-hint">🩺 ไม่มีวันหมดอายุ — เพิ่มเครื่อง/ถังพร้อมค่าแบต/แรงดันที่แท็บ “เติมของ” หลังบันทึก</p>'
+        ? '<p class="copy-row-hint">ไม่มีวันหมดอายุ — เพิ่มเครื่อง/ถังพร้อมค่าแบต/แรงดันที่แท็บ “เติมของ” หลังบันทึก</p>'
         : `<div class="copy-row-fill">
               <label for="cpq-${idx}">จำนวนที่จัดขึ้นรถ
                 <input id="cpq-${idx}" type="number" min="0" step="${type === 'individual' ? 1 : 'any'}" inputmode="decimal"
@@ -1583,9 +1583,9 @@ class VehiclesPage {
             <span class="copy-row-no">${idx + 1}</span>
             <strong class="copy-row-name" data-copy-name></strong>
             <button type="button" class="copy-row-remove" data-copy-action="remove"
-              aria-label="เอารายการที่ ${idx + 1} ออก" title="เอาออกจากรายการรอบันทึก">🗑</button>
+              aria-label="เอารายการที่ ${idx + 1} ออก" title="เอาออกจากรายการรอบันทึก"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/></svg></button>
             <div class="copy-row-tags" data-copy-tags></div>
-            <p class="copy-row-dup hidden" data-copy-dup>⚠️ มีชื่อนี้อยู่ในรถแล้ว — ถ้าไม่ต้องการให้กด 🗑</p>
+            <p class="copy-row-dup hidden" data-copy-dup>มีชื่อนี้อยู่ในรถแล้ว — ถ้าไม่ต้องการให้กด</p>
           </div>
           ${fill}
           <details class="copy-row-edit">
@@ -1623,7 +1623,7 @@ class VehiclesPage {
 
     panel.classList.remove('hidden');
     if (fromEl) fromEl.textContent = this.copySourceLabel;
-    if (countChip) countChip.textContent = `📥 รอเพิ่มลงรถ ${this.copyStaging.length} รายการ`;
+    if (countChip) countChip.textContent = `รอเพิ่มลงรถ ${this.copyStaging.length} รายการ`;
     if (confirmBtn) confirmBtn.textContent = `ยืนยันเพิ่ม ${this.copyStaging.length} รายการ`;
     this.renderCopyStockSummary();
     this.applyCopyFilter();
@@ -1655,7 +1655,7 @@ class VehiclesPage {
     const tags = [typeLabel];
     if (String(row.standard || '').trim()) tags.push(`มาตรฐาน ${String(row.standard).trim()}`);
     if (row.active === false) tags.push('พักใช้งาน');
-    if (type === 'non_expiring' && row.is_battery) tags.push('🔋 มีแบต');
+    if (type === 'non_expiring' && row.is_battery) tags.push('มีแบต');
     if (type === 'non_expiring' && row.has_pressure) tags.push('วัดแรงดัน');
     const tagsEl = rowEl.querySelector('[data-copy-tags]');
     if (tagsEl) tagsEl.innerHTML = tags.map(t => `<span class="copy-tag">${UI.escape(t)}</span>`).join('');
@@ -1687,7 +1687,7 @@ class VehiclesPage {
     const resting = rows.filter(row => row.active === false).length;
 
     const bits = [`<span>ใส่จำนวนแล้ว ${done}/${fillable.length}</span>`];
-    if (dup > 0) bits.push(`<span class="is-warn">⚠️ ซ้ำกับในรถ ${dup}</span>`);
+    if (dup > 0) bits.push(`<span class="is-warn">ซ้ำกับในรถ ${dup}</span>`);
     if (resting > 0) bits.push(`<span>พักใช้งาน ${resting}</span>`);
     bits.push('<span>ยังไม่บันทึก · ที่เว้นว่างไว้เติมภายหลังที่แท็บ “เติมของ”</span>');
     el.innerHTML = bits.join('');
@@ -2026,11 +2026,11 @@ class VehiclesPage {
           <div class="veh-kind-opts">
             <label class="veh-kind-opt">
               <input type="radio" name="vehKind" value="refer" ${kind === 'refer' ? 'checked' : ''}>
-              <span><b>🚑 รถ Refer</b><small>รถส่งต่อผู้ป่วย</small></span>
+              <span><b>รถ Refer</b><small>รถส่งต่อผู้ป่วย</small></span>
             </label>
             <label class="veh-kind-opt">
               <input type="radio" name="vehKind" value="emr" ${kind === 'emr' ? 'checked' : ''}>
-              <span><b>🏥 รถ EMR</b><small>อยู่ประจำวอร์ด</small></span>
+              <span><b>รถ EMR</b><small>อยู่ประจำวอร์ด</small></span>
             </label>
           </div>
         </fieldset>
@@ -2229,7 +2229,7 @@ class VehiclesPage {
       const value = (hex.value || '').trim().toUpperCase();
       const color = /^#[0-9A-F]{6}$/.test(value) ? value : window.VEHICLE_DEFAULT_COLOR;
       const label = UI.escape(plateInput?.value?.trim() || 'ทะเบียนรถ');
-      preview.innerHTML = `<span class="vehicle-chip" style="background:${color};color:${window.vehicleTextColor(color)}">🚑 ${label}</span>`;
+      preview.innerHTML = `<span class="vehicle-chip" style="background:${color};color:${window.vehicleTextColor(color)}">${label}</span>`;
     };
     picker?.addEventListener('input', () => {
       hex.value = picker.value.toUpperCase();
