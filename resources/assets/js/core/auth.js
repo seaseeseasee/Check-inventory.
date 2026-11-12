@@ -279,7 +279,7 @@ function initializeRoleUI() {
   // Update header title with user role
   const headerTitle = document.getElementById('headerTitle');
   if (headerTitle) {
-    const roleLabel = user.role === 'admin' ? '👑 ผู้ดูแลระบบ' : '👩‍⚕️ เจ้าหน้าที่';
+    const roleLabel = user.role === 'admin' ? 'ผู้ดูแลระบบ' : 'เจ้าหน้าที่';
     // ชื่อระบบสั้น + บรรทัดผู้ใช้แยก — บนมือถือหัวเว็บจะไม่สูงจนบังเนื้อหา
     headerTitle.textContent = '';
     const title = document.createElement('span');

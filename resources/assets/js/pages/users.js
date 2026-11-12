@@ -82,7 +82,7 @@ class UsersPage {
         data-role="${UI.escape(user.role)}" data-status="${user.active ? 'active' : 'inactive'}">
         <span class="user-av is-other${user.role === 'admin' ? ' is-admin' : ''}" aria-hidden="true">${UI.escape(NursesPage.initial(user.full_name))}</span>
         <span class="user-who"><b>${UI.escape(user.full_name)}</b>
-          <span>🔑 ${UI.escape(user.username)} · ${user.last_login_at ? 'เข้าล่าสุด ' + UI.escape(UI.formatDateTimeThai(user.last_login_at)) : 'ยังไม่เคยเข้าสู่ระบบ'}</span></span>
+          <span>${UI.escape(user.username)} · ${user.last_login_at ? 'เข้าล่าสุด ' + UI.escape(UI.formatDateTimeThai(user.last_login_at)) : 'ยังไม่เคยเข้าสู่ระบบ'}</span></span>
         <span class="user-side">${NursesPage.rowBadge(true, user)}<span class="user-chev" aria-hidden="true">›</span></span>
       </button>
     `).join('');
@@ -131,7 +131,7 @@ class UsersPage {
     if (!user) return;
     const btn = document.getElementById('uActiveBtn');
     if (btn) {
-      btn.textContent = user.active ? '🔒 ปิดบัญชี (เข้าสู่ระบบไม่ได้)' : '🔓 เปิดบัญชี';
+      btn.textContent = user.active ? 'ปิดบัญชี (เข้าสู่ระบบไม่ได้)' : 'เปิดบัญชี';
       btn.classList.toggle('is-danger', Boolean(user.active));
     }
     const last = document.getElementById('uLastLogin');

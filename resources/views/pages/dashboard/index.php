@@ -1,10 +1,10 @@
 <!-- Dashboard Tab -->
 <div id="tabContentDashboard">
   <div class="card mascot-hero">
-    <img class="mascot-hero-img" src="<?= asset('images/mascot/cat-thumbsup.svg') ?>" alt="" width="150" height="154">
+    <img class="mascot-hero-img" src="<?= asset('images/mascot/cat-thumbsup.svg') ?>" alt="" width="96" height="98">
     <div class="mascot-hero-text">
-      <p class="mascot-hero-hi" id="dashGreeting">สวัสดีครับ 👋</p>
-      <h2>ยินดีต้อนรับสู่ระบบเติมสต๊อกรถ Refer</h2>
+      <p class="mascot-hero-hi" id="dashGreeting">สวัสดีครับ</p>
+      <h2>ภาพรวมความพร้อมรถ</h2>
       <p>ตรวจเช็กและเติมเวชภัณฑ์ให้รถพร้อมออกปฏิบัติงานทุกเวร</p>
     </div>
   </div>
@@ -21,7 +21,7 @@
   <div class="card wiz" id="inspectionWizard" data-help-tel="<?= escape(env('HELP_PHONE', '')) ?>">
     <div class="wiz-top">
       <button type="button" class="gray wiz-back" id="inspectionBackBtn" data-call="inspectionBack">← ย้อนกลับ</button>
-      <button type="button" class="wiz-help" data-call="openInspectionHelp">📞 ขอความช่วยเหลือ</button>
+      <button type="button" class="wiz-help" data-call="openInspectionHelp">ขอความช่วยเหลือ</button>
     </div>
     <div class="wiz-progress">
       <p class="wiz-step-text" id="inspectionStepText" aria-live="polite"></p>
@@ -30,7 +30,7 @@
 
     <!-- ขั้นที่ 1: เลือกรถ -->
     <section class="wiz-step" id="inspectionStepCar">
-      <h2>🚑 วันนี้ตรวจรถคันไหน?</h2>
+      <h2>วันนี้ตรวจรถคันไหน?</h2>
       <p class="wiz-sub">แตะที่รถที่ต้องการตรวจ</p>
       <div class="car-grid" aria-label="เลือกรถ" id="inspectionCarGrid"></div>
     </section>
@@ -38,18 +38,18 @@
     <!-- ขั้นที่ 2: ผู้ตรวจ วันที่ และเวร -->
     <section class="wiz-step hidden" id="inspectionStepWho">
       <form id="inspectionStartForm">
-        <h2>👤 ใครเป็นผู้ตรวจ?</h2>
+        <h2>ใครเป็นผู้ตรวจ?</h2>
         <div class="wiz-picked" id="inspectionPickedCar"></div>
 
         <input type="hidden" id="inspectionNurse">
         <p id="inspectionNurseLock" class="wiz-lock hidden" role="status"></p>
         <div id="inspectionNursePicker">
-          <label for="inspectionNurseSearch">🔍 พิมพ์ชื่อเพื่อค้นหา</label>
+          <label for="inspectionNurseSearch">พิมพ์ชื่อเพื่อค้นหา</label>
           <input type="search" id="inspectionNurseSearch" autocomplete="off" placeholder="เช่น สมศรี">
           <div class="pick-list" id="inspectionNurseList" role="group" aria-label="รายชื่อผู้ตรวจ"></div>
         </div>
 
-        <p class="step-label">⏰ เวรที่ตรวจ</p>
+        <p class="step-label">เวรที่ตรวจ</p>
         <input type="hidden" id="inspectionShift">
         <div class="seg wiz-shift" role="group" aria-label="เลือกเวร">
           <button type="button" class="seg-btn" data-shift="morning" aria-pressed="false">เช้า<small>08–16 น.</small></button>
@@ -57,7 +57,7 @@
           <button type="button" class="seg-btn" data-shift="night" aria-pressed="false">ดึก<small>00–08 น.</small></button>
         </div>
         <details class="wiz-date">
-          <summary>📅 วันที่ <b id="inspectionDateText"></b> (แตะเพื่อเปลี่ยน)</summary>
+          <summary>วันที่ <b id="inspectionDateText"></b> (แตะเพื่อเปลี่ยน)</summary>
           <label for="inspectionDate">วันที่ตรวจ</label>
           <input type="date" id="inspectionDate" required>
         </details>
@@ -75,7 +75,7 @@
       <p id="inspectionModeNote" class="mode-note hidden" role="status"></p>
       <h2 id="inspectionGroupTitle"></h2>
       <p class="wiz-sub" id="inspectionGroupSub" role="status" aria-live="polite"></p>
-      <button type="button" class="wiz-all-ok hidden" id="inspectionPageNoneBtn" data-call="checkAllInspection">✅ หน้านี้ไม่ได้ใช้ ไม่มีหาย ทั้งหมด</button>
+      <button type="button" class="wiz-all-ok hidden" id="inspectionPageNoneBtn" data-call="checkAllInspection">หน้านี้ไม่ได้ใช้ ไม่มีหาย ทั้งหมด</button>
 
       <div id="inspectionItemTable" class="list"></div>
 
@@ -88,30 +88,26 @@
 
     <!-- ขั้นที่ 4: สรุปก่อนส่ง -->
     <section class="wiz-step hidden" id="inspectionStepSummary">
-      <h2>📋 ตรวจสอบอีกครั้งก่อนส่ง</h2>
+      <h2>ตรวจสอบอีกครั้งก่อนส่ง</h2>
       <div class="top-info" id="inspectionSummaryInfo"></div>
       <div id="inspectionSummary"></div>
       <!-- หน้าสรุปสั้น และต้องอ่านให้จบก่อนส่ง: ปุ่มอยู่ท้ายรายการ (ไม่ลอย) จึงไม่บังกล่องสรุปสุดท้าย -->
       <div class="save-bar wiz-bar is-static wiz-submit-bar">
         <p class="save-hint">อ่านสรุปด้านบนครบแล้ว กดส่งได้เลย</p>
-        <button id="inspectionSubmitBtn" type="button" class="wiz-submit" data-call="submitInspection">✅ ยืนยันส่งผลการตรวจ</button>
+        <button id="inspectionSubmitBtn" type="button" class="wiz-submit" data-call="submitInspection">ยืนยันส่งผลการตรวจ</button>
       </div>
     </section>
 
     <!-- เสร็จแล้ว -->
     <section class="wiz-step hidden" id="inspectionStepDone">
       <div class="wiz-done">
-        <!-- มาสคอตแมวชูสองมือดีใจ + ป้ายติ๊กถูก แทนไอคอน ✅ อย่างเดียว -->
-        <div class="wiz-done-mascot" aria-hidden="true">
-          <img src="<?= asset('images/mascot/cat-cheer.svg') ?>" alt="" width="150" height="154">
-          <span class="wiz-done-badge">✅</span>
-        </div>
+        <span class="mascot-figure wiz-done-mascot" aria-hidden="true"><img src="<?= asset('images/mascot/cat-cheer.svg') ?>" alt="" width="132" height="135"><span class="mascot-badge" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></span></span>
         <h2>บันทึกผลการตรวจเรียบร้อยแล้ว</h2>
         <p id="inspectionDoneText"></p>
       </div>
       <div class="wiz-done-actions">
-        <button type="button" data-call="switchTab" data-arg="dashboard">🏠 กลับหน้าแรก</button>
-        <button type="button" class="gray" data-call="inspectionRestart">🚑 ตรวจรถคันอื่น</button>
+        <button type="button" data-call="switchTab" data-arg="dashboard">กลับหน้าแรก</button>
+        <button type="button" class="gray" data-call="inspectionRestart">ตรวจรถคันอื่น</button>
       </div>
     </section>
   </div>
@@ -119,9 +115,9 @@
   <!-- หน้าต่างช่วยเหลือ -->
   <div id="inspectionHelp" class="hidden sheet-overlay" role="dialog" aria-modal="true" aria-labelledby="inspectionHelpTitle" data-call="closeInspectionHelp" data-call-self>
     <div class="sheet">
-      <h3 id="inspectionHelpTitle">📞 ขอความช่วยเหลือ</h3>
+      <h3 id="inspectionHelpTitle">ขอความช่วยเหลือ</h3>
       <div id="inspectionHelpBody"></div>
-      <a class="wiz-call hidden" id="inspectionHelpCall" href="#">📞 โทรหาเจ้าหน้าที่</a>
+      <a class="wiz-call hidden" id="inspectionHelpCall" href="#">โทรหาเจ้าหน้าที่</a>
       <button type="button" class="gray" data-call="closeInspectionHelp">ปิดหน้าต่างนี้</button>
     </div>
   </div>
@@ -132,7 +128,7 @@
   <div class="card">
     <h2>เติมของ</h2>
     <div class="mascot-tip">
-      <img src="<?= asset('images/mascot/cat-cart.svg') ?>" alt="" width="120" height="82">
+      <img class="tip-mascot" src="<?= asset('images/mascot/cat-cart.svg') ?>" alt="" width="80" height="55">
       <p><b>เลือกรถที่จะเติมของ</b><br>แตะการ์ดรถด้านล่าง ระบบจะแสดงรายการที่ต่ำกว่าเกณฑ์ให้ก่อน</p>
     </div>
     <p class="step-label">เลือกรถ</p>
@@ -140,7 +136,7 @@
     <div id="refillSheet" class="hidden">
       <div class="refill-head" id="refillHead"></div>
       <div class="mascot-tip">
-        <img src="<?= asset('images/mascot/cat-clipboard.svg') ?>" alt="" width="70" height="72">
+        <img class="tip-mascot" src="<?= asset('images/mascot/cat-clipboard.svg') ?>" alt="" width="52" height="53">
         <p><b>ก่อนกดบันทึก</b><br>ใส่จำนวนที่เติมจริง และตรวจวันหมดอายุของแต่ละล็อตให้ถูกต้อง</p>
       </div>
       <div class="filter-chips" role="group" aria-label="กรองรายการ">
@@ -150,12 +146,12 @@
       </div>
       <!-- เลือกเติมเฉพาะบางกลุ่มก่อน: ค้นหาชื่อ + ประเภท (ใช้ร่วมกับปุ่มด้านบน) -->
       <div class="refill-narrow">
-        <input type="search" id="refillSearch" placeholder="🔍 ค้นหาชื่ออุปกรณ์" aria-label="ค้นหาชื่ออุปกรณ์ที่จะเติม" autocomplete="off">
+        <input type="search" id="refillSearch" placeholder="ค้นหาชื่ออุปกรณ์" aria-label="ค้นหาชื่ออุปกรณ์ที่จะเติม" autocomplete="off">
         <select id="refillType" aria-label="กรองตามประเภทอุปกรณ์">
           <option value="">ทุกประเภท</option>
-          <option value="individual">🧩 รายชิ้น</option>
-          <option value="box">📦 กล่อง / ล็อต</option>
-          <option value="non_expiring">🩺 ไม่มีวันหมดอายุ</option>
+          <option value="individual">รายชิ้น</option>
+          <option value="box">กล่อง / ล็อต</option>
+          <option value="non_expiring">ไม่มีวันหมดอายุ</option>
         </select>
       </div>
       <div id="refillItems" class="list"></div>
@@ -163,7 +159,7 @@
       <input type="text" id="refillNote" maxlength="200">
       <div class="save-bar">
         <p id="refillSummary" class="save-hint" role="status" aria-live="polite"></p>
-        <button id="refillSubmitBtn" type="button" class="secondary" data-call="submitRefill">💾 บันทึก</button>
+        <button id="refillSubmitBtn" type="button" class="secondary" data-call="submitRefill">บันทึก</button>
       </div>
     </div>
   </div>
@@ -190,7 +186,7 @@
     </div>
     
     <div class="report-toolbar">
-      <input type="search" id="historySearch" placeholder="🔍 ค้นหา วันที่ ทะเบียน ผู้ตรวจ ผู้ดำเนินการ เลขที่คำขอ หรือชื่ออุปกรณ์">
+      <input type="search" id="historySearch" placeholder="ค้นหา วันที่ ทะเบียน ผู้ตรวจ ผู้ดำเนินการ เลขที่คำขอ หรือชื่ออุปกรณ์">
       <div class="filter-chips" id="historyCarChips" role="group" aria-label="กรองตามรถ"></div>
       <div class="filter-chips" id="historyStatusChips" role="group" aria-label="กรองสถานะ"></div>
       <div class="date-row">
@@ -219,13 +215,13 @@
     <div class="vehicle-card">
       <div id="stockCarMeta" class="vehicle-meta">จำนวนและวันหมดอายุแยกตามรถแต่ละคัน</div>
       <div class="vehicle-actions" id="vehicleActions">
-        <button type="button" id="btnEditVehicle" class="small-btn vehicle-edit">✏️ แก้ไขข้อมูลรถ</button>
+        <button type="button" id="btnEditVehicle" class="small-btn vehicle-edit">แก้ไขข้อมูลรถ</button>
         <!-- ปิดใช้งาน / ลบ นาน ๆ ใช้ที: เก็บในเมนู ⋯ ลดปุ่มแดงบนจอและกันกดพลาด -->
         <details class="vehicle-more" id="vehicleMore">
           <summary class="small-btn" aria-label="ตัวเลือกเพิ่มเติมของรถคันนี้" title="ตัวเลือกเพิ่มเติม">⋯</summary>
           <div class="vehicle-more-menu">
-            <button type="button" id="btnToggleVehicleStatus" class="vehicle-more-item">🚫 ปิดใช้งานรถ</button>
-            <button type="button" id="btnDeleteVehicle" class="vehicle-more-item is-danger">🗑 ลบรถ</button>
+            <button type="button" id="btnToggleVehicleStatus" class="vehicle-more-item">ปิดใช้งานรถ</button>
+            <button type="button" id="btnDeleteVehicle" class="vehicle-more-item is-danger">ลบรถ</button>
           </div>
         </details>
       </div>
@@ -244,14 +240,14 @@
       <div id="copyBox" class="copy-box">
         <label for="copySourceCar">คัดลอกรายการจากรถคันอื่น</label>
         <select id="copySourceCar" aria-label="เลือกรถต้นทางสำหรับคัดลอกอุปกรณ์"></select>
-        <button type="button" id="btnCopyStart" class="copy-start-btn" disabled>📋 คัดลอกรายการ</button>
+        <button type="button" id="btnCopyStart" class="copy-start-btn" disabled>คัดลอกรายการ</button>
       </div>
 
       <div id="itemImportBox" class="copy-box">
         <label for="itemImportFile">นำเข้ารายการจากไฟล์ (.csv / .xlsx)</label>
         <input type="file" id="itemImportFile" accept=".csv,.xlsx,.xls,text/csv" hidden>
-        <button type="button" id="btnItemImport" class="copy-start-btn">📥 นำเข้าจากไฟล์</button>
-        <button type="button" id="btnItemTemplate" class="copy-start-btn alt">📄 ดาวน์โหลดไฟล์ต้นแบบ</button>
+        <button type="button" id="btnItemImport" class="copy-start-btn">นำเข้าจากไฟล์</button>
+        <button type="button" id="btnItemTemplate" class="copy-start-btn alt">ดาวน์โหลดไฟล์ต้นแบบ</button>
       </div>
       </div>
     </details>
@@ -295,23 +291,23 @@
           <details class="users-more" id="usersMore">
             <summary class="small-btn" aria-label="ตัวเลือกเพิ่มเติม" title="ตัวเลือกเพิ่มเติม">⋯</summary>
             <div class="users-more-menu">
-              <button type="button" id="userImportOpenBtn" class="users-more-item">📥 นำเข้าจาก Excel / CSV</button>
-              <button type="button" id="nurseTemplateBtn" class="users-more-item">📄 ดาวน์โหลดไฟล์ตัวอย่าง (.xlsx)</button>
-              <button type="button" id="wardManagerBtn" class="users-more-item">🏥 จัดการวอร์ด <span id="wardManagerCount" class="users-more-count"></span></button>
+              <button type="button" id="userImportOpenBtn" class="users-more-item">นำเข้าจาก Excel / CSV</button>
+              <button type="button" id="nurseTemplateBtn" class="users-more-item">ดาวน์โหลดไฟล์ตัวอย่าง (.xlsx)</button>
+              <button type="button" id="wardManagerBtn" class="users-more-item">จัดการวอร์ด <span id="wardManagerCount" class="users-more-count"></span></button>
             </div>
           </details>
         </div>
       </div>
       <div class="users-stats" id="userStats" aria-live="polite"></div>
       <div class="users-search">
-        <input type="search" id="nurseSearch" placeholder="🔍 ชื่อ, รหัส, เบอร์, ชื่อผู้ใช้" aria-label="ค้นหาผู้ใช้">
+        <input type="search" id="nurseSearch" placeholder="ชื่อ, รหัส, เบอร์, ชื่อผู้ใช้" aria-label="ค้นหาผู้ใช้">
         <select id="nurseDeptFilter" aria-label="กรองรายชื่อตามวอร์ด"></select>
       </div>
       <div class="users-chips" id="userChips" role="group" aria-label="กรองตามประเภทและสถานะ" data-role="" data-status="">
         <!-- 3 หมวด — กดหมวดที่เลือกอยู่ซ้ำ = กลับไปแสดงทั้งหมด -->
-        <button type="button" data-role="nurse" data-status="" aria-pressed="false">👩‍⚕️ พยาบาล</button>
-        <button type="button" data-role="admin" data-status="" aria-pressed="false">👑 แอดมิน</button>
-        <button type="button" data-role="other" data-status="" aria-pressed="false">👤 ผู้ใช้</button>
+        <button type="button" data-role="nurse" data-status="" aria-pressed="false">พยาบาล</button>
+        <button type="button" data-role="admin" data-status="" aria-pressed="false">แอดมิน</button>
+        <button type="button" data-role="other" data-status="" aria-pressed="false">ผู้ใช้</button>
       </div>
       <p id="nurseFilterNote" class="hidden users-filter-note"></p>
     </div>
@@ -334,14 +330,14 @@
             <!-- แก้ไขพยาบาล: คำสั่งที่ใช้นาน ๆ ครั้ง (ลบ) เก็บไว้ในเมนู ไม่วางใกล้ปุ่มบันทึก -->
             <button type="button" class="user-sheet-x hidden" id="nurseMenuBtn" aria-label="คำสั่งเพิ่มเติม" aria-haspopup="menu" aria-expanded="false" aria-controls="nurseMenu">⋮</button>
             <div id="nurseMenu" class="user-menu hidden" role="menu" aria-label="คำสั่งเพิ่มเติม">
-              <button type="button" id="nurseDeleteBtn" class="user-menu-item is-danger" role="menuitem">🗑 ลบพยาบาลคนนี้</button>
+              <button type="button" id="nurseDeleteBtn" class="user-menu-item is-danger" role="menuitem">ลบพยาบาลคนนี้</button>
             </div>
             <button type="button" class="user-sheet-x" data-call="closeUserSheet" aria-label="ปิดหน้าต่าง">✕</button>
           </div>
         </div>
         <div class="user-kind" id="userKind" role="group" aria-label="ประเภทผู้ใช้">
-          <button type="button" data-kind="nurse" aria-pressed="true">👩‍⚕️ พยาบาล</button>
-          <button type="button" data-kind="other" aria-pressed="false">👤 บัญชีอื่น</button>
+          <button type="button" data-kind="nurse" aria-pressed="true">พยาบาล</button>
+          <button type="button" data-kind="other" aria-pressed="false">บัญชีอื่น</button>
         </div>
       </div>
 
@@ -496,20 +492,20 @@
       </div>
       <div class="user-form-body">
         <div id="nurseDropzone" role="button" tabindex="0" aria-label="อัปโหลดไฟล์รายชื่อ Excel หรือ CSV" class="user-dropzone">
-          <span class="user-dropzone-ico" aria-hidden="true">📥</span>
+          <span class="user-dropzone-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="m7 9 5-5 5 5"/><path d="M4 20h16"/></svg></span>
           <p class="user-dropzone-main">ลากไฟล์ .xlsx .xls .csv มาวาง หรือ <u>แตะเพื่อเลือกไฟล์</u></p>
           <p class="user-hint">ระบบจะแสดงตารางพรีวิวให้ตรวจก่อนบันทึกจริง</p>
           <input id="nurseImport" type="file" accept=".xlsx,.xls,.csv" class="sr-only">
         </div>
         <div id="nurseFileStatus" class="user-file-status hidden">
-          <span aria-hidden="true">📄</span>
+          <span aria-hidden="true"></span>
           <div class="user-file-text">
             <p id="nurseFileName"></p>
             <p id="nurseFileMeta"></p>
           </div>
           <button type="button" id="nurseFileClear" class="user-sheet-x" aria-label="ซ่อนสถานะไฟล์">✕</button>
         </div>
-        <button type="button" data-call="downloadNurseTemplate" class="user-acc-btn">📄 ดาวน์โหลดไฟล์ตัวอย่าง (.xlsx)</button>
+        <button type="button" data-call="downloadNurseTemplate" class="user-acc-btn">ดาวน์โหลดไฟล์ตัวอย่าง (.xlsx)</button>
       </div>
     </div>
   </div>

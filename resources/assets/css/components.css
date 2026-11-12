@@ -40,7 +40,7 @@
 .stat {
   background: var(--teal-50);
   border: 1.5px solid var(--teal-100);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 10px 6px;
   text-align: center;
 }
@@ -83,7 +83,7 @@
   height: 100%;
   width: 0%;
   border-radius: var(--radius-full);
-  background: linear-gradient(90deg, var(--teal-600), var(--teal-400));
+  background: var(--teal-700);
   transition: width 0.25s ease;
 }
 
@@ -229,7 +229,7 @@
   background: transparent;
   color: var(--bad);
   border: 1.5px solid var(--bad-soft);
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .clear-history-btn:hover {
@@ -305,7 +305,7 @@
   display: grid;
   place-items: center;
   padding: 16px;
-  background: linear-gradient(160deg, var(--teal-700), var(--teal-800) 55%, var(--teal-900));
+  background: var(--navy-900);
 }
 
 .auth-card {
@@ -352,7 +352,7 @@
 /* มีข้อความ = แสดงเป็นกล่อง (แดง = ผิดพลาด, เขียว = สำเร็จ) */
 .auth-error:not(:empty) {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 6px;
   border: 1px solid var(--bad);
   background: var(--bad-soft);
   color: #991b1b;
@@ -405,7 +405,7 @@
   background: #f8fafc;
   color: #334155;
   border: 2px solid transparent;
-  border-radius: 16px;
+  border-radius: 6px;
   transition: box-shadow var(--transition-fast), transform var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
 }
 
@@ -424,7 +424,7 @@
 .car-symbol[aria-pressed="true"] {
   background: var(--teal-100);
   border-color: var(--teal-600);
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.22);
+  box-shadow: 0 0 0 3px rgba(26, 79, 156, 0.22);
   transform: translateY(-2px);
 }
 
@@ -477,7 +477,7 @@
 /* Item Card (Checklist) */
 .item-card {
   border: 1.5px solid var(--line);
-  border-radius: 14px;
+  border-radius: 8px;
   background: #fff;
   padding: 12px;
   transition: border-color var(--transition-fast), background var(--transition-fast);
@@ -584,7 +584,7 @@
   margin: 0;
   padding: 12px 8px;
   font-size: 14.5px;
-  border-radius: 10px;
+  border-radius: 6px;
 }
 
 .act-btn.ok {
@@ -609,7 +609,7 @@
   grid-template-columns: repeat(5, 1fr);
   gap: 6px;
   border: 2px solid #334155;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 6px;
   background: #f8fafc;
 }
@@ -653,10 +653,10 @@
   z-index: var(--z-sticky);
   background: #fff;
   border: 1.5px solid var(--teal-100);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 10px 12px;
   margin-bottom: 12px;
-  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.10);
+  box-shadow: none;
 }
 
 .check-sticky .progress-wrap {
@@ -668,7 +668,7 @@
 .stock-card,
 .report-card {
   border: 1.5px solid var(--line);
-  border-radius: 14px;
+  border-radius: 8px;
   background: #fff;
   padding: 12px;
 }

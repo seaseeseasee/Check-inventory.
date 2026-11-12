@@ -4,14 +4,14 @@
 <path d="M100 2 l2.5 6.5 6.5 2.5 -6.5 2.5 -2.5 6.5 -2.5 -6.5 -6.5 -2.5 6.5 -2.5z" fill="#facc15"/>
 <g class="body">
   <path d="M138 182 C178 188 184 150 166 136" fill="none" stroke="#1f2328" stroke-width="12" stroke-linecap="round"/>
-  <rect x="58" y="118" width="84" height="70" rx="26" fill="#8fd0f5" stroke="#3b8fc9" stroke-width="3"/>
+  <rect x="58" y="118" width="84" height="70" rx="26" fill="#a9c5ee" stroke="#1a4f9c" stroke-width="3"/>
   <path d="M86 119 L100 140 L114 119 Z" fill="#fff"/>
   <rect x="59.5" y="160" width="81" height="10" fill="#e2e8f0"/><rect x="59.5" y="163.5" width="81" height="3" fill="#facc15"/>
-  <circle cx="123" cy="140" r="8" fill="#fff" stroke="#3b8fc9" stroke-width="2"/><path d="M123 135v10M118 140h10" stroke="#ef4444" stroke-width="3"/>
+  <circle cx="123" cy="140" r="8" fill="#fff" stroke="#1a4f9c" stroke-width="2"/><path d="M123 135v10M118 140h10" stroke="#ef4444" stroke-width="3"/>
   <ellipse cx="82" cy="190" rx="15" ry="9" fill="#fff" stroke="#1f2328" stroke-width="2"/><ellipse cx="118" cy="190" rx="15" ry="9" fill="#fff" stroke="#1f2328" stroke-width="2"/>
 </g>
-<path d="M64 136 C46 128 36 112 32 92" fill="none" stroke="#3b8fc9" stroke-width="19" stroke-linecap="round"/><path d="M64 136 C46 128 36 112 32 92" fill="none" stroke="#8fd0f5" stroke-width="14" stroke-linecap="round"/>
-<path d="M136 136 C154 128 164 112 168 92" fill="none" stroke="#3b8fc9" stroke-width="19" stroke-linecap="round"/><path d="M136 136 C154 128 164 112 168 92" fill="none" stroke="#8fd0f5" stroke-width="14" stroke-linecap="round"/>
+<path d="M64 136 C46 128 36 112 32 92" fill="none" stroke="#1a4f9c" stroke-width="19" stroke-linecap="round"/><path d="M64 136 C46 128 36 112 32 92" fill="none" stroke="#a9c5ee" stroke-width="14" stroke-linecap="round"/>
+<path d="M136 136 C154 128 164 112 168 92" fill="none" stroke="#1a4f9c" stroke-width="19" stroke-linecap="round"/><path d="M136 136 C154 128 164 112 168 92" fill="none" stroke="#a9c5ee" stroke-width="14" stroke-linecap="round"/>
 <g class="head">
   <path d="M50 72 L44 20 L86 44 Z" fill="#1f2328"/><path d="M150 72 L156 20 L114 44 Z" fill="#1f2328"/>
   <path d="M56 58 L53 32 L77 47 Z" fill="#f9a8b8"/><path d="M144 58 L147 32 L123 47 Z" fill="#f9a8b8"/>

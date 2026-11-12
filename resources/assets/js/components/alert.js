@@ -32,7 +32,7 @@ class AlertManager {
     const icons = {
       success: '✓',
       error: '✕',
-      warning: '⚠',
+      warning: '!',
       info: 'ℹ',
     };
 

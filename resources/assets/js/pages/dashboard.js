@@ -14,7 +14,7 @@ class DashboardPage {
     const user = window.auth?.getUser();
     this.userRole = user?.role || 'staff';
     const greeting = document.getElementById('dashGreeting');
-    if (greeting && user?.full_name) greeting.textContent = `สวัสดี ${user.full_name} 👋`;
+    if (greeting && user?.full_name) greeting.textContent = `สวัสดี ${user.full_name}`;
 
     await this.loadData();
     this.render();
@@ -310,8 +310,8 @@ class DashboardPage {
     const expired = expiring.filter(item => item.days_left < 0).length;
     const soon = expiring.length - expired;
     const parts = [
-      expired && `⛔ มีของหมดอายุแล้ว ${expired} รายการ`,
-      soon && `⚠️ มีของใกล้หมดอายุ ${soon} รายการ`,
+      expired && `มีของหมดอายุแล้ว ${expired} รายการ`,
+      soon && `มีของใกล้หมดอายุ ${soon} รายการ`,
     ].filter(Boolean);
     return `<p class="dash-attn">${parts.join(' · ')}</p>`;
   }
