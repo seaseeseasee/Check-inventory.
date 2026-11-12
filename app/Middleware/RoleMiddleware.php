@@ -22,6 +22,27 @@ class RoleMiddleware
         $this->requireRole($roles);
     }
 
+    /**
+     * สิทธิ์ย่อย (เช่น logs.view) — ต้องเป็น admin และถือสิทธิ์นั้นใน refer_user_permissions
+     * แยกผู้ดู Log ออกจาก admin ทั่วไป: admin ที่ไม่ได้รับสิทธิ์จะได้ 403 เหมือนผู้ใช้อื่น
+     */
+    public function requirePermission(string $permission): void
+    {
+        $this->requireRole(['admin']);
+        if (!$this->hasPermission($permission)) {
+            Response::forbidden('Insufficient permissions');
+        }
+    }
+
+    public function hasPermission(string $permission): bool
+    {
+        $id = $this->getCurrentUserId();
+        if ($id === null || $this->getCurrentUserRole() !== 'admin') {
+            return false;
+        }
+        return in_array($permission, (new \App\Models\UserPermission())->forUser((string)$id), true);
+    }
+
     private function requireRole(array $allowedRoles): void
     {
         $user = $_SESSION['user'] ?? null;

@@ -309,6 +309,9 @@ function initializeRoleUI() {
     });
   }
 
+  // หน้าที่ต้องรู้สิทธิ์ของผู้ใช้ก่อนแสดงเมนู (เช่น Log Management) ฟังเหตุการณ์นี้
+  window.dispatchEvent(new CustomEvent('auth:ready', { detail: user }));
+
   // Redirect to appropriate dashboard
   const currentTab = document.querySelector('.tab-btn.active')?.id;
   if (!currentTab || currentTab === 'btnTabDashboard') {

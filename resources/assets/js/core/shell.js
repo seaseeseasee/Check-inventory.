@@ -7,7 +7,7 @@
 function switchTab(id) {
   // หน้าจัดการผู้ใช้เดิมถูกรวมเข้ากับหน้าพยาบาล — ลิงก์/โค้ดเก่าที่เรียก 'users' ไปหน้าเดียวกัน
   if (id === 'users') id = 'nurses';
-  const tabs = ['Dashboard', 'Check', 'Restock', 'Reports', 'Stock', 'Nurses'];
+  const tabs = ['Dashboard', 'Check', 'Restock', 'Reports', 'Stock', 'Nurses', 'Logs'];
   tabs.forEach(name => {
     const content = document.getElementById('tabContent' + name);
     const btn = document.getElementById('btnTab' + name);
@@ -35,6 +35,9 @@ function switchTab(id) {
     case 'nurses':
       if (typeof initNurses === 'function') initNurses();
       if (typeof initUsers === 'function') initUsers();   // บัญชีที่ไม่ใช่พยาบาลอยู่หน้าเดียวกัน
+      break;
+    case 'logs':
+      if (typeof initLogs === 'function') initLogs();
       break;
   }
 }

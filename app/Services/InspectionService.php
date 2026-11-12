@@ -20,6 +20,7 @@ use App\Models\RestockAction;
 use App\Models\StockMovement;
 use App\Config\Database;
 use App\Exceptions\ApiException;
+use App\Services\Logging\LogService;
 
 /**
  * การตรวจเช็คอุปกรณ์ประจำรถตามเวร (1 รอบต่อ รถ + วันที่ + เวร — UNIQUE uk_check_car_date_shift)
@@ -795,6 +796,10 @@ class InspectionService
             if ($issues) {
                 // ไม่ควรเกิด — ถ้าเกิดให้ยกเลิกทั้งรอบดีกว่าบันทึกยอดที่ขัดกัน
                 error_log('reconcile failed after inspection ' . $checkId . ': ' . json_encode($issues, JSON_UNESCAPED_UNICODE));
+                LogService::system('system.reconcile_failed', 'ยอดคงเหลือไม่สอดคล้องหลังบันทึกผลตรวจเช็ก — ยกเลิกการบันทึก', 'ERROR', [
+                    'module' => 'inspection', 'record_type' => 'check', 'record_id' => $checkId,
+                    'context' => ['car_id' => $carId, 'issues' => array_slice($issues, 0, 20)],
+                ]);
                 throw new \RuntimeException('ยอดคงเหลือไม่สอดคล้องกันหลังคำนวณ ระบบยกเลิกการบันทึกเพื่อป้องกันข้อมูลผิด');
             }
 
@@ -804,6 +809,14 @@ class InspectionService
             $result['mode'] = $mode;
             $result['refill'] = $refill;
             $result['adjustments'] = $adjustments;
+
+            $summary = (LogService::pick($result, ['car_id', 'check_date', 'shift_code', 'nurse_id', 'nurse_name']) ?? [])
+                + ['items_checked' => count($rawLines), 'refill_lines' => count($refillLines)];
+            LogService::audit($mode === 'edit' ? 'inspection.update' : 'inspection.submit', 'inspection', 'check', $checkId,
+                $mode === 'edit' ? LogService::pick($header ?? null, ['check_date', 'shift_code', 'nurse_id', 'nurse_name']) : null,
+                $summary,
+                ['description' => ($mode === 'edit' ? 'แก้ไขผลตรวจเช็กรถ ' : 'ส่งผลตรวจเช็กรถ ') . $vehicle['name']
+                    . (count($refillLines) ? ' — ต้องเติม ' . count($refillLines) . ' รายการ' : '')]);
             return $result;
         } catch (\Throwable $e) {
             $db->rollBack();

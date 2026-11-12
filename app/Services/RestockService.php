@@ -14,6 +14,7 @@ use App\Models\RestockAction;
 use App\Models\StockMovement;
 use App\Config\Database;
 use App\Exceptions\ApiException;
+use App\Services\Logging\LogService;
 
 /**
  * เติมอุปกรณ์เข้ารถ "โดยตรง" (ไม่มีคลังสต็อกกลาง / ไม่มีขั้นตอนมอบหมาย-อนุมัติ)
@@ -416,10 +417,20 @@ class RestockService
             $issues = $this->stock->reconcile($carId);
             if ($issues) {
                 error_log('reconcile failed after refill ' . $batchId . ': ' . json_encode($issues, JSON_UNESCAPED_UNICODE));
+                LogService::system('system.reconcile_failed', 'ยอดคงเหลือไม่สอดคล้องหลังเติมของ — ยกเลิกการบันทึก', 'ERROR', [
+                    'module' => 'refill', 'record_type' => 'vehicle', 'record_id' => $carId,
+                    'context' => ['batch_id' => $batchId, 'issues' => array_slice($issues, 0, 20)],
+                ]);
                 throw new \RuntimeException('ยอดคงเหลือไม่สอดคล้องกันหลังคำนวณ ระบบยกเลิกการบันทึกเพื่อป้องกันข้อมูลผิด');
             }
 
             $db->commit();
+            LogService::audit('refill.create', 'refill', 'refill_batch', $batchId, null, [
+                'car_id' => $carId,
+                'lines' => count($applied),
+                'applied' => array_slice($applied, 0, 50),
+                'requests_updated' => is_array($requests) ? count($requests) : null,
+            ], ['description' => 'เติมของเข้ารถ ' . (($this->vehicleModel->find($carId)['name'] ?? null) ?: $carId) . ' ' . count($applied) . ' รายการ']);
             return [
                 'batch_id' => $batchId,
                 'duplicate' => false,
@@ -490,10 +501,30 @@ class RestockService
             $issues = $this->stock->reconcile((string)$item['car_id']);
             if ($issues) {
                 error_log('reconcile failed after lot ' . $action . ' ' . $lotId . ': ' . json_encode($issues, JSON_UNESCAPED_UNICODE));
+                LogService::system('system.reconcile_failed', 'ยอดคงเหลือไม่สอดคล้องหลังจัดการล็อต — ยกเลิกการบันทึก', 'ERROR', [
+                    'module' => 'lot', 'record_type' => 'lot', 'record_id' => $lotId,
+                    'context' => ['action' => $action, 'issues' => array_slice($issues, 0, 20)],
+                ]);
                 throw new \RuntimeException('ยอดคงเหลือไม่สอดคล้องกันหลังคำนวณ ระบบยกเลิกการบันทึกเพื่อป้องกันข้อมูลผิด');
             }
             $db->commit();
             $result['current_qty'] = (float)($this->itemModel->find((string)$item['id'])['current_qty'] ?? 0);
+
+            $labels = ['edit' => 'แก้ไขล็อต', 'adjust' => 'ปรับยอดล็อต', 'void' => 'ยกเลิกล็อต', 'expire' => 'จำหน่ายล็อตหมดอายุ'];
+            LogService::audit('lot.' . $action, 'lot', 'lot', $lotId,
+                LogService::pick($lot, ['lot_no', 'expiry_date', 'received_date', 'qty_received', 'qty_remaining']),
+                array_filter([
+                    'item_id' => (string)$item['id'],
+                    'changed' => $result['changed'] ?? null,
+                    'delta' => $result['delta'] ?? null,
+                    'removed' => $result['removed'] ?? null,
+                    'reason' => $reason !== '' ? $reason : null,
+                    'item_qty_after' => $result['current_qty'],
+                ], static fn($v) => $v !== null),
+                [
+                    'description' => $labels[$action] . ' ของ ' . $item['name'] . ($reason !== '' ? " — {$reason}" : ''),
+                    'severity' => $action === 'void' ? 'WARNING' : 'INFO',
+                ]);
             return $result;
         } catch (\Throwable $e) {
             if ($db->inTransaction()) {
@@ -650,6 +681,9 @@ class RestockService
             ]);
 
             $db->commit();
+            LogService::audit('restock.cancel', 'restock', 'restock_request', $id,
+                ['status' => $request['status']], ['status' => RestockRequest::STATUS_CANCELLED, 'reason' => $reason],
+                ['description' => 'ยกเลิกคำขอเติมของ ' . ($request['request_no'] ?? $id) . " — {$reason}"]);
             return $this->requestModel->getWithDetails($id);
         } catch (\Throwable $e) {
             $db->rollBack();

@@ -12,9 +12,13 @@ use App\Middleware\RoleMiddleware;
 use App\Models\AuditLog;
 use App\Models\Nurse;
 use App\Models\User;
+use App\Services\Logging\LogService;
 
 class NurseController extends Controller
 {
+    /** ช่องของพยาบาลที่เก็บใน audit log */
+    private const AUDIT_FIELDS = ['name', 'phone', 'department', 'department_id', 'start_text', 'end_text', 'note', 'active'];
+
     private InspectionService $inspectionService;
     private DepartmentService $departmentService;
     private RoleMiddleware $roleMiddleware;
@@ -39,6 +43,10 @@ class NurseController extends Controller
                 $nurse['account'] = $account;   // หน้าจัดการผู้ใช้: บทบาท/สถานะ/เข้าสู่ระบบล่าสุด
             }
             unset($nurse);
+            // admin เห็นเบอร์โทร + ชื่อผู้ใช้ของพยาบาลทุกคน = ข้อมูลส่วนบุคคล (staff ได้รายชื่อที่ตัดเบอร์ออกแล้ว ไม่ต้องบันทึก)
+            LogService::dataAccess('data.view_nurse_list', 'nurse', null, null, [
+                'description' => 'เปิดดูรายชื่อพยาบาลพร้อมเบอร์โทรและบัญชี (' . count($nurses) . ' คน)',
+            ]);
         } else {
             $nurses = self::forSelection($nurses);
         }
@@ -120,6 +128,9 @@ class NurseController extends Controller
             }
             throw $e;
         }
+        LogService::audit('nurse.create', 'nurse', 'nurse', (string)$data['id'], null,
+            LogService::pick($data, self::AUDIT_FIELDS) + ['account' => $username !== '' ? $username : null],
+            ['description' => 'เพิ่มพยาบาล ' . $data['name']]);
 
         if ($username !== '') {
             try {
@@ -202,6 +213,11 @@ class NurseController extends Controller
                 $db->rollBack();
             }
             throw $e;
+        }
+        [$old, $new] = LogService::diff($existing, LogService::pick($data, self::AUDIT_FIELDS) ?? []);
+        if ($new !== null) {
+            LogService::audit('nurse.update', 'nurse', 'nurse', $id, $old, $new,
+                ['description' => 'แก้ไขพยาบาล ' . $data['name'] . ': ' . implode(', ', array_keys($new))]);
         }
 
         if ($username !== '') {
@@ -318,6 +334,12 @@ class NurseController extends Controller
             }
             throw $e;
         }
+        if ((bool)$nurse['active'] !== $active) {
+            LogService::audit($active ? 'nurse.restore' : 'nurse.disable', 'nurse', 'nurse', $id,
+                ['active' => (bool)$nurse['active']], ['active' => $active],
+                ['description' => ($active ? 'เปิดใช้งานพยาบาล ' : 'พักใช้งานพยาบาล ') . $nurse['name']
+                    . ($linked !== null ? ' (พร้อมบัญชีที่ผูกกัน)' : '')]);
+        }
 
         $this->success(['id' => $id, 'active' => $active, 'account' => $linked !== null]);
     }
@@ -364,6 +386,10 @@ class NurseController extends Controller
                 $db->rollBack();
             }
             throw $e;
+        }
+        if (!empty($existing['active'])) {
+            LogService::audit('nurse.disable', 'nurse', 'nurse', $id, ['active' => true], ['active' => false],
+                ['description' => 'พักใช้งานพยาบาล ' . $existing['name'] . ($linked !== null ? ' (พร้อมบัญชีที่ผูกกัน)' : '')]);
         }
 
         $this->success(['id' => $id]);
