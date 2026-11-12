@@ -510,3 +510,15 @@
     </div>
   </div>
 </div>
+
+<!-- Log Management (admin ที่ได้รับสิทธิ์ logs.view เท่านั้น — เนื้อหาสร้างโดย js/pages/logs.js) -->
+<div id="tabContentLogs" class="hidden">
+  <div class="card logs-page">
+    <div class="logs-head">
+      <h2>Log Management</h2>
+      <p class="logs-sub">ประวัติการใช้งาน การเปลี่ยนแปลงข้อมูล และเหตุการณ์ความปลอดภัย — เวลาแสดงเป็นเวลาไทย</p>
+    </div>
+    <div class="seg logs-seg" role="tablist" aria-label="ส่วนของ Log Management" id="logsSeg"></div>
+    <div id="logsBody" aria-live="polite"></div>
+  </div>
+</div>

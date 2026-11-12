@@ -2511,6 +2511,7 @@ class VehiclesPage {
           b.drafts > 0 ? `ร่างงาน ${b.drafts}` : '',
           b.restock_open > 0 ? `งานเติมค้าง ${b.restock_open}` : '',
           b.restock_total > 0 ? `งานเติมทั้งหมด ${b.restock_total}` : '',
+          b.refills > 0 ? `เติมของเข้ารถ ${b.refills} ครั้ง` : '',
         ].filter(Boolean).join(' • ');
         const fallback = await window.confirmDialog(
           `${error.message}\n\n(${summary || 'มีข้อมูลผูกอยู่'})\n\nเปลี่ยนเป็น "งดใช้งาน" แทนหรือไม่?`,

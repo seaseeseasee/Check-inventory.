@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\Metadata;
 use App\Models\StockMovement;
 use App\Models\Vehicle;
+use App\Services\Logging\LogService;
 
 /**
  * ทะเบียนรถและอุปกรณ์ประจำรถ (Vehicle & Item Management) — แหล่งตรรกะเดียวของทุกหน้าจอ
@@ -37,6 +38,12 @@ use App\Models\Vehicle;
 class VehicleService
 {
     public const STATUSES = ['available', 'maintenance', 'disabled'];
+
+    /** ช่องที่เก็บใน audit log ตอนเพิ่ม/ลบ (ไม่เก็บทั้งแถว) */
+    private const AUDIT_VEHICLE_FIELDS = ['name', 'plate', 'brand_model', 'status', 'vehicle_type', 'home_department_id',
+        'vehicle_color', 'odometer_initial', 'notes'];
+    private const AUDIT_ITEM_FIELDS = ['car_id', 'name', 'standard', 'item_type', 'is_battery', 'has_pressure', 'active',
+        'battery_max_bars', 'battery_low_bars', 'o2_low_psi', 'expiry_warn_days'];
 
     /** สถานะงานเติมที่ยัง "เดินอยู่" — ห้ามลบรถทิ้งเด็ดขาด */
     public const OPEN_RESTOCK_STATUSES = ['PENDING', 'IN_PROGRESS', 'PARTIAL'];
@@ -172,6 +179,10 @@ class VehicleService
         $issues = $stock->reconcile((string)$item['car_id']);
         if ($issues) {
             error_log('reconcile failed after onboard set ' . $item['id'] . ': ' . json_encode($issues, JSON_UNESCAPED_UNICODE));
+            LogService::system('system.reconcile_failed', 'ยอดคงเหลือไม่สอดคล้องหลังตั้งยอดบนรถ — ยกเลิกการบันทึก', 'ERROR', [
+                'module' => 'item', 'record_type' => 'item', 'record_id' => (string)$item['id'],
+                'context' => ['issues' => array_slice($issues, 0, 20)],
+            ]);
             throw new \RuntimeException('ยอดคงเหลือไม่สอดคล้องกันหลังคำนวณ ระบบยกเลิกการบันทึกเพื่อป้องกันข้อมูลผิด');
         }
         return ['before' => $before, 'after' => $new];
@@ -270,16 +281,19 @@ class VehicleService
             array_merge([$carId], self::OPEN_RESTOCK_STATUSES)
         );
         $items = $count("SELECT COUNT(*) FROM refer_items WHERE car_id = ?", [$carId]);
+        // ประวัติเติมของเข้ารถ (010) — เดิมไม่ได้นับ: รถที่เคยเติมของแต่ยังไม่เคยตรวจ ลบแล้วชน FK ได้ 500
+        $refills = $count("SELECT COUNT(*) FROM refer_refill_batches WHERE car_id = ?", [$carId]);
 
-        // FK ของ refer_checks/refer_drafts/refer_restock_requests → refer_vehicles เป็น RESTRICT
+        // FK ของ refer_checks/refer_drafts/refer_restock_requests/refer_refill_batches → refer_vehicles เป็น RESTRICT
         // ถ้ามีแถวเหล่านี้ การลบถาวรจะพังเป็น SQL errorเสมอ — จึงต้องปฏิเสธก่อนแตะฐานข้อมูล
-        $blocking = $checks > 0 || $drafts > 0 || $restockOpen > 0 || $restockTotal > 0;
+        $blocking = $checks > 0 || $drafts > 0 || $restockOpen > 0 || $restockTotal > 0 || $refills > 0;
 
         return [
             'checks' => $checks,
             'drafts' => $drafts,
             'restock_total' => $restockTotal,
             'restock_open' => $restockOpen,
+            'refills' => $refills,
             'items' => $items,
             'can_hard_delete' => !$blocking,
             'blocking' => $blocking,
@@ -372,6 +386,11 @@ class VehicleService
         }
         $vehicle['stock_copied'] = $stockCopied;
         $vehicle['items_inactive'] = $inactiveCopied;
+
+        $snapshot = LogService::pick($vehicle, self::AUDIT_VEHICLE_FIELDS) ?? [];
+        LogService::audit('vehicle.create', 'vehicle', 'vehicle', $id, null,
+            $snapshot + ['items_created' => $inserted, 'item_source' => $seed['source']],
+            ['description' => "เพิ่มรถ {$name} พร้อมอุปกรณ์ {$inserted} รายการ"]);
         return $vehicle;
     }
 
@@ -680,6 +699,11 @@ class VehicleService
         }
         $created = count($itemIds);
 
+        LogService::audit('item.copy', 'item', 'vehicle', $carId, null, [
+            'created' => $created,
+            'names' => array_slice(array_column($rows, 'name'), 0, 100),
+        ], ['description' => "คัดลอกอุปกรณ์ {$created} รายการเข้ารถ " . ($vehicle['name'] ?? $carId)]);
+
         return [
             'created' => $created,
             'item_ids' => $itemIds,   // ลำดับเดียวกับ items ที่ส่งมา
@@ -785,6 +809,13 @@ class VehicleService
 
         $vehicle = $this->vehicleModel->find($id) ?? [];
         $vehicle['updated_fields'] = array_keys($data);
+
+        [$old, $new] = LogService::diff($existing, $data);
+        if ($new !== null) {
+            LogService::audit('vehicle.update', 'vehicle', 'vehicle', $id, $old, $new, [
+                'description' => 'แก้ไขรถ ' . ($vehicle['name'] ?? $id) . ': ' . implode(', ', array_keys($new)),
+            ]);
+        }
         return $vehicle;
     }
 
@@ -815,6 +846,9 @@ class VehicleService
                 }
                 $this->vehicleModel->update($id, ['status' => 'disabled']);
                 $db->commit();
+                LogService::audit('vehicle.disable', 'vehicle', 'vehicle', $id,
+                    ['status' => $vehicle['status'] ?? null], ['status' => 'disabled'],
+                    ['description' => "งดใช้งานรถ {$label}"]);
                 return ['mode' => 'disabled', 'id' => $id, 'name' => $label, 'blockers' => $blockers];
             }
 
@@ -841,6 +875,9 @@ class VehicleService
             }
 
             $db->commit();
+            LogService::audit('vehicle.delete', 'vehicle', 'vehicle', $id,
+                (LogService::pick($vehicle, self::AUDIT_VEHICLE_FIELDS) ?? []) + ['items_removed' => $removedItems], null,
+                ['description' => "ลบรถ {$label} ถาวร (อุปกรณ์ {$removedItems} รายการ)", 'severity' => 'WARNING']);
             return [
                 'mode' => 'deleted',
                 'id' => $id,
@@ -870,6 +907,9 @@ class VehicleService
         }
         if ($blockers['restock_total'] > $blockers['restock_open']) {
             $parts[] = 'ประวัติการเติมของ ' . ($blockers['restock_total'] - $blockers['restock_open']) . ' คำขอ';
+        }
+        if (($blockers['refills'] ?? 0) > 0) {
+            $parts[] = 'ประวัติการเติมของเข้ารถ ' . $blockers['refills'] . ' ครั้ง';
         }
         return 'ลบถาวรไม่ได้เพราะรถคันนี้มี' . ($parts ? ' — ' . implode(' • ', $parts) : 'ข้อมูลผูกอยู่')
             . ' — แนะนำให้ตั้งสถานะเป็น "งดใช้งาน" แทน เพื่อให้รายงานย้อนหลังอ่านได้ครบ';
@@ -999,7 +1039,14 @@ class VehicleService
             throw $e;
         }
 
-        return $this->itemModel->find($itemId) ?? [];
+        $created = $this->itemModel->find($itemId) ?? [];
+        $snapshot = LogService::pick($created, self::AUDIT_ITEM_FIELDS) ?? [];
+        if (array_key_exists('onboard_qty', $input) && trim((string)$input['onboard_qty']) !== '') {
+            $snapshot['onboard_qty'] = $input['onboard_qty'];
+        }
+        LogService::audit('item.create', 'item', 'item', $itemId, null, $snapshot,
+            ['description' => "เพิ่มอุปกรณ์ {$name} ในรถ " . ($vehicle['name'] ?? $carId)]);
+        return $created;
     }
 
     /**
@@ -1111,6 +1158,20 @@ class VehicleService
             $result = $this->itemModel->find($itemId) ?? [];
             $result['updated_fields'] = array_keys($data);
             $result['onboard'] = $onboard;
+
+            [$old, $new] = LogService::diff($existing, $data);
+            if ($onboard !== null) {
+                $old = ($old ?? []) + ['onboard_qty' => $onboard['before'] ?? null];
+                $new = ($new ?? []) + ['onboard_qty' => $input['onboard_qty']];
+            }
+            if ($new !== null) {
+                $active = $new['active'] ?? null;
+                $action = $active !== null && count($new) === 1 ? ((int)$active ? 'item.restore' : 'item.disable') : 'item.update';
+                LogService::audit($action, 'item', 'item', $itemId, $old, $new, [
+                    'description' => ($action === 'item.restore' ? 'เปิดใช้งานอุปกรณ์ ' : ($action === 'item.disable' ? 'พักใช้งานอุปกรณ์ ' : 'แก้ไขอุปกรณ์ '))
+                        . ($result['name'] ?? $oldName) . ($action === 'item.update' ? ': ' . implode(', ', array_keys($new)) : ''),
+                ]);
+            }
             return $result;
         } catch (\Throwable $e) {
             $db->rollBack();
@@ -1143,6 +1204,9 @@ class VehicleService
                 }
                 $this->itemModel->update($itemId, ['active' => false]);
                 $db->commit();
+                LogService::audit('item.disable', 'item', 'item', $itemId, ['active' => true], ['active' => false], [
+                    'description' => 'พักใช้งานอุปกรณ์ ' . $item['name'] . ($mode === 'disable' ? '' : ' (ลบไม่ได้เพราะมีประวัติผูก)'),
+                ]);
                 return [
                     'mode' => $mode === 'disable' ? 'disabled' : 'auto_disabled',
                     'id' => $itemId,
@@ -1157,6 +1221,9 @@ class VehicleService
                 throw new ApiException('ลบอุปกรณ์ไม่สำเร็จ: ไม่พบแถวที่ต้องลบ');
             }
             $db->commit();
+            LogService::audit('item.delete', 'item', 'item', $itemId, LogService::pick($item, self::AUDIT_ITEM_FIELDS), null, [
+                'description' => 'ลบอุปกรณ์ ' . $item['name'] . ' ถาวร',
+            ]);
             return ['mode' => 'deleted', 'id' => $itemId, 'name' => $item['name'], 'references' => $refs];
         } catch (\Throwable $e) {
             if ($db->inTransaction()) {

@@ -13,6 +13,11 @@ use App\Controllers\HistoryController;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\CsrfMiddleware;
 use App\Helpers\Response;
+use App\Services\Logging\LogService;
+use App\Services\Logging\RequestLogger;
+
+// ระบบ log กลาง: ลงทะเบียนก่อน middleware เพื่อให้ 401/403 จาก middleware ถูกบันทึกด้วย (ดู RequestLogger)
+RequestLogger::register();
 
 // Get base path from environment (set by index.php for subdirectory installations)
 $basePath = $_ENV['BASE_PATH'] ?? '';
@@ -149,6 +154,20 @@ $route = match (true) {
     $path === '/api/history/restock' && $method === 'GET' => ['HistoryController', 'restock'],
     $path === '/api/history/inspections/clear' && $method === 'POST' => ['HistoryController', 'clearInspections'],
 
+    // Log Management (admin + สิทธิ์ย่อย logs.* — ตรวจใน LogController) — อ่านอย่างเดียว ไม่มีเส้นทางแก้/ลบ log
+    $path === '/api/logs/me' && $method === 'GET' => ['LogController', 'me'],
+    $path === '/api/logs/summary' && $method === 'GET' => ['LogController', 'summary'],
+    $path === '/api/logs/options' && $method === 'GET' => ['LogController', 'options'],
+    $path === '/api/logs/export' && $method === 'GET' => ['LogController', 'export'],
+    $path === '/api/logs/archives' && $method === 'GET' => ['LogController', 'archives'],
+    preg_match('/^\/api\/logs\/archives\/(\d+)\/search$/', $path, $matches) && $method === 'GET' => ['LogController', 'archiveSearch', $matches[1]],
+    preg_match('/^\/api\/logs\/archives\/(\d+)\/download$/', $path, $matches) && $method === 'GET' => ['LogController', 'archiveDownload', $matches[1]],
+    preg_match('/^\/api\/logs\/archives\/(\d+)\/verify$/', $path, $matches) && $method === 'GET' => ['LogController', 'archiveVerify', $matches[1]],
+    $path === '/api/logs/permissions' && $method === 'GET' => ['LogController', 'permissions'],
+    preg_match('/^\/api\/logs\/permissions\/([^\/]+)$/', $path, $matches) && $method === 'PUT' => ['LogController', 'updatePermissions', $matches[1]],
+    preg_match('/^\/api\/logs\/events\/([0-9A-Z]{26})$/', $path, $matches) && $method === 'GET' => ['LogController', 'show', $matches[1]],
+    $path === '/api/logs' && $method === 'GET' => ['LogController', 'index'],
+
     default => null,
 };
 
@@ -212,6 +231,10 @@ try {
 } catch (\PDOException $e) {
     // PDOException สืบทอดจาก RuntimeException — ต้องจับก่อน ไม่ให้ SQLSTATE/ชื่อตาราง/คอลัมน์หลุดถึงผู้ใช้
     error_log('API PDOException: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    LogService::system('system.database_error', $e->getMessage(), 'ERROR', [
+        'http_status' => 500,
+        'context' => ['sqlstate' => (string)$e->getCode(), 'file' => basename($e->getFile()), 'line' => $e->getLine(), 'handler' => "{$route[0]}::{$action}"],
+    ]);
     Response::serverError();
 } catch (\RuntimeException $e) {
     // Business-rule violations (invalid status transitions, etc.) must return JSON, not a PHP fatal
@@ -219,5 +242,9 @@ try {
     Response::error($e->getMessage());
 } catch (\Throwable $e) {
     error_log('API Error: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    LogService::system('system.exception', get_class($e) . ': ' . $e->getMessage(), 'ERROR', [
+        'http_status' => 500,
+        'context' => ['file' => basename($e->getFile()), 'line' => $e->getLine(), 'handler' => "{$route[0]}::{$action}"],
+    ]);
     Response::serverError();
 }
