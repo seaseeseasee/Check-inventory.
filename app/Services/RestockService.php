@@ -117,6 +117,7 @@ class RestockService
         if (!$vehicle) {
             throw new ApiException('ไม่พบรถ', 404);
         }
+        VehicleService::assertUsable($vehicle, 'refill');
         $items = $this->itemModel->getActiveByVehicle($carId);
         $ids = array_map(fn($i) => (string)$i['id'], $items);
         $details = $this->stock->detailsForItems($items);
@@ -214,6 +215,7 @@ class RestockService
             if (!$vehicle) {
                 throw new ApiException('ไม่พบรถ', 404);
             }
+            VehicleService::assertUsable($vehicle, 'refill');
 
             $batchId = 'rf-' . generate_id();
             try {

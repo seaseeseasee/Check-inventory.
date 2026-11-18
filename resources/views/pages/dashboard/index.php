@@ -275,6 +275,18 @@
       </div>
     </div>
 
+    <!-- ค้นหา/กรองอุปกรณ์ของรถคันที่เลือก (กรองบนหน้าเว็บ — ซ่อนการ์ด ไม่วาดใหม่ ค่าที่แก้ค้างไว้จึงไม่หาย) -->
+    <div class="stock-find" id="stockFind" hidden>
+      <input type="search" id="stockItemSearch" placeholder="ค้นหาชื่ออุปกรณ์" aria-label="ค้นหาชื่ออุปกรณ์ในรถคันนี้" autocomplete="off">
+      <div class="stock-find-types" role="group" aria-label="กรองตามประเภทอุปกรณ์">
+        <button type="button" class="chip-btn on" data-item-type="" aria-pressed="true">ทั้งหมด <b data-type-count=""></b></button>
+        <button type="button" class="chip-btn" data-item-type="box" aria-pressed="false">กล่อง / ล็อต <b data-type-count="box"></b></button>
+        <button type="button" class="chip-btn" data-item-type="individual" aria-pressed="false">รายชิ้น <b data-type-count="individual"></b></button>
+        <button type="button" class="chip-btn" data-item-type="non_expiring" aria-pressed="false" title="เครื่อง / ถัง / อุปกรณ์ที่ไม่มีวันหมดอายุ">ไม่มีวันหมดอายุ <b data-type-count="non_expiring"></b></button>
+      </div>
+    </div>
+    <p id="stockFindEmpty" class="empty hidden" role="status">ไม่พบอุปกรณ์ตามที่ค้นหา</p>
+
     <div id="stockTable" class="list"></div>
   </div>
 </div>

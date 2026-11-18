@@ -266,6 +266,18 @@
   margin: 0 0 8px;
 }
 
+/* ค้นหา / กรองประเภทอุปกรณ์ของรถคันที่เลือก */
+.stock-find { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 12px; }
+.stock-find[hidden], .stock-card[hidden] { display: none !important; }
+.stock-find input { width: 100%; margin: 0; }
+.stock-find-types { display: flex; flex-wrap: wrap; gap: 6px; }
+/* ปุ่มส่วนกลางกว้าง 100% — ตรงนี้ให้เรียงต่อกันในแถว (มือถือ 2 คอลัมน์) */
+.stock-find-types .chip-btn { flex: 0 1 auto; width: auto; min-width: 0; padding: 8px 14px; }
+@media (max-width: 760px) {
+  .stock-find-types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stock-find-types .chip-btn { width: 100%; padding: 8px 6px; }
+}
+
 .stock-item-count {
   color: var(--muted);
   font-weight: 600;

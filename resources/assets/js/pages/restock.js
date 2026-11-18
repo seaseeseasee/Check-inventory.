@@ -91,6 +91,8 @@ class RefillPage {
         this.isAdmin() ? window.restockApi.getAll() : window.staffApi.getRestockRequests(),
       ]);
       this.vehicles = (vehiclesRes.data || []).filter(v => v.status !== 'disabled');
+      // รถงดใช้งาน: เติมของไม่ได้ (server ตอบ 409 VEHICLE_DISABLED) — ใช้ซ่อนปุ่ม/กันลิงก์ที่พาเข้ารถคันนั้น
+      this.disabledCars = new Set((vehiclesRes.data || []).filter(v => v.status === 'disabled').map(v => String(v.id)));
       window.vehicleRef.remember(vehiclesRes.data || []);
       this.requests = requestsRes.data || [];
       this.renderCars();
@@ -159,6 +161,11 @@ class RefillPage {
   }
 
   async selectCar(carId, keepDrafts = false) {
+    if (this.disabledCars?.has(String(carId))) {
+      window.toast.warning('รถคันนี้ถูกงดใช้งานแล้ว — เติมของไม่ได้ (เปิดกลับที่แท็บ "ทะเบียนรถ/อุปกรณ์" ก่อน)');
+      if (this.carId === carId) { this.carId = ''; this.sheet = null; this.drafts = {}; }
+      return;
+    }
     if (!keepDrafts && this.carId && this.carId !== carId && this.hasDraftLines()) {
       const ok = await window.confirmDialog('มีรายการเติมที่ยังไม่บันทึกของรถคันเดิม — เปลี่ยนรถและทิ้งรายการนั้น?', { confirmText: 'เปลี่ยนรถ' });
       if (!ok) return;
@@ -772,6 +779,7 @@ class RefillPage {
           + `${Number(i.qty_filled) > 0 ? ` <small>(ขอ ${UI.escape(i.qty_requested)} • เติมแล้ว ${UI.escape(i.qty_filled)})</small>` : ''}${note(i)}</li>`;
       }).join('');
       const open = ['PENDING', 'IN_PROGRESS', 'PARTIAL'].includes(r.status);
+      const carOff = this.disabledCars?.has(String(r.car_id));
       return `<div class="request-card" data-id="${UI.escape(r.id)}">
         <div class="check-card-head">
           <div>${window.vehicleChip({ id: r.car_id, name: r.car_name })} <b>${UI.escape(r.no)}</b>
@@ -781,7 +789,9 @@ class RefillPage {
         ${all.length ? `<p class="request-progress">เติมแล้ว <b>${doneCount}/${all.length}</b> รายการ</p>` : ''}
         <ul class="request-lines">${lines}</ul>
         ${open ? `<div class="btn-row">
-          <button type="button" class="small-btn" data-action="fill" data-car="${UI.escape(r.car_id)}">เติมรถคันนี้</button>
+          ${carOff
+            ? '<span class="dash-disabled-note">รถคันนี้งดใช้งานแล้ว — เติมไม่ได้</span>'
+            : `<button type="button" class="small-btn" data-action="fill" data-car="${UI.escape(r.car_id)}">เติมรถคันนี้</button>`}
           <button type="button" class="small-btn gray" data-action="cancel">ยกเลิกรายการ</button></div>` : ''}
       </div>`;
     }).join('') : '<p class="empty">ไม่มีรายการ</p>';

@@ -146,6 +146,8 @@ class VehiclesPage {
     this.currentVehicle = null;
     this.items = [];
     this.openItems = new Set();   // การ์ดอุปกรณ์ที่ขยายอยู่ (ค่าเริ่มต้น = ย่อทุกใบ)
+    this.itemQuery = '';          // ค้นหาชื่ออุปกรณ์ (ตัวพิมพ์เล็ก) — คงไว้เมื่อเปลี่ยนรถ
+    this.itemTypeFilter = '';     // '' | box | individual | non_expiring
     this.editingItemId = null;
     this.copyStaging = [];
     this.copySourceLabel = '';
@@ -188,6 +190,26 @@ class VehiclesPage {
   bindEvents() {
     // Vehicle select
     document.getElementById('stockCar')?.addEventListener('change', () => this.onVehicleChange());
+
+    // ค้นหา / กรองประเภทอุปกรณ์ในรถคันที่เลือก
+    const search = document.getElementById('stockItemSearch');
+    search?.addEventListener('input', UI.debounce(() => {
+      this.itemQuery = search.value.trim().toLowerCase();
+      this.applyItemFilter();
+    }, 150));
+    search?.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && search.value) {
+        search.value = '';
+        this.itemQuery = '';
+        this.applyItemFilter();
+      }
+    });
+    document.querySelector('#stockFind .stock-find-types')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-item-type]');
+      if (!btn) return;
+      this.itemTypeFilter = btn.dataset.itemType;
+      this.applyItemFilter();
+    });
 
     // Vehicle CRUD
     document.getElementById('btnEditVehicle')?.addEventListener('click', () => this.showEditVehicleForm());
@@ -426,6 +448,7 @@ class VehiclesPage {
       || '<p class="empty">ยังไม่มีอุปกรณ์ในรถคันนี้</p>';
     this.bindItemCards(container);
     this.lotSheet = null;   // ข้อมูลล็อตโหลดใหม่ทุกครั้งที่ render รายการ (ยอดอาจเปลี่ยนจากการตรวจ/เติม)
+    this.applyItemFilter();
 
     if (!container.dataset.boundDates) {   // container อยู่ถาวร — ผูกครั้งเดียว
       container.dataset.boundDates = '1';
@@ -462,6 +485,62 @@ class VehiclesPage {
         });
       });
     }
+  }
+
+  /**
+   * ค้นหาชื่อ + กรองประเภท: ซ่อน/แสดงการ์ดที่วาดไว้แล้ว (ไม่วาดใหม่) — ค่าที่แก้ค้างในการ์ดไม่หาย
+   * ประเภทใช้ค่าที่บันทึกไว้ (ไม่ใช่ค่าที่กำลังเลือกในการ์ดแต่ยังไม่บันทึก) การ์ดจึงไม่หายไปกลางการแก้
+   */
+  applyItemFilter() {
+    const find = document.getElementById('stockFind');
+    const empty = document.getElementById('stockFindEmpty');
+    const container = document.getElementById('stockTable');
+    if (find) find.hidden = !this.items.length;
+    if (!container) return;
+
+    const typeOf = (item) => item.item_type || (item.is_battery ? 'non_expiring' : 'individual');
+    const q = this.itemQuery;
+    const byId = new Map(this.items.map(item => [String(item.id), item]));
+    const nameHit = (item) => !q || String(item.name || '').toLowerCase().includes(q);
+
+    // ตัวเลขบนปุ่มประเภท = จำนวนที่ตรงคำค้น ในแต่ละประเภท
+    const counts = { '': 0, box: 0, individual: 0, non_expiring: 0 };
+    this.items.forEach(item => {
+      if (!nameHit(item)) return;
+      counts['']++;
+      counts[typeOf(item)] = (counts[typeOf(item)] || 0) + 1;
+    });
+    find?.querySelectorAll('[data-type-count]').forEach(b => { b.textContent = counts[b.dataset.typeCount] ?? 0; });
+    find?.querySelectorAll('[data-item-type]').forEach(btn => {
+      const on = btn.dataset.itemType === this.itemTypeFilter;
+      btn.classList.toggle('on', on);
+      btn.setAttribute('aria-pressed', String(on));
+    });
+
+    let shown = 0;
+    container.querySelectorAll('.stock-card[data-item-id]').forEach(card => {
+      const item = byId.get(String(card.dataset.itemId));
+      const match = !!item && nameHit(item) && (!this.itemTypeFilter || typeOf(item) === this.itemTypeFilter);
+      card.hidden = !match;
+      if (match) shown++;
+    });
+
+    const filtering = !!(q || this.itemTypeFilter);
+    if (empty) empty.classList.toggle('hidden', !(filtering && this.items.length && shown === 0));
+    const count = document.getElementById('stockItemCount');
+    const total = this.currentVehicle?.active_item_count;
+    if (count && this.items.length) {
+      count.textContent = filtering ? `แสดง ${shown} จาก ${this.items.length} รายการ`
+        : (total !== undefined ? `${total} รายการ` : `${this.items.length} รายการ`);
+    }
+  }
+
+  clearItemFilter() {
+    this.itemQuery = '';
+    this.itemTypeFilter = '';
+    const search = document.getElementById('stockItemSearch');
+    if (search) search.value = '';
+    this.applyItemFilter();
   }
 
   /** ประเภทที่เลือกอยู่ในการ์ด (อาจยังไม่บันทึก) — ไม่มีการ์ด = ประเภทที่บันทึกไว้ */
@@ -1259,6 +1338,7 @@ class VehiclesPage {
     if (!itemId) return;
     const card = document.querySelector(`#stockTable .stock-card[data-item-id="${CSS.escape(String(itemId))}"]`);
     if (!card) return;
+    if (card.hidden) this.clearItemFilter();   // การ์ดที่เพิ่งเพิ่มถูกตัวกรองซ่อน → ล้างตัวกรองให้เห็น
     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     card.classList.add('is-focus');
     setTimeout(() => card.classList.remove('is-focus'), 3000);
@@ -2439,7 +2519,7 @@ class VehiclesPage {
     const items = Number(vehicle.active_item_count ?? vehicle.item_count ?? 0);
     const hasHistory = (checks + drafts + restockTotal) > 0 || openRestock > 0;
 
-    // เซิร์ฟเวอร์เป็นผู้ตัดสินจริง (FK RESTRICT) — ด้านหน้าแค่เตือนไว้ก่อน
+    // เซิร์ฟเวอร์เป็นผู้ตัดสินจริง (ตอบ 409 ถ้ามีประวัติ) — ด้านหน้าเสนอทางเลือกไว้ก่อน
     if (hasHistory) {
       const details = [
         checks > 0 ? `ประวัติการตรวจ ${checks} ครั้ง` : '',
@@ -2448,24 +2528,7 @@ class VehiclesPage {
         restockTotal > openRestock ? `งานเติมทั้งหมด ${restockTotal} งาน` : '',
         items > 0 ? `อุปกรณ์ประจำรถ ${items} รายการ` : '',
       ].filter(Boolean).join(' • ');
-
-      const disableFirst = await window.confirmDialog(
-        `รถ “${label}” มีข้อมูลผูกอยู่ (${details})\n\n`
-        + 'การลบถาวรจะกระทบประวัติย้อนหลังของระบบ ระบบจึงแนะนำให้ "งดใช้งาน" แทน '
-        + '(รถจะหายจากเมนูเลือกสำหรับหน้าตรวจ แต่ข้อมูลเดิมยังอยู่ครบ)\n\n'
-        + 'กด "งดใช้งานแทน" เพื่อตั้งสถานะเป็น งดใช้งาน',
-        { title: 'รถมีประวัติผูกอยู่', confirmText: 'งดใช้งานแทน' }
-      );
-      if (disableFirst) {
-        await this.removeVehicle(label, 'disable');
-        return;
-      }
-      const force = await window.confirmDialog(
-        `ยังยืนยันจะลบ “${label}” ถาวรหรือไม่? ระบบจะปฏิเสธถ้ามีประวัติผูกอยู่จริง (409)`,
-        { title: 'ลบรถถาวร', confirmText: 'ลองลบถาวร' }
-      );
-      if (!force) return;
-      await this.removeVehicle(label, 'auto');
+      await this.chooseDeleteMode(label, details);
       return;
     }
 
@@ -2475,6 +2538,36 @@ class VehiclesPage {
     );
     if (!ok) return;
     await this.removeVehicle(label, 'auto');
+  }
+
+  /**
+   * รถมีประวัติ: เลือก "งดใช้งาน" (เก็บประวัติ, ปิดงานค้าง) หรือ "ลบพร้อมประวัติทั้งหมด" (ย้อนกลับไม่ได้)
+   * ลบพร้อมประวัติต้องยืนยัน 2 ครั้ง
+   */
+  async chooseDeleteMode(label, details) {
+    const disable = await window.confirmDialog(
+      `รถ “${label}” มีข้อมูลผูกอยู่ (${details || 'มีประวัติ'})\n\n`
+      + 'แนะนำ "งดใช้งาน": รถจะตรวจเช็คและเติมของไม่ได้ รายการรอเติมที่ค้างจะถูกยกเลิก แต่ประวัติเดิมยังอยู่ครบ (เปิดกลับมาใช้ได้)\n\n'
+      + 'ถ้าไม่ต้องการข้อมูลของรถคันนี้แล้ว กด "ยกเลิก" เพื่อไปที่ตัวเลือกลบพร้อมประวัติ',
+      { title: 'รถมีประวัติผูกอยู่', confirmText: 'งดใช้งาน', tone: 'ok' }
+    );
+    if (disable) {
+      await this.removeVehicle(label, 'disable');
+      return;
+    }
+    const purge = await window.confirmDialog(
+      `ลบรถ “${label}” พร้อมประวัติทั้งหมดหรือไม่?\n\n`
+      + 'จะลบ: ประวัติการตรวจเช็คทุกรอบ, ร่างงานตรวจ, รายการรอเติม/ประวัติการเติมของ, ล็อต/เครื่อง/ถัง, อุปกรณ์ประจำรถ และตัวรถ\n'
+      + 'ข้อมูลจะหายจากรายงานย้อนหลังและกู้คืนไม่ได้',
+      { title: 'ลบพร้อมประวัติทั้งหมด', confirmText: 'ลบพร้อมประวัติ' }
+    );
+    if (!purge) return;
+    const sure = await window.confirmDialog(
+      `ยืนยันครั้งสุดท้าย: ลบ “${label}” และประวัติทั้งหมดถาวร`,
+      { title: 'ยืนยันการลบถาวร', confirmText: 'ยืนยันลบถาวร' }
+    );
+    if (!sure) return;
+    await this.removeVehicle(label, 'purge');
   }
 
   async removeVehicle(label, mode) {
@@ -2487,10 +2580,25 @@ class VehiclesPage {
     try {
       const res = await window.vehicleApi.remove(id, { mode });
       const result = res.data || {};
-      if (result.mode === 'deleted') {
+      if (result.mode === 'deleted' && result.purged) {
+        const r = result.removed || {};
+        const parts = [
+          r.checks ? `ผลตรวจ ${r.checks} รอบ` : '',
+          r.restock_requests ? `รายการรอเติม ${r.restock_requests}` : '',
+          r.refills ? `การเติมของ ${r.refills} ครั้ง` : '',
+          r.items ? `อุปกรณ์ ${r.items} รายการ` : '',
+        ].filter(Boolean).join(', ');
+        window.toast.success(`ลบรถ “${result.name || label}” พร้อมประวัติแล้ว${parts ? ` (${parts})` : ''}`);
+      } else if (result.mode === 'deleted') {
         window.toast.success(`ลบรถ “${result.name || label}” แล้ว`);
+      } else if (result.mode === 'already_disabled') {
+        window.toast.info(`“${result.name || label}” งดใช้งานอยู่แล้ว`);
       } else {
-        window.toast.success(`ตั้งสถานะ “${result.name || label}” เป็น งดใช้งานแล้ว (ประวัติเดิมยังอยู่ครบ)`);
+        const closed = [
+          result.requests_cancelled ? `ยกเลิกรายการรอเติม ${result.requests_cancelled} รายการ` : '',
+          result.drafts_removed ? `ล้างร่างตรวจที่ค้าง ${result.drafts_removed} รายการ` : '',
+        ].filter(Boolean).join(', ');
+        window.toast.success(`ตั้งสถานะ “${result.name || label}” เป็น งดใช้งานแล้ว${closed ? ` — ${closed}` : ''} (ประวัติเดิมยังอยู่ครบ)`);
       }
       // ล้างการเลือกคันที่ถูกลบออกก่อน แล้วให้ renderVehicleSelect() โหลดข้อมูลใหม่
       this.currentVehicle = null;
@@ -2503,20 +2611,17 @@ class VehiclesPage {
         this.renderVehicleMeta();
       }
     } catch (error) {
-      // 409 = เซิร์ฟเวอร์ตรวจพบข้อมูลผูก → เสนอ "งดใช้งาน" เป็นทางเลือกปลอดภัย
-      if (error.status === 409 && mode !== 'disable') {
+      // 409 = เซิร์ฟเวอร์ตรวจพบข้อมูลผูก (ข้อมูลหน้าจออาจเก่ากว่า) → เสนอ งดใช้งาน / ลบพร้อมประวัติ
+      if (error.status === 409 && mode === 'auto') {
         const b = error.data?.blockers || {};
         const summary = [
           b.checks > 0 ? `ประวัติตรวจ ${b.checks}` : '',
           b.drafts > 0 ? `ร่างงาน ${b.drafts}` : '',
           b.restock_open > 0 ? `งานเติมค้าง ${b.restock_open}` : '',
           b.restock_total > 0 ? `งานเติมทั้งหมด ${b.restock_total}` : '',
+          b.refills > 0 ? `เติมของเข้ารถ ${b.refills} ครั้ง` : '',
         ].filter(Boolean).join(' • ');
-        const fallback = await window.confirmDialog(
-          `${error.message}\n\n(${summary || 'มีข้อมูลผูกอยู่'})\n\nเปลี่ยนเป็น "งดใช้งาน" แทนหรือไม่?`,
-          { title: 'ลบไม่ได้เพราะมีประวัติ', confirmText: 'งดใช้งานแทน' }
-        );
-        if (fallback) await this.removeVehicle(label, 'disable');
+        await this.chooseDeleteMode(label, summary);
         return;
       }
       window.toast.error('ลบรถไม่สำเร็จ: ' + (error.message || 'ไม่ทราบสาเหตุ'));
