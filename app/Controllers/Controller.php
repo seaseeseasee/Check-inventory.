@@ -42,6 +42,11 @@ abstract class Controller
             $data = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
             // Malformed body must answer JSON 400, never a raw fatal page
+            // หน้าเว็บของระบบส่ง JSON ถูกรูปแบบเสมอ — body เสียจึงมักมาจากเครื่องมือภายนอก (ไม่เก็บเนื้อ body)
+            \App\Services\Logging\LogService::security('security.malformed_input', 'ส่งข้อมูล JSON ผิดรูปแบบ', 'WARNING', [
+                'http_status' => 400,
+                'context' => ['bytes' => strlen($raw), 'error' => $e->getMessage()],
+            ]);
             $this->error('Invalid JSON request body', 400);
         }
         return is_array($data) ? $data : [];

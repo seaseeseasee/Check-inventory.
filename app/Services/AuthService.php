@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Models\LoginAttempt;
 use App\Config\Database;
 use App\Helpers\Response;
+use App\Services\Logging\LogSanitizer;
+use App\Services\Logging\LogService;
 
 class AuthService
 {
@@ -30,7 +32,7 @@ class AuthService
         // (เดิมล้างของ IP ทำให้ผู้ที่มีบัญชีเองเดา 8 ครั้ง → login บัญชีตัวเอง → เดาต่อได้ไม่จำกัด)
         $ipKey = $this->ipKey();
         $accountKey = $this->accountKey($phone ?? $username);
-        $this->assertNotThrottled($ipKey, $accountKey);
+        $this->assertNotThrottled($ipKey, $accountKey, 'Too many attempts. Please try again later.', $username);
 
         $user = $this->userModel->findByUsername($username);
         if (!$user && $phone !== null && $phone !== $username) {
@@ -39,11 +41,15 @@ class AuthService
 
         // ตรวจรหัสผ่านก่อนบอกสถานะบัญชี — ไม่ให้คนที่ไม่รู้รหัสรู้ว่าบัญชีถูกปิดอยู่
         if (!$user || !$this->userModel->verifyPassword($password, (string)$user['password_hash'])) {
-            $this->recordFailure($ipKey, $accountKey);
+            LogService::auth('auth.login_failed', 'FAILED', $this->loginLogOptions($user, $username,
+                $user ? 'รหัสผ่านไม่ถูกต้อง' : 'ไม่พบบัญชีผู้ใช้', $user ? 'wrong_password' : 'unknown_user'));
+            $this->recordFailure($ipKey, $accountKey, $user, $username);
             Response::unauthorized('Invalid credentials');
         }
 
         if (!$user['active']) {
+            LogService::auth('auth.login_failed', 'FAILED',
+                $this->loginLogOptions($user, $username, 'บัญชีถูกปิดใช้งาน', 'account_deactivated'));
             Response::forbidden('Account is deactivated');
         }
 
@@ -82,6 +88,12 @@ class AuthService
 
         $this->loginAttemptModel->reset($accountKey);
 
+        LogService::auth('auth.login_success', 'SUCCESS', [
+            'record_type' => 'user',
+            'record_id' => (string)$user['id'],
+            'description' => $mustChange ? 'เข้าสู่ระบบสำเร็จ (ต้องเปลี่ยนรหัสผ่านก่อนใช้งาน)' : 'เข้าสู่ระบบสำเร็จ',
+        ]);
+
         return [
             'ok' => true,
             'user' => $sessionUser,
@@ -105,9 +117,14 @@ class AuthService
         // ใส่รหัสปัจจุบันผิด นับรวมกับการ login ผิด (จำกัดการเดารหัส)
         $ipKey = $this->ipKey();
         $accountKey = $this->accountKey((string)$user['username']);
-        $this->assertNotThrottled($ipKey, $accountKey, 'ลองผิดหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่');
+        $this->assertNotThrottled($ipKey, $accountKey, 'ลองผิดหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่', (string)$user['username']);
         if (!$this->userModel->verifyPassword($current, (string)$user['password_hash'])) {
-            $this->recordFailure($ipKey, $accountKey);
+            LogService::auth('auth.password_change_failed', 'FAILED', [
+                'record_type' => 'user', 'record_id' => (string)$user['id'],
+                'description' => 'เปลี่ยนรหัสผ่านไม่สำเร็จ: รหัสผ่านปัจจุบันไม่ถูกต้อง',
+                'context' => ['reason' => 'wrong_current_password'],
+            ]);
+            $this->recordFailure($ipKey, $accountKey, $user, (string)$user['username']);
             Response::validationError(['current_password' => 'รหัสผ่านปัจจุบันไม่ถูกต้อง']);
         }
 
@@ -122,6 +139,12 @@ class AuthService
             $errors['confirm_password'] = 'ยืนยันรหัสผ่านไม่ตรงกับรหัสผ่านใหม่';
         }
         if ($errors) {
+            LogService::auth('auth.password_change_failed', 'FAILED', [
+                'severity' => 'INFO',
+                'record_type' => 'user', 'record_id' => (string)$user['id'],
+                'description' => 'เปลี่ยนรหัสผ่านไม่สำเร็จ: รหัสใหม่ไม่ผ่านเงื่อนไข',
+                'context' => ['reason' => 'policy', 'fields' => array_keys($errors)],
+            ]);
             Response::validationError($errors);
         }
 
@@ -138,6 +161,13 @@ class AuthService
         // session นี้ใช้ต่อได้ — session อื่นของบัญชีนี้ (ลายนิ้วมือรหัสเก่า) จะหลุดเองใน request ถัดไป
         $updated = $this->userModel->find((string)$user['id']);
         $_SESSION['pw_fp'] = self::passwordFingerprint((string)($updated['password_hash'] ?? ''));
+
+        LogService::auth('auth.password_changed', 'SUCCESS', [
+            'record_type' => 'user', 'record_id' => (string)$user['id'],
+            'description' => !empty($user['must_change_password'])
+                ? 'เปลี่ยนรหัสผ่านสำเร็จ (เปลี่ยนจากรหัสชั่วคราวตามที่ระบบบังคับ)'
+                : 'เปลี่ยนรหัสผ่านสำเร็จ',
+        ]);
 
         return ['ok' => true, 'user' => $_SESSION['user']];
     }
@@ -174,12 +204,14 @@ class AuthService
         }
         $now = time();
         if (($_SESSION['until'] ?? 0) < $now) {
+            $this->logSessionEnded('max_lifetime', 'session หมดอายุ (ครบ 8 ชั่วโมง)');
             $this->logout();
             return false;
         }
         // ไม่มีการใช้งานนานเกินกำหนด (ค่าเริ่มต้น 120 นาที — เวรยาวจึงไม่ตั้งสั้น)
         $idle = max(5, (int)(getenv('SESSION_IDLE_MINUTES') ?: 120)) * 60;
         if (($_SESSION['last_seen'] ?? $now) < $now - $idle) {
+            $this->logSessionEnded('idle_timeout', 'session หมดอายุ (ไม่มีการใช้งานนานเกินกำหนด)');
             $this->logout();
             return false;
         }
@@ -189,6 +221,11 @@ class AuthService
         $user = $this->userModel->find((string)($_SESSION['user']['id'] ?? ''));
         if (!$user || !$user['active']
             || !hash_equals((string)($_SESSION['pw_fp'] ?? ''), self::passwordFingerprint((string)$user['password_hash']))) {
+            if (!$user || !$user['active']) {
+                $this->logSessionEnded('account_disabled', 'session ถูกยกเลิก: บัญชีถูกลบหรือปิดใช้งาน', 'WARNING');
+            } else {
+                $this->logSessionEnded('password_changed', 'session ถูกยกเลิก: รหัสผ่านถูกเปลี่ยนจากที่อื่น');
+            }
             $this->logout();
             return false;
         }
@@ -279,19 +316,69 @@ class AuthService
         return hash('sha256', 'user|' . mb_strtolower(trim($username), 'UTF-8'));
     }
 
-    private function assertNotThrottled(string $ipKey, string $accountKey, string $message = 'Too many attempts. Please try again later.'): void
+    private function assertNotThrottled(string $ipKey, string $accountKey, string $message = 'Too many attempts. Please try again later.', string $attemptedUsername = ''): void
     {
         $window = self::FAILURE_WINDOW_SECONDS;
         if ($this->loginAttemptModel->getAttempts($accountKey, $window) >= self::ACCOUNT_MAX_FAILURES
             || $this->loginAttemptModel->getAttempts($ipKey, $window) >= self::IP_MAX_FAILURES) {
+            LogService::security('security.auth_throttled', 'ถูกระงับการลองรหัสผ่านชั่วคราว (ลองผิดเกินกำหนด)', 'WARNING', [
+                'module' => 'auth',
+                'http_status' => 429,
+                'context' => ['attempted' => $attemptedUsername !== '' ? LogSanitizer::maskUnknownUsername($attemptedUsername) : null],
+            ]);
             Response::tooManyRequests($message);
         }
     }
 
-    private function recordFailure(string $ipKey, string $accountKey): void
+    /**
+     * นับครั้งที่ผิด — ครั้งที่ทำให้ถึงเกณฑ์ล็อกพอดี บันทึกเป็นเหตุการณ์ security (สงสัยไล่เดารหัส)
+     * @param array|null $user บัญชีที่ตรงกับชื่อที่พิมพ์ (null = ไม่มีบัญชีนี้)
+     */
+    private function recordFailure(string $ipKey, string $accountKey, ?array $user = null, string $attemptedUsername = ''): void
     {
-        $this->loginAttemptModel->increment($accountKey, self::FAILURE_WINDOW_SECONDS);
-        $this->loginAttemptModel->increment($ipKey, self::FAILURE_WINDOW_SECONDS);
+        $accountCount = $this->loginAttemptModel->increment($accountKey, self::FAILURE_WINDOW_SECONDS);
+        $ipCount = $this->loginAttemptModel->increment($ipKey, self::FAILURE_WINDOW_SECONDS);
+
+        $minutes = intdiv(self::FAILURE_WINDOW_SECONDS, 60);
+        if ($accountCount === self::ACCOUNT_MAX_FAILURES) {
+            LogService::security('security.bruteforce_account',
+                "ใส่รหัสผ่านผิด {$accountCount} ครั้งใน {$minutes} นาที — บัญชีถูกระงับการลองชั่วคราว", 'ERROR',
+                $this->loginLogOptions($user, $attemptedUsername, '', 'account_threshold') + ['module' => 'auth']);
+        }
+        if ($ipCount === self::IP_MAX_FAILURES) {
+            LogService::security('security.bruteforce_ip',
+                "IP นี้ใส่รหัสผ่านผิด {$ipCount} ครั้งใน {$minutes} นาที (หลายบัญชีรวมกัน) — ถูกระงับการลองชั่วคราว", 'ERROR',
+                ['module' => 'auth', 'user' => null]);
+        }
+    }
+
+    /**
+     * ตัวเลือก log ของการ login — บัญชีที่มีอยู่จริงเก็บ id + ชื่อผู้ใช้เต็ม
+     * ชื่อที่ไม่ตรงบัญชีใด เก็บแบบ mask เท่านั้น (อาจเป็นรหัสผ่านที่พิมพ์ผิดช่อง)
+     */
+    private function loginLogOptions(?array $user, string $attempted, string $description, string $reason): array
+    {
+        $opt = [
+            'description' => $description !== '' ? 'เข้าสู่ระบบไม่สำเร็จ: ' . $description : null,
+            'context' => ['reason' => $reason],
+            'user' => $user ? ['id' => (string)$user['id'], 'username' => (string)$user['username'], 'role' => (string)$user['role']] : null,
+        ];
+        if ($user) {
+            $opt['record_type'] = 'user';
+            $opt['record_id'] = (string)$user['id'];
+        } else {
+            $opt['context']['attempted'] = LogSanitizer::maskUnknownUsername($attempted);
+        }
+        return $opt;
+    }
+
+    private function logSessionEnded(string $reason, string $description, string $severity = 'INFO'): void
+    {
+        LogService::auth('auth.session_expired', 'SUCCESS', [
+            'severity' => $severity,
+            'description' => $description,
+            'context' => ['reason' => $reason],
+        ]);
     }
 
     private static function passwordFingerprint(string $passwordHash): string

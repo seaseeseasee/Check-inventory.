@@ -5,6 +5,7 @@ namespace App\Controllers;
 
 use App\Services\AuthService;
 use App\Helpers\Response;
+use App\Services\Logging\LogService;
 
 class AuthController extends Controller
 {
@@ -43,6 +44,10 @@ class AuthController extends Controller
             Response::error('Method not allowed', 405);
         }
 
+        // บันทึกก่อนล้าง session (หลัง logout จะไม่รู้แล้วว่าเป็นใคร)
+        if ($this->authService->getCurrentUser()) {
+            LogService::auth('auth.logout', 'SUCCESS', ['description' => 'ออกจากระบบ']);
+        }
         $this->authService->logout();
         $this->success(['ok' => true]);
     }

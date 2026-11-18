@@ -47,4 +47,10 @@ COPY . /var/www/html
 RUN chown -R www-data:www-data /var/www/html/storage \
     && find /var/www/html/storage -type d -exec chmod 775 {} \;
 
+# ที่เก็บสำเนา archive ของ log (compose: volume log_archive_backup) — สร้างไว้ใน image ให้ www-data เป็นเจ้าของ
+# volume ใหม่จะคัดลอกสิทธิ์จากโฟลเดอร์นี้ตอนสร้างครั้งแรก (ไม่งั้นเป็นของ root และสคริปต์ archive เขียนไม่ได้)
+RUN mkdir -p /var/log-archive-backup \
+    && chown www-data:www-data /var/log-archive-backup \
+    && chmod 750 /var/log-archive-backup
+
 EXPOSE 80

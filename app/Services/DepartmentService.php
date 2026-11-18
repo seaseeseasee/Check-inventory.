@@ -6,6 +6,7 @@ namespace App\Services;
 use App\Config\Database;
 use App\Exceptions\ApiException;
 use App\Models\Department;
+use App\Services\Logging\LogService;
 
 /**
  * ทะเบียนวอร์ด/หน่วยงาน (Department Management) — แหล่งตรรกะเดียวของทุกหน้าจอ
@@ -98,6 +99,9 @@ class DepartmentService
         $created = $this->departmentModel->find($id) ?? [];
         $created['nurse_count'] = 0;
         $created['created_by'] = $actor['id'] ?? null;
+        LogService::audit('department.create', 'department', 'department', $id, null,
+            LogService::pick($created, ['name', 'notes', 'active']),
+            ['description' => 'เพิ่มวอร์ด ' . ($created['name'] ?? $id)]);
         return $created;
     }
 
@@ -174,6 +178,17 @@ class DepartmentService
         $updated['nurses_updated'] = $synced;
         $updated['renamed'] = isset($data['name']);
         $updated['updated_by'] = $actor['id'] ?? null;
+
+        [$old, $new] = LogService::diff($current, $data);
+        if ($new !== null) {
+            $active = $new['active'] ?? null;
+            $action = $active !== null && count($new) === 1 ? ((int)$active ? 'department.restore' : 'department.disable') : 'department.update';
+            LogService::audit($action, 'department', 'department', $id, $old, $new, [
+                'description' => ['department.restore' => 'เปิดใช้งานวอร์ด ', 'department.disable' => 'ปิดใช้งานวอร์ด ',
+                        'department.update' => 'แก้ไขวอร์ด '][$action] . ($updated['name'] ?? $id)
+                    . ($synced ? " (อัปเดตชื่อวอร์ดของพยาบาล {$synced} คน)" : ''),
+            ]);
+        }
         return $updated;
     }
 
@@ -202,6 +217,8 @@ class DepartmentService
                 }
                 $this->departmentModel->update($id, ['active' => false, 'updated_at' => $this->now()]);
                 $db->commit();
+                LogService::audit('department.disable', 'department', 'department', $id, ['active' => true], ['active' => false],
+                    ['description' => 'ปิดใช้งานวอร์ด ' . $ward['name']]);
                 return ['mode' => 'disabled', 'id' => $id, 'name' => $ward['name'], 'nurse_count' => $assigned];
             }
 
@@ -225,6 +242,8 @@ class DepartmentService
             }
             $db->commit();
 
+            LogService::audit('department.delete', 'department', 'department', $id,
+                LogService::pick($ward, ['name', 'notes', 'active']), null, ['description' => 'ลบวอร์ด ' . $ward['name'] . ' ถาวร']);
             return ['mode' => 'deleted', 'id' => $id, 'name' => $ward['name'], 'nurse_count' => 0];
         } catch (\Throwable $e) {
             if ($db->inTransaction()) {
@@ -289,6 +308,9 @@ class DepartmentService
             'updated_at' => $now,
         ]);
 
+        // มักเกิดใน transaction ของการบันทึกพยาบาล → LogService รอผล commit ให้เอง
+        LogService::audit('department.create', 'department', 'department', $id, null, ['name' => $name],
+            ['description' => "เพิ่มวอร์ด {$name} อัตโนมัติ (จากการกรอกข้อมูลพยาบาล)"]);
         return ['id' => $id, 'name' => $name, 'auto_created' => true];
     }
 

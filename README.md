@@ -263,6 +263,51 @@ docker compose ps        # frontend, backend, db ต้องขึ้น (healt
 - `GET /api/history/inspections` - ประวัติการตรวจ (มี filter)
 - `GET /api/history/restock` - ประวัติการเบิก-เติม (มี filter)
 
+## ระบบ Log & Audit Trail (migration 017–019)
+
+Log ทุกประเภทเก็บในฐานแยก `refer_logs` (MariaDB ตัวเดิม) — บัญชีแอปมีแค่ SELECT/INSERT จึงแก้/ลบ log ย้อนหลังไม่ได้
+ดูได้ที่แท็บ **Log** (admin ที่ได้รับสิทธิ์ `logs.view`) — ให้สิทธิ์ admin คนอื่นที่แท็บย่อย "สิทธิ์ผู้ดู Log"
+
+| ประเภท | ตัวอย่าง |
+|---|---|
+| auth | login สำเร็จ/ไม่สำเร็จ, logout, session หมดอายุ, เปลี่ยน/รีเซ็ตรหัสผ่าน |
+| audit | เพิ่ม/แก้/ลบ ผู้ใช้ พยาบาล รถ อุปกรณ์ วอร์ด ผลตรวจ การเติมของ ล็อต — เก็บค่าก่อน/หลัง + hash chain |
+| security | 401/403/404/429, ไล่เดารหัส, JSON ผิดรูป, เปลี่ยนสิทธิ์ |
+| system | DB error, exception, fatal, ยอดคงเหลือไม่สอดคล้อง, archive ล้มเหลว |
+| data_access | เปิดดูรายชื่อ/ผลตรวจ, เข้าหน้า Log, ค้นหา, ส่งออก, ดาวน์โหลด archive |
+
+ไม่บันทึกรหัสผ่าน/token/session (ตัดทิ้งที่ `LogSanitizer`) — เขียน log ไม่ได้ระบบหลักยังทำงานต่อ และเก็บลง `storage/logs/fallback-*.log`
+
+**ตรวจ hash chain** (รวมส่วนที่อยู่ใน archive):
+```bash
+docker compose exec -u www-data backend php bin/logs-verify.php
+```
+
+### Archive (ย้าย log เก่าออกจากฐานข้อมูล)
+- เก็บใน DB 90 วัน (`LOG_RETENTION_DAYS`) — เดือนที่เก่ากว่านั้นทั้งเดือนย้ายเป็น `storage/logs/archive/<ประเภท>/<ปี>/<ประเภท>_<ปี>_<เดือน>.json.gz`
+  พร้อม SHA-256 และสำเนาที่ `/var/log-archive-backup` (volume `log_archive_backup` — production ควรเปลี่ยนเป็น bind mount ไปดิสก์/NAS อื่น)
+- ไฟล์เก็บ 5 ปี (`LOG_ARCHIVE_RETENTION_YEARS`) แล้วทำลายพร้อมบันทึก
+- ผิดพลาดขั้นใด = ไม่ลบข้อมูลต้นฉบับ, แจ้งเตือน CRITICAL + แถบเตือนในหน้า Log, รันซ้ำได้ (ทำต่อจากเดิม)
+- ใช้บัญชี `refer_log_archiver` (บัญชีเดียวที่ลบ log ได้) — รหัสอยู่ใน `.env.archiver` บนเครื่อง host เท่านั้น
+  (ไม่อยู่ใน `.env` ที่เว็บอ่าน, ไม่เข้า image, git ไม่ track) ส่งเข้า container ทาง stdin
+
+ตั้งค่าครั้งแรก:
+```bash
+# 1) ตั้งรหัส + ปลดล็อกบัญชี (root)
+docker exec -i emer-db-1 sh -c 'mariadb -uroot -p"$MYSQL_ROOT_PASSWORD"' <<< "ALTER USER refer_log_archiver@'%' IDENTIFIED BY '<รหัสยาวสุ่ม>' ACCOUNT UNLOCK;"
+# 2) เก็บรหัสไว้ที่ host
+echo "LOG_ARCHIVER_PASSWORD=<รหัสเดียวกัน>" > .env.archiver
+# 3) ลองแบบไม่เขียน/ไม่ลบ
+powershell -File bin/run-log-archive.ps1 -DryRun      # Windows
+sh bin/run-log-archive.sh --dry-run                   # Linux
+```
+ตั้งเวลาเดือนละครั้ง (รันซ้ำได้ปลอดภัย):
+```
+schtasks /Create /TN "emer-log-archive" /SC MONTHLY /D 1 /ST 02:00 /TR "powershell -NoProfile -ExecutionPolicy Bypass -File <path>\bin\run-log-archive.ps1"
+# Linux crontab:  0 2 1 * * /path/to/emer/bin/run-log-archive.sh >> /path/to/emer/storage/logs/archive-cron.txt 2>&1
+```
+ผลแต่ละรอบดูได้ที่แท็บ Log → Archive (ค้นหา Log เก่าในไฟล์ได้โดยไม่ต้องนำกลับเข้า DB) และไฟล์ `storage/logs/archive-run-*.txt`
+
 ## การทดสอบ
 
 > หมายเหตุ (2026-10-19): `tests/test-php.php`, `tests/test-restock.php`,

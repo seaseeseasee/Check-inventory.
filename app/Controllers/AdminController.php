@@ -16,9 +16,13 @@ use App\Models\Item;
 use App\Helpers\Response;
 use App\Helpers\Validator;
 use App\Middleware\RoleMiddleware;
+use App\Services\Logging\LogService;
 
 class AdminController extends Controller
 {
+    /** ช่องของพยาบาลที่เก็บใน audit log (ชุดเดียวกับ NurseController) */
+    private const AUDIT_NURSE_FIELDS = ['name', 'phone', 'department', 'department_id', 'start_text', 'end_text', 'note', 'active'];
+
     private InspectionService $inspectionService;
     private RestockService $restockService;
     private AuthService $authService;
@@ -80,6 +84,10 @@ class AdminController extends Controller
             ['id', 'username', 'full_name', 'role', 'nurse_id', 'active', 'last_login_at', 'created_at', 'updated_at'],
             'active DESC, full_name'
         );
+        // รายชื่อบัญชีมีเบอร์โทร (ชื่อผู้ใช้) ของทุกคน = ข้อมูลส่วนบุคคล
+        LogService::dataAccess('data.view_user_list', 'user', null, null, [
+            'description' => 'เปิดดูรายชื่อบัญชีผู้ใช้ทั้งหมด (' . count($users) . ' บัญชี)',
+        ]);
         $this->success($users);
     }
 
@@ -372,6 +380,8 @@ class AdminController extends Controller
             }
             throw $e;
         }
+        LogService::audit('nurse.create', 'nurse', 'nurse', (string)$data['id'], null,
+            LogService::pick($data, self::AUDIT_NURSE_FIELDS), ['description' => 'เพิ่มพยาบาล ' . $data['name']]);
 
         $this->success(['id' => $data['id']], 201);
     }
@@ -426,6 +436,11 @@ class AdminController extends Controller
             }
             throw $e;
         }
+        [$old, $new] = LogService::diff($existing, LogService::pick($data, self::AUDIT_NURSE_FIELDS) ?? []);
+        if ($new !== null) {
+            LogService::audit('nurse.update', 'nurse', 'nurse', $id, $old, $new,
+                ['description' => 'แก้ไขพยาบาล ' . ($data['name'] ?? $existing['name']) . ': ' . implode(', ', array_keys($new))]);
+        }
 
         $this->success(['id' => $id]);
     }
@@ -443,6 +458,10 @@ class AdminController extends Controller
         }
 
         $this->nurseModel->update($id, ['active' => false]);
+        if (!empty($existing['active'])) {
+            LogService::audit('nurse.disable', 'nurse', 'nurse', $id, ['active' => true], ['active' => false],
+                ['description' => 'พักใช้งานพยาบาล ' . $existing['name']]);
+        }
         $this->success(['id' => $id]);
     }
 

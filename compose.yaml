@@ -1,5 +1,13 @@
 name: emer
 
+# docker logs (stderr ของ PHP/Apache/nginx/MariaDB) — เดิมไม่จำกัดขนาด ไฟล์โตไปเรื่อย ๆ
+# หมุนไฟล์ที่ 10 MB เก็บ 5 ไฟล์ต่อ container (log สำคัญอยู่ใน refer_logs แล้ว)
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 # Three always-on containers:
 #   frontend (nginx)        — the only one published to the host; serves UI assets,
 #                             proxies the app shell + /api/* to the backend
@@ -30,6 +38,7 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+    logging: *default-logging
     # Hardening: ตัด Linux capabilities ทิ้งทั้งหมด เหลือเท่าที่ nginx ต้องใช้ (bind :80 แล้วลดสิทธิ์เป็น user nginx)
     # ระบบไฟล์อ่านอย่างเดียว — เขียนได้เฉพาะ tmpfs (cache/pid)
     cap_drop: [ALL]
@@ -61,6 +70,9 @@ services:
     volumes:
       # Persist what the app may write at runtime without baking it into the image.
       - storage_data:/var/www/html/storage
+      # สำเนา archive ของ log — คนละ volume กับไฟล์หลัก (storage/logs/archive)
+      # production ควรเปลี่ยนเป็น bind mount ไปดิสก์/NAS อีกตัว เช่น  - D:/log-backup:/var/log-archive-backup
+      - log_archive_backup:/var/log-archive-backup
     healthcheck:
       # CLI script outside public/ — checks Apache answers and the DB login works
       # (see docker/healthcheck.php for why /api/health is not used here).
@@ -70,6 +82,7 @@ services:
       retries: 3
       start_period: 15s
     restart: unless-stopped
+    logging: *default-logging
     # Hardening: Apache ต้อง bind :80 แล้วลดสิทธิ์ worker เป็น www-data เท่านั้น
     # อ่านอย่างเดียวทั้ง image — ที่เขียนได้คือ volume storage/ (session) + tmpfs ของ Apache/PHP
     cap_drop: [ALL]
@@ -110,6 +123,10 @@ services:
       - ./database/migrations/014-audit-log.sql:/docker-entrypoint-initdb.d/07-migration-014.sql:ro
       - ./database/migrations/015-app-user-least-privilege.sql:/docker-entrypoint-initdb.d/08-migration-015.sql:ro
       - ./database/migrations/016-vehicle-type.sql:/docker-entrypoint-initdb.d/09-migration-016.sql:ro
+      # ระบบ log กลาง: ฐาน refer_logs + สิทธิ์ append-only ของบัญชีแอป
+      - ./database/migrations/017-logging.sql:/docker-entrypoint-initdb.d/10-migration-017.sql:ro
+      - ./database/migrations/018-log-grants.sql:/docker-entrypoint-initdb.d/11-migration-018.sql:ro
+      - ./database/migrations/019-log-chain-head.sql:/docker-entrypoint-initdb.d/12-migration-019.sql:ro
     # ปิด LOAD DATA LOCAL INFILE (แอปไม่ได้ใช้)
     command: ["--local-infile=0"]
     healthcheck:
@@ -124,6 +141,7 @@ services:
     # No "ports:" here on purpose — the database is reachable only from other
     # containers on the internal "data" network (service name "db"), never from the host.
     restart: unless-stopped
+    logging: *default-logging
     # entrypoint ของ MariaDB ต้อง chown datadir แล้วลดสิทธิ์เป็น user mysql (gosu)
     cap_drop: [ALL]
     cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER]
@@ -167,3 +185,4 @@ volumes:
   db_data:
     name: emer_db_data_1011
   storage_data:
+  log_archive_backup:

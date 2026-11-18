@@ -7,6 +7,7 @@ use App\Services\InspectionService;
 use App\Services\RestockService;
 use App\Helpers\Response;
 use App\Middleware\RoleMiddleware;
+use App\Services\Logging\LogService;
 
 class HistoryController extends Controller
 {
@@ -63,6 +64,10 @@ class HistoryController extends Controller
             $this->notFound('ไม่พบรอบการตรวจ');
             return;
         }
+        LogService::dataAccess('data.view_inspection', 'inspection', 'check', $id, [
+            'description' => 'เปิดดูรายละเอียดผลตรวจเช็ก ' . ($inspection['car_name'] ?? $inspection['car_id'] ?? '')
+                . ' ' . ($inspection['check_date'] ?? ''),
+        ]);
         $this->success($inspection);
     }
 
