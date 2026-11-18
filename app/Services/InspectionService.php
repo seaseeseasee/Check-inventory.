@@ -279,6 +279,7 @@ class InspectionService
     /** ร่าง: เก็บสถานะฟอร์มทั้งชุดเป็น JSON (ไม่แตะยอดสต๊อค) */
     public function saveDraft(string $carId, array $lines, ?array $user): void
     {
+        VehicleService::assertUsable($this->vehicleModel->find($carId), 'inspect');
         $draft = $this->draftModel->getByVehicle($carId);
         if (!$draft) {
             throw new ApiException('ไม่พบร่างการตรวจของรถคันนี้ (อาจถูกบันทึกหรือแทนที่ไปแล้ว)', 404);
@@ -581,6 +582,8 @@ class InspectionService
             if (!$vehicle) {
                 throw new ApiException('ไม่พบรถในฐานข้อมูล', 404);
             }
+            // เริ่มตรวจไว้ก่อนแล้วรถถูกงดใช้งานระหว่างนั้น → ส่งผลไม่ได้ (เดิมกันแค่ตอนเริ่มตรวจ)
+            VehicleService::assertUsable($vehicle, 'inspect');
 
             if ($mode === 'edit') {
                 $stmt = $this->inspectionModel->query("SELECT * FROM " . $this->inspectionModel->getTable() . " WHERE id = ? FOR UPDATE", [$checkId]);

@@ -76,7 +76,7 @@ class VehicleController extends Controller
         $this->roleMiddleware->requireAdmin();
         $input = $this->getInput();
         $mode = strtolower(trim((string)($input['mode'] ?? 'auto')));
-        if (!in_array($mode, ['auto', 'disable', 'force'], true)) {
+        if (!in_array($mode, ['auto', 'disable', 'force', 'purge'], true)) {
             $mode = 'auto';
         }
         $result = $this->vehicleService->deleteVehicle($id, $this->actor(), $mode);

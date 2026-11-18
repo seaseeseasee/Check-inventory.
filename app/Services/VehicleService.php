@@ -9,6 +9,8 @@ use App\Models\Item;
 use App\Models\Metadata;
 use App\Models\StockMovement;
 use App\Models\Vehicle;
+use App\Models\RestockAction;
+use App\Models\RestockRequest;
 use App\Services\Logging\LogService;
 
 /**
@@ -195,13 +197,74 @@ class VehicleService
      */
     public static function assertInspectable(?array $vehicle): void
     {
-        if (($vehicle['status'] ?? '') === 'disabled') {
-            throw new ApiException(
-                'รถคันนี้ถูกงดใช้งานแล้ว — เปิดกลับที่แท็บ "ทะเบียนรถ/อุปกรณ์" ก่อนเริ่มตรวจเช็ค',
-                409,
-                ['code' => 'VEHICLE_DISABLED']
-            );
+        self::assertUsable($vehicle, 'inspect');
+    }
+
+    /**
+     * รถที่งดใช้งานห้าม ตรวจเช็ค (เริ่ม/บันทึกร่าง/ส่งผล) และห้าม เติมของ (เปิดหน้าเติม/บันทึก)
+     * ตรวจที่ server ทุกเส้นทาง — เดิมกันไว้แค่ตอนเริ่มตรวจ + ซ่อนรถในหน้าเติมของฝั่ง client
+     * ทำให้ปุ่ม "เติมรถคันนี้" ของรายการรอเติม/ลิงก์จากหน้าแรก ยังเติมรถที่งดใช้งานได้
+     */
+    public static function assertUsable(?array $vehicle, string $action): void
+    {
+        if (($vehicle['status'] ?? '') !== 'disabled') {
+            return;
         }
+        $what = $action === 'refill' ? 'เติมของ' : 'ตรวจเช็ค';
+        throw new ApiException(
+            "รถคันนี้ถูกงดใช้งานแล้ว — {$what}ไม่ได้ (เปิดกลับที่แท็บ \"ทะเบียนรถ/อุปกรณ์\" ก่อน)",
+            409,
+            ['code' => 'VEHICLE_DISABLED']
+        );
+    }
+
+    /**
+     * งดใช้งานรถ: ปิดงานที่ค้างของรถคันนี้ไปพร้อมกัน (เรียกภายใน transaction เดียวกับการเปลี่ยนสถานะ)
+     *   - รายการรอเติมที่ยังเปิดอยู่ → ยกเลิก + บันทึกเหตุผลในประวัติของรายการ
+     *   - ร่างการตรวจที่ค้าง → ลบ (ส่งผลไม่ได้อยู่แล้ว)
+     * เปิดรถกลับมาใช้: รอบตรวจครั้งถัดไปสร้างรายการรอเติมใหม่จากยอดจริงเอง
+     */
+    /** ข้อความต่อท้ายใน audit เมื่องดใช้งานแล้วมีงานค้างถูกปิด */
+    private static function closedNote(array $closed): string
+    {
+        $parts = array_filter([
+            ($closed['requests_cancelled'] ?? 0) ? "ยกเลิกรายการรอเติม {$closed['requests_cancelled']} รายการ" : '',
+            ($closed['drafts_removed'] ?? 0) ? "ล้างร่างตรวจ {$closed['drafts_removed']} รายการ" : '',
+        ]);
+        return $parts ? ' — ' . implode(', ', $parts) : '';
+    }
+
+    private function closeOpenWork(string $carId, ?array $actor): array
+    {
+        $db = Database::getConnection();
+        $in = implode(',', array_fill(0, count(self::OPEN_RESTOCK_STATUSES), '?'));
+        $stmt = $db->prepare("SELECT id FROM refer_restock_requests WHERE car_id = ? AND status IN ({$in}) FOR UPDATE");
+        $stmt->execute(array_merge([$carId], self::OPEN_RESTOCK_STATUSES));
+        $ids = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+
+        $actions = new RestockAction();
+        $now = $this->now();
+        foreach ($ids as $requestId) {
+            $db->prepare("UPDATE refer_restock_requests SET status = ? WHERE id = ?")
+                ->execute([RestockRequest::STATUS_CANCELLED, $requestId]);
+            if (empty($actor['id'])) {
+                continue;   // by_id เป็น FK NOT NULL → refer_users — ไม่มีผู้ดำเนินการก็บันทึกได้แค่สถานะ
+            }
+            $actions->create([
+                'request_id' => $requestId,
+                'type' => RestockAction::TYPE_CANCEL,
+                'at' => $now,
+                'by_id' => $actor['id'] ?? null,
+                'by_name' => (string)($actor['full_name'] ?? 'ระบบ'),
+                'note' => 'ยกเลิกอัตโนมัติ: รถถูกงดใช้งาน',
+                'action_lines' => [],
+            ]);
+        }
+
+        $stmt = $db->prepare("DELETE FROM refer_drafts WHERE car_id = ?");   // refer_draft_items ลบตาม (CASCADE)
+        $stmt->execute([$carId]);
+
+        return ['requests_cancelled' => count($ids), 'drafts_removed' => $stmt->rowCount()];
     }
 
     // ==================== อ่านข้อมูล ====================
@@ -281,11 +344,11 @@ class VehicleService
             array_merge([$carId], self::OPEN_RESTOCK_STATUSES)
         );
         $items = $count("SELECT COUNT(*) FROM refer_items WHERE car_id = ?", [$carId]);
-        // ประวัติเติมของเข้ารถ (010) — เดิมไม่ได้นับ: รถที่เคยเติมของแต่ยังไม่เคยตรวจ ลบแล้วชน FK ได้ 500
+        // ประวัติเติมของเข้ารถ (010) — เดิมไม่ได้นับ: รถที่เคยเติมของแต่ยังไม่เคยตรวจ ลบแบบปกติแล้วชน FK ได้ 500
         $refills = $count("SELECT COUNT(*) FROM refer_refill_batches WHERE car_id = ?", [$carId]);
 
         // FK ของ refer_checks/refer_drafts/refer_restock_requests/refer_refill_batches → refer_vehicles เป็น RESTRICT
-        // ถ้ามีแถวเหล่านี้ การลบถาวรจะพังเป็น SQL errorเสมอ — จึงต้องปฏิเสธก่อนแตะฐานข้อมูล
+        // ถ้ามีแถวเหล่านี้ การลบแบบปกติจะพังเป็น SQL error — ต้องเลือก งดใช้งาน หรือ ลบพร้อมประวัติ (purge)
         $blocking = $checks > 0 || $drafts > 0 || $restockOpen > 0 || $restockTotal > 0 || $refills > 0;
 
         return [
@@ -801,6 +864,9 @@ class VehicleService
             }
 
             $this->vehicleModel->update($id, $data);
+            // เปลี่ยนเป็น "งดใช้งาน" จากฟอร์มแก้ไข = ผลเดียวกับปุ่มงดใช้งาน (ปิดรายการรอเติม/ร่างตรวจที่ค้าง)
+            $closed = (($data['status'] ?? null) === 'disabled' && ($existing['status'] ?? '') !== 'disabled')
+                ? $this->closeOpenWork($id, $actor) : null;
             $db->commit();
         } catch (\Throwable $e) {
             $db->rollBack();
@@ -809,11 +875,16 @@ class VehicleService
 
         $vehicle = $this->vehicleModel->find($id) ?? [];
         $vehicle['updated_fields'] = array_keys($data);
+        if ($closed !== null) {
+            $vehicle += $closed;
+        }
 
         [$old, $new] = LogService::diff($existing, $data);
         if ($new !== null) {
             LogService::audit('vehicle.update', 'vehicle', 'vehicle', $id, $old, $new, [
-                'description' => 'แก้ไขรถ ' . ($vehicle['name'] ?? $id) . ': ' . implode(', ', array_keys($new)),
+                'description' => 'แก้ไขรถ ' . ($vehicle['name'] ?? $id) . ': ' . implode(', ', array_keys($new))
+                    . ($closed ? self::closedNote($closed) : ''),
+                'context' => $closed ?: null,
             ]);
         }
         return $vehicle;
@@ -845,11 +916,26 @@ class VehicleService
                     return ['mode' => 'already_disabled', 'id' => $id, 'name' => $label, 'blockers' => $blockers];
                 }
                 $this->vehicleModel->update($id, ['status' => 'disabled']);
+                $closed = $this->closeOpenWork($id, $actor);
                 $db->commit();
                 LogService::audit('vehicle.disable', 'vehicle', 'vehicle', $id,
                     ['status' => $vehicle['status'] ?? null], ['status' => 'disabled'],
-                    ['description' => "งดใช้งานรถ {$label}"]);
-                return ['mode' => 'disabled', 'id' => $id, 'name' => $label, 'blockers' => $blockers];
+                    ['description' => "งดใช้งานรถ {$label}" . self::closedNote($closed), 'context' => $closed]);
+                return ['mode' => 'disabled', 'id' => $id, 'name' => $label, 'blockers' => $blockers] + $closed;
+            }
+
+            // purge = ผู้ดูแลยืนยันแล้วว่าจะลบรถ "พร้อมประวัติทั้งหมด" (ตรวจเช็ค/เติมของ/ล็อต/movement) — ย้อนกลับไม่ได้
+            // audit log เป็นร่องรอยเดียวที่เหลือ: เก็บข้อมูลรถ + จำนวนที่ลบแต่ละชนิด
+            if ($mode === 'purge') {
+                $removed = $this->purgeVehicleData($id);
+                $db->commit();
+                LogService::audit('vehicle.purge', 'vehicle', 'vehicle', $id,
+                    (LogService::pick($vehicle, self::AUDIT_VEHICLE_FIELDS) ?? []) + ['removed' => $removed], null,
+                    ['description' => "ลบรถ {$label} พร้อมประวัติทั้งหมด (ผลตรวจ {$removed['checks']} รอบ, "
+                        . "รายการรอเติม {$removed['restock_requests']}, การเติมของ {$removed['refills']} ครั้ง, อุปกรณ์ {$removed['items']} รายการ)",
+                        'severity' => 'WARNING']);
+                return ['mode' => 'deleted', 'id' => $id, 'name' => $label, 'purged' => true,
+                    'items_removed' => $removed['items'], 'removed' => $removed, 'blockers' => $blockers];
             }
 
             if (!$blockers['can_hard_delete']) {
@@ -857,6 +943,7 @@ class VehicleService
                     'reason' => 'vehicle_has_history',
                     'blockers' => $blockers,
                     'suggestion' => 'disable',
+                    'can_purge' => true,
                     'name' => $label,
                 ]);
             }
@@ -893,6 +980,36 @@ class VehicleService
         }
     }
 
+    /**
+     * ลบรถและข้อมูลทุกอย่างที่ผูกกับรถคันนี้ (ภายใน transaction ของผู้เรียก) — ลำดับตาม FK:
+     *   คำขอเติม (+รายการ/ประวัติการดำเนินการ CASCADE) → ร่างตรวจ (+รายการ) → ผลตรวจ (+รายการ/ประวัติ CASCADE)
+     *   → movement ของสต็อก → ประวัติการเติมของ → รายการคลังเก่า (refer_stock_transactions)
+     *   → อุปกรณ์ (+ล็อต/เครื่อง CASCADE) → รถ
+     * คืนจำนวนแถวต่อชนิด (สำหรับแจ้งผู้ใช้)
+     */
+    private function purgeVehicleData(string $carId): array
+    {
+        $db = Database::getConnection();
+        $del = function (string $sql) use ($db, $carId): int {
+            $stmt = $db->prepare($sql);
+            $stmt->execute([$carId]);
+            return $stmt->rowCount();
+        };
+        $removed = [
+            'restock_requests' => $del("DELETE FROM refer_restock_requests WHERE car_id = ?"),
+            'drafts' => $del("DELETE FROM refer_drafts WHERE car_id = ?"),
+            'checks' => $del("DELETE FROM refer_checks WHERE car_id = ?"),
+            'stock_movements' => $del("DELETE FROM refer_stock_movements WHERE car_id = ?"),
+            'refills' => $del("DELETE FROM refer_refill_batches WHERE car_id = ?"),
+            'stock_transactions' => $del("DELETE FROM refer_stock_transactions WHERE car_id = ?"),
+            'items' => $del("DELETE FROM refer_items WHERE car_id = ?"),
+        ];
+        if ($del("DELETE FROM refer_vehicles WHERE id = ?") < 1) {
+            throw new ApiException('ลบรถไม่สำเร็จ: ไม่พบแถวที่ต้องลบ');
+        }
+        return $removed;
+    }
+
     private function deletionMessage(array $blockers): string
     {
         $parts = [];
@@ -912,7 +1029,7 @@ class VehicleService
             $parts[] = 'ประวัติการเติมของเข้ารถ ' . $blockers['refills'] . ' ครั้ง';
         }
         return 'ลบถาวรไม่ได้เพราะรถคันนี้มี' . ($parts ? ' — ' . implode(' • ', $parts) : 'ข้อมูลผูกอยู่')
-            . ' — แนะนำให้ตั้งสถานะเป็น "งดใช้งาน" แทน เพื่อให้รายงานย้อนหลังอ่านได้ครบ';
+            . ' — เลือก "งดใช้งาน" เพื่อเก็บประวัติไว้ หรือ "ลบพร้อมประวัติทั้งหมด" ถ้าไม่ต้องการข้อมูลของรถคันนี้แล้ว';
     }
 
     // ==================== อุปกรณ์: เพิ่ม / แก้ / ลบ ====================
